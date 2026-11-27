@@ -114,6 +114,7 @@ func notASessionArgs() map[string]bool {
 		"agent create name":     true,
 		"agent show name":       true,
 		"agent set-soul name":   true,
+		"agent set-reply name":  true,
 		"host add name":         true,
 		"host check name":       true,
 		"host provision name":   true,

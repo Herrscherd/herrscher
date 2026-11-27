@@ -19,6 +19,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
@@ -69,9 +70,7 @@ type storeFile struct {
 // file runs under an exclusive lock shared by every process of that directory,
 // and that lock is held only while the file is read, changed and written.
 type Store struct {
-	dir    string
-	rename func(oldPath, newPath string) error
-	read   func(path string) ([]byte, error)
+	dir string
 }
 
 // Tx is the connections file as one change of Store.Update sees it. Its
@@ -106,7 +105,7 @@ func (t *Tx) Delete(host contracts.ForgeHost) bool {
 
 // NewStore keeps the forge connections file in dir.
 func NewStore(dir string) *Store {
-	return &Store{dir: dir, rename: os.Rename, read: os.ReadFile}
+	return &Store{dir: dir}
 }
 
 // Path returns the file the saved records live in.
@@ -178,6 +177,7 @@ func (s *Store) Update(ctx context.Context, change func(*Tx) error) error {
 		return fmt.Errorf("lock forge connections: %w", err)
 	}
 	defer release()
+	atomicfile.SweepLogged(s.Path())
 	file, err := s.load()
 	if err != nil {
 		return err
@@ -241,7 +241,7 @@ func (s *Store) Insecure() (bool, error) {
 
 func (s *Store) load() (storeFile, error) {
 	file := storeFile{Hosts: make(map[string]Record)}
-	raw, err := s.read(s.Path())
+	raw, err := os.ReadFile(s.Path())
 	if errors.Is(err, fs.ErrNotExist) {
 		return file, nil
 	}
@@ -266,39 +266,8 @@ func (s *Store) save(file storeFile) error {
 }
 
 func (s *Store) writeAtomic(data []byte) error {
-	staging, err := os.CreateTemp(s.dir, "."+storeFileName+".*")
-	if err != nil {
-		return fmt.Errorf("stage forge connections: %w", err)
-	}
-	if stageErr := writeStaged(staging, data); stageErr != nil {
-		discardStaged(staging)
-		return stageErr
-	}
-	if renameErr := s.rename(staging.Name(), s.Path()); renameErr != nil {
-		discardStaged(staging)
-		return fmt.Errorf("replace forge connections: %w", renameErr)
-	}
-	return nil
-}
-
-func writeStaged(staging *os.File, data []byte) error {
-	if err := staging.Chmod(storeFileMode); err != nil {
-		return fmt.Errorf("protect forge connections: %w", err)
-	}
-	if _, err := staging.Write(data); err != nil {
-		return fmt.Errorf("write forge connections: %w", err)
-	}
-	if err := staging.Close(); err != nil {
+	if err := atomicfile.Write(s.Path(), data, storeFileMode); err != nil {
 		return fmt.Errorf("write forge connections: %w", err)
 	}
 	return nil
-}
-
-func discardStaged(staging *os.File) {
-	if err := staging.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
-		slog.Warn("close staged forge connections", "err", err)
-	}
-	if err := os.Remove(staging.Name()); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		slog.Warn("remove staged forge connections", "err", err)
-	}
 }

@@ -1,28 +1,44 @@
-//go:build !windows
-
 package host
 
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
+	"sync"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
+
+type gatedStateWriter struct {
+	gate chan struct{}
+	once sync.Once
+}
+
+func (g *gatedStateWriter) open() {
+	g.once.Do(func() { close(g.gate) })
+}
+
+func (g *gatedStateWriter) write(name string, data []byte, perm os.FileMode) error {
+	<-g.gate
+	return atomicfile.Write(name, data, perm)
+}
 
 func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	grace := 200 * time.Millisecond
 	layout := isolatedRuntimeDir(t)
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	st := state.NewState(statePath)
+	gate := &gatedStateWriter{gate: make(chan struct{})}
+	t.Cleanup(gate.open)
+	st := state.NewStateWith(statePath, gate.write)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
@@ -35,12 +51,6 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	hdl := newManagerHandler(newHostMessages(), clitext.NewMessages(), Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	wireManagerHandler(ctx, nil, io.Discard, hdl, st, layout, "wired", nil, sessions, nil)
 
-	tmp := statePath + ".tmp"
-	if err := syscall.Mkfifo(tmp, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { unblockTranscript(tmp) })
-
 	setLang := mustCommand(t, hdl.Commands(), "set", "lang")
 	done := make(chan struct{})
 	var runErr error
@@ -50,7 +60,7 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	}()
 
 	awaitPersistWriteInFlight(t, h)
-	release := time.AfterFunc(300*time.Millisecond, func() { releaseBlockedTranscript(tmp) })
+	release := time.AfterFunc(300*time.Millisecond, gate.open)
 	t.Cleanup(func() { release.Stop() })
 
 	started := time.Now()

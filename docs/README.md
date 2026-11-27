@@ -11,6 +11,7 @@ The [README](../README.md) is the startup page. These guides go deeper.
 | [Observability](observability.md) | Following a session, health, usage, model routing. |
 | [Terminal UI](terminal-ui.md) | The window, its keys, the keys not bound yet, and the terminal's own files. |
 | [GitHub connection](github.md) | Connecting the GitHub App, the token sources, status, logout, GitHub Enterprise. |
+| [GitHub gateway study](github-gateway.md) | Feasibility of a GitHub gateway on the gateway port, what blocks it, and the order before building it. |
 | [Plugins](plugins.md) | The compiled-in plugins, managing the set, languages. |
 | [Architecture](architecture.md) | The layout of the code and where the project came from. |
 | [Testing](testing.md) | The test suite, scenarios on the real binary, the remote paths. |

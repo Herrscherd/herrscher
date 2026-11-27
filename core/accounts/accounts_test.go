@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -269,5 +270,62 @@ func TestGrokStatusIgnoresAKeyInheritedFromTheDaemon(t *testing.T) {
 	}
 	if got := inheritedEnv(contracts.VendorClaude, []string{"XAI_API_KEY=k"}); len(got) != 1 {
 		t.Fatalf("claude env = %q, want it untouched", got)
+	}
+}
+
+func TestSetDefaultWritesPrivatelyPastAStrayStagingName(t *testing.T) {
+	store := newStore(t)
+	name := mustName(t, "work")
+	if _, err := store.Create("claude", name); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(store.Root, defaultsFileName)+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefault("claude", name); err != nil {
+		t.Fatalf("SetDefault blocked by a stray staging name: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(store.Root, defaultsFileName))
+	if err != nil {
+		t.Fatalf("stat defaults: %v", err)
+	}
+	if info.Mode().Perm() != fileMode {
+		t.Fatalf("defaults mode = %v; want %v", info.Mode().Perm(), fileMode)
+	}
+	if got, err := store.Default("claude"); err != nil || got != "work" {
+		t.Fatalf("Default = %q, %v; want work", got, err)
+	}
+}
+
+func TestReadsSurviveAReadOnlyAccountsDirectoryWithAStaleStagingFile(t *testing.T) {
+	store := newStore(t)
+	name := mustName(t, "work")
+	if _, err := store.Create(contracts.VendorClaude, name); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefault(contracts.VendorClaude, name); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(store.Root, "."+defaultsFileName+".4242520")
+	if err := os.WriteFile(stale, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(store.Root, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(store.Root, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	if got, err := store.Default(contracts.VendorClaude); err != nil || got != "work" {
+		t.Fatalf("Default on a read-only accounts directory = %q, %v; want work", got, err)
+	}
+	if _, err := store.List(); err != nil {
+		t.Fatalf("List on a read-only accounts directory: %v", err)
 	}
 }

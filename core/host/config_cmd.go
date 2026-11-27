@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 const (
@@ -94,6 +95,7 @@ func editConfig(cliMessages *clitext.Messages, lang languageSource, path, rawKey
 	key := strings.TrimSpace(rawKey)
 	release := edits.hold(path)
 	defer release()
+	logCleanup(atomicfile.Sweep(path))
 	doc, err := config.ReadDocument(path)
 	if err != nil {
 		return "", err

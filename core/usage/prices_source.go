@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 // PricesURL is the LiteLLM price list the cost of the transcripts is computed from.
@@ -67,6 +68,7 @@ func (s *PriceSource) Refresh(ctx context.Context) error {
 	s.mu.Lock()
 	s.book, s.fetchedAt = book, s.Now()
 	s.mu.Unlock()
+	atomicfile.SweepLogged(s.Path)
 	return writeAtomic(s.Path, raw)
 }
 
@@ -129,22 +131,7 @@ func writeAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
 		return fmt.Errorf("usage cache: %w", err)
 	}
-	temp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return fmt.Errorf("usage cache: %w", err)
-	}
-	_, writeErr := temp.Write(data)
-	if err := errors.Join(writeErr, temp.Chmod(fileMode), temp.Close()); err != nil {
-		return errors.Join(fmt.Errorf("usage cache: %w", err), removeMissing(temp.Name()))
-	}
-	if err := os.Rename(temp.Name(), path); err != nil {
-		return errors.Join(fmt.Errorf("usage cache: %w", err), removeMissing(temp.Name()))
-	}
-	return nil
-}
-
-func removeMissing(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := atomicfile.Write(path, data, fileMode); err != nil {
 		return fmt.Errorf("usage cache: %w", err)
 	}
 	return nil

@@ -5,6 +5,7 @@ const (
 	CmdHelpAgentCreate                    = "cli.help.cmd.agent.create"
 	CmdHelpAgentList                      = "cli.help.cmd.agent.list"
 	CmdHelpAgentSetSoul                   = "cli.help.cmd.agent.set_soul"
+	CmdHelpAgentSetReply                  = "cli.help.cmd.agent.set_reply"
 	CmdHelpAgentShow                      = "cli.help.cmd.agent.show"
 	CmdHelpApproveAllow                   = "cli.help.cmd.approve.allow"
 	CmdHelpApproveAsk                     = "cli.help.cmd.approve.ask"
@@ -87,6 +88,8 @@ const (
 	CmdParamAgentCreateTags               = "cli.help.param.agent.create.tags"
 	CmdParamAgentSetSoulName              = "cli.help.param.agent.set_soul.name"
 	CmdParamAgentSetSoulSoul              = "cli.help.param.agent.set_soul.soul"
+	CmdParamAgentSetReplyName             = "cli.help.param.agent.set_reply.name"
+	CmdParamAgentSetReplyRule             = "cli.help.param.agent.set_reply.rule"
 	CmdParamAgentShowName                 = "cli.help.param.agent.show.name"
 	CmdParamApproveAllowAlways            = "cli.help.param.approve.allow.always"
 	CmdParamApproveAllowID                = "cli.help.param.approve.allow.id"
@@ -251,6 +254,7 @@ func helpKeys() map[Key][]string {
 		CmdHelpAgentCreate:                    nil,
 		CmdHelpAgentList:                      nil,
 		CmdHelpAgentSetSoul:                   nil,
+		CmdHelpAgentSetReply:                  nil,
 		CmdHelpAgentShow:                      nil,
 		CmdHelpApproveAllow:                   nil,
 		CmdHelpApproveAsk:                     nil,
@@ -333,6 +337,8 @@ func helpKeys() map[Key][]string {
 		CmdParamAgentCreateTags:               nil,
 		CmdParamAgentSetSoulName:              nil,
 		CmdParamAgentSetSoulSoul:              nil,
+		CmdParamAgentSetReplyName:             nil,
+		CmdParamAgentSetReplyRule:             nil,
 		CmdParamAgentShowName:                 nil,
 		CmdParamApproveAllowAlways:            nil,
 		CmdParamApproveAllowID:                nil,

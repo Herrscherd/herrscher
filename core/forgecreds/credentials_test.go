@@ -405,13 +405,18 @@ func TestHeldRenewalIsDroppedWhenAnotherProcessSavedANewerPair(t *testing.T) {
 		RefreshToken:    "ghr_old",
 	})
 	blockWrites(t, first.creds.store)
-	if _, err := tokenSource(t, first.creds, "github.com"); err != nil {
-		t.Fatalf("Token: %v", err)
+	held, err := tokenSource(t, first.creds, "github.com")
+	if err != nil || held.Secret() != "ghu_fresh" {
+		t.Fatalf("Token with the write refused = %v, %v; want the renewed token kept in memory", held.Secret(), err)
+	}
+	stored, _, err := first.creds.store.Get(mustHost(t, "github.com"))
+	if err != nil || stored.RefreshToken != "ghr_old" {
+		t.Fatalf("file after the refused write = %+v, %v; want the old pair", stored, err)
 	}
 
 	allowWrites(t, first.creds.store)
 	other := NewStore(dir)
-	if err := other.Put(t.Context(), mustHost(t, "github.com"), Record{
+	if err = other.Put(t.Context(), mustHost(t, "github.com"), Record{
 		AccessToken:     "ghu_other",
 		AccessExpiresAt: fixedNow().Add(time.Hour),
 		RefreshToken:    "ghr_other",
@@ -871,17 +876,6 @@ func TestMisconfiguredAppKeepsServingAValidTokenWithAWarning(t *testing.T) {
 	}
 }
 
-func failOnce(read func(string) ([]byte, error)) func(string) ([]byte, error) {
-	var failed bool
-	return func(path string) ([]byte, error) {
-		if !failed {
-			failed = true
-			return nil, errors.New("injected read failure")
-		}
-		return read(path)
-	}
-}
-
 func renewWithFailingSave(t *testing.T) (testSetup, *refreshServer) {
 	t.Helper()
 	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
@@ -1172,14 +1166,20 @@ func TestHeldRenewalIsServedWhenTheFileBecomesCorrupt(t *testing.T) {
 	}
 }
 
-func TestHeldRenewalIsSavedAgainWhenTheFileCannotBeReadOnce(t *testing.T) {
+func TestHeldRenewalIsSavedOnceTheFileIsReadableAgain(t *testing.T) {
+	requireEnforcedModes(t)
 	setup, server := renewWithFailingSave(t)
 	allowWrites(t, setup.creds.store)
-	setup.creds.store.read = failOnce(os.ReadFile)
+	setFileMode(t, setup.creds.store.Path(), 0o000)
 
 	token, err := tokenSource(t, setup.creds, "github.com")
 	if err != nil || token.Secret() != "ghu_fresh" {
-		t.Fatalf("Token with one unreadable read = %v, %v; want the renewed token", token.Secret(), err)
+		t.Fatalf("Token with an unreadable file = %v, %v; want the renewed token", token.Secret(), err)
+	}
+	setFileMode(t, setup.creds.store.Path(), 0o600)
+	token, err = tokenSource(t, setup.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_fresh" {
+		t.Fatalf("Token once the file is readable = %v, %v; want the renewed token", token.Secret(), err)
 	}
 	if stored := storedRecord(t, setup.creds); stored.RefreshToken != "ghr_fresh" {
 		t.Fatalf("the held pair was not saved again under the lock: %+v", stored)
@@ -1190,8 +1190,9 @@ func TestHeldRenewalIsSavedAgainWhenTheFileCannotBeReadOnce(t *testing.T) {
 }
 
 func TestExpiredHeldRenewalIsNotServedWhenTheFileCannotBeRead(t *testing.T) {
+	requireEnforcedModes(t)
 	setup, _ := renewWithFailingSave(t)
-	setup.creds.store.read = func(string) ([]byte, error) { return nil, errors.New("injected read failure") }
+	setFileMode(t, setup.creds.store.Path(), 0o000)
 	setup.creds.now = func() time.Time { return fixedNow().Add(9 * time.Hour) }
 
 	token, err := tokenSource(t, setup.creds, "github.com")

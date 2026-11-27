@@ -7,14 +7,19 @@ import (
 	"testing"
 )
 
-func blockWrites(t *testing.T, store *Store) {
+func requireEnforcedModes(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows does not enforce directory modes, so a read-only directory cannot refuse a write")
+		t.Skip("Windows does not enforce file and directory modes, so a permission failure cannot be produced")
 	}
 	if os.Geteuid() == 0 {
-		t.Skip("root writes through read-only directories, so the write cannot be refused")
+		t.Skip("root ignores file and directory modes, so a permission failure cannot be produced")
 	}
+}
+
+func blockWrites(t *testing.T, store *Store) {
+	t.Helper()
+	requireEnforcedModes(t)
 	if err := store.ensureDir(); err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +38,13 @@ func blockWrites(t *testing.T, store *Store) {
 func allowWrites(t *testing.T, store *Store) {
 	t.Helper()
 	setDirMode(t, store.dir, 0o700)
+}
+
+func setFileMode(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatalf("chmod %s: %v", path, err)
+	}
 }
 
 func setDirMode(t *testing.T, dir string, mode os.FileMode) {

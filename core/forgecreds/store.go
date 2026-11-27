@@ -70,8 +70,7 @@ type storeFile struct {
 // file runs under an exclusive lock shared by every process of that directory,
 // and that lock is held only while the file is read, changed and written.
 type Store struct {
-	dir  string
-	read func(path string) ([]byte, error)
+	dir string
 }
 
 // Tx is the connections file as one change of Store.Update sees it. Its
@@ -106,7 +105,7 @@ func (t *Tx) Delete(host contracts.ForgeHost) bool {
 
 // NewStore keeps the forge connections file in dir.
 func NewStore(dir string) *Store {
-	return &Store{dir: dir, read: os.ReadFile}
+	return &Store{dir: dir}
 }
 
 // Path returns the file the saved records live in.
@@ -241,7 +240,7 @@ func (s *Store) Insecure() (bool, error) {
 
 func (s *Store) load() (storeFile, error) {
 	file := storeFile{Hosts: make(map[string]Record)}
-	raw, err := s.read(s.Path())
+	raw, err := os.ReadFile(s.Path())
 	if errors.Is(err, fs.ErrNotExist) {
 		return file, nil
 	}

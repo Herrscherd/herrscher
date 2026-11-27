@@ -325,41 +325,39 @@ func writePair(certPath, keyPath string, der []byte, key *ecdsa.PrivateKey) erro
 	return writePrivate(certPath, pem.EncodeToMemory(&pem.Block{Type: pemCertificate, Bytes: der}))
 }
 
-func writePrivate(path string, data []byte) (err error) {
+func writePrivate(path string, data []byte) error {
 	file, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
 	}
 	temporary := file.Name()
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, os.Remove(temporary))
-		}
-	}()
-	if _, err = file.Write(data); err != nil {
-		return fmt.Errorf("%w: %w", ErrAuthorityFiles, errors.Join(err, file.Close()))
+	if err := writeSynced(file, data); err != nil {
+		return fmt.Errorf("%w: %w", ErrAuthorityFiles, errors.Join(err, removeTemporary(temporary)))
 	}
-	if err = file.Sync(); err != nil {
-		return fmt.Errorf("%w: %w", ErrAuthorityFiles, errors.Join(err, file.Close()))
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("%w: %w", ErrAuthorityFiles, errors.Join(err, removeTemporary(temporary)))
 	}
-	if err = file.Close(); err != nil {
-		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
-	}
-	if err = os.Rename(temporary, path); err != nil {
-		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
-	}
-	if err = syncDirectory(filepath.Dir(path)); err != nil {
+	if err := syncDirectory(filepath.Dir(path)); err != nil {
 		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
 	}
 	return nil
 }
 
-func syncDirectory(dir string) error {
-	handle, err := os.Open(filepath.Clean(dir))
-	if err != nil {
+func writeSynced(file *os.File, data []byte) error {
+	if _, err := file.Write(data); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	if err := file.Sync(); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	return file.Close()
+}
+
+func removeTemporary(name string) error {
+	if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return errors.Join(handle.Sync(), handle.Close())
+	return nil
 }
 
 func parseCertificatePEM(data []byte) (*x509.Certificate, error) {

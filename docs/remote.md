@@ -176,15 +176,23 @@ authenticate, and the signed certificate is not handed to anyone yet.
     `/bin/herr[s]cher`) counts as the name too. This also catches a command that
     only reads, such as `grep "herrscher role" docs/remote.md`, and a word such as
     `herring` next to `role`;
-  - the command feeds a stream or inline code to an interpreter (`sh`, `bash`,
+  - the command runs code from a pipe or inline into an interpreter (`sh`, `bash`,
     `zsh`, `dash`, `ksh`, `fish`, `eval`, `source`, `python`, `python3`, `perl`,
-    `node`, `deno`, `bun`, `ruby`, `php`, `lua`, `tclsh`, placed after a pipe or
-    followed by `-c`, `-e`, `--eval`, `<<`, `<<<` or `<(`), and it holds a decoder
+    `node`, `deno`, `bun`, `ruby`, `php`, `lua`, `tclsh`), and it holds a decoder
     or an encoding (`base64`, `base32`, `xxd`, `od`, `uudecode`, `zcat`, `gunzip`,
-    `openssl`, `rev`, `tr`, `printf` with a backslash, `echo -e`, `$'`).
+    `openssl`, `rev`, `tr`, `printf` with a backslash, `echo -e`, `$'`). The
+    interpreter counts when it is the command word directly after a `|` or `|&`
+    (an opening `(`, a `$` or a backtick before it does not change that), or when it
+    takes inline code: a short option group holding `c` or `e` (`-c`, `-lc`, `-ec`,
+    `-e`), `--eval` or `--eval=...`, `php -r`, a `-` followed by a `<<` or `<<<`
+    heredoc, or a `<<`, `<<<` or `<(` directly after it. A `;`, `&`, `&&`, `||` or
+    line break ends the pipeline, so only the command that follows the pipe counts:
+    `go test ./... | tr -d '\r' && bash scripts/ci.sh` is not flagged.
   The check does not see a payload that spells none of those letters and passes
   through no decoder in the list above. That covers a script written to a file and
-  run by a later command, a file downloaded and then run, and an encoding that is
+  run by a later command, even after a `;` or a `&&` (`echo ... | base64 -d > /tmp/x;
+  bash /tmp/x`), a stream fed to a wrapper such as `xargs sh` or `env sh` rather than
+  to the interpreter itself, a file downloaded and then run, and an encoding that is
   not in the list. The real boundary is the user account: an agent's shell
   reaches the operator socket as `local`, and a process of the same uid can do
   what the daemon can.

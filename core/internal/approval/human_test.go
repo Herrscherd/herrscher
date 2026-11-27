@@ -53,6 +53,23 @@ func TestRequiresHumanCatchesEveryWayOfNamingHerrscherAdministration(t *testing.
 		`printf '\150\145rrscher device list' | sh`,
 		"echo herring role",
 		`echo "herrscher role" | xargs echo`,
+		`bash -lc "$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)"`,
+		`sh -ec "$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)"`,
+		"python3 - <<'EOF'\nimport base64\nexec(base64.b64decode('cHJpbnQoMSk='))\nEOF",
+		`node --eval="$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)"`,
+		`php -r "$(echo cHJpbnQoMSk= | base64 -d)"`,
+		`bash -lc "$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		`sh -ec "$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		`bash -c "$(echo aGVycnNjaGVyIHJvbGUgZ3JhbnQgY2hhdDoxIG93bmVy | base64 -d)"`,
+		"python3 - <<'EOF'\nimport base64\nprint(base64.b64decode('aGVycnNjaGVyIGRldmljZSBsaXN0'))\nEOF",
+		`node --eval="$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		`php -r "$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		"echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d | xargs sh -c",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | (sh)",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d |& sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d && echo ok | sh",
+		`echo "$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)" | bash`,
+		"echo cm9sZQ==\n| base64 -d | sh",
 	} {
 		if !RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
 			t.Fatalf("%q must need a person", subject)
@@ -78,6 +95,11 @@ func TestRequiresHumanLeavesOrdinaryCommandsToTheRules(t *testing.T) {
 		"echo cm9sZQ== | base64 -d",
 		"echo role grant bob owner | xargs echo",
 		"go test ./...",
+		"go test ./... | tr -d '\\r' && bash scripts/ci.sh",
+		"printf '%s\\n' a | sort && sh ./run.sh",
+		"echo a | sort; sh ./run.sh",
+		"echo a | grep -c sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d || sh",
 	} {
 		if RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
 			t.Fatalf("%q must stay under the rules", subject)
@@ -85,5 +107,18 @@ func TestRequiresHumanLeavesOrdinaryCommandsToTheRules(t *testing.T) {
 	}
 	if RequiresHuman(Request{Tool: "Edit", Subject: "herrscher device list"}) {
 		t.Fatal("only shell commands are administered this way")
+	}
+}
+
+func TestRequiresHumanStopsAtTheDocumentedLimits(t *testing.T) {
+	for _, subject := range []string{
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d > /tmp/x; bash /tmp/x",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d > /tmp/x\nsh /tmp/x",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | xargs sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | env sh",
+	} {
+		if RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
+			t.Fatalf("%q is a documented limit and must stay under the rules", subject)
+		}
 	}
 }

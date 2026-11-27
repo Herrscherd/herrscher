@@ -49,7 +49,7 @@ func namesHerrscherByGlob(command string) bool {
 }
 
 func tokenize(command string) []string {
-	spaced := strings.NewReplacer("<<", " << ", "<(", " <( ", "|", " | ", ";", " ; ", "&", " & ", "(", " ( ", ")", " ) ", "`", " ` ", `"`, " ", "'", " ").Replace(command)
+	spaced := strings.NewReplacer("<<", " << ", "<(", " <( ", "||", " || ", "&&", " && ", "|&", " | ", "|", " | ", "&", " & ", ";", " ; ", "\n", " ; ", "(", " ( ", ")", " ) ", "`", " ` ", `"`, " ", "'", " ").Replace(command)
 	return strings.Fields(strings.ToLower(spaced))
 }
 
@@ -59,32 +59,64 @@ func runsDecodedCode(command string) bool {
 }
 
 func runsInterpreter(tokens []string) bool {
-	afterPipe := false
+	pipedInto := false
 	for idx, token := range tokens {
-		if token == "|" {
-			afterPipe = true
+		switch token {
+		case "(", ")", "`", "$":
+			continue
+		case "|":
+			pipedInto = true
+			continue
+		case ";", "&", "&&", "||":
+			pipedInto = false
 			continue
 		}
-		if !isInterpreter(token) {
-			continue
-		}
-		if afterPipe || takesInlineCode(tokens, idx) {
+		if isInterpreter(token) && (pipedInto || takesInlineCode(tokens, idx)) {
 			return true
 		}
+		pipedInto = false
 	}
 	return false
 }
 
 func takesInlineCode(tokens []string, idx int) bool {
-	if idx+1 >= len(tokens) {
-		return false
+	args := argumentsAfter(tokens, idx)
+	next := tokenAt(args, 0)
+	if path.Base(tokens[idx]) == "php" && next == "-r" {
+		return true
 	}
-	next := tokens[idx+1]
-	switch next {
-	case "-c", "-e", "--eval":
+	if isInlineCodeOption(next) {
+		return true
+	}
+	if next == "-" && strings.HasPrefix(tokenAt(args, 1), "<<") {
 		return true
 	}
 	return strings.HasPrefix(next, "<<") || strings.HasPrefix(next, "<(")
+}
+
+func argumentsAfter(tokens []string, idx int) []string {
+	if idx+1 >= len(tokens) {
+		return nil
+	}
+	return tokens[idx+1:]
+}
+
+func tokenAt(tokens []string, idx int) string {
+	if idx >= len(tokens) {
+		return ""
+	}
+	return tokens[idx]
+}
+
+func isInlineCodeOption(token string) bool {
+	if token == "--eval" || strings.HasPrefix(token, "--eval=") {
+		return true
+	}
+	if !strings.HasPrefix(token, "-") || strings.HasPrefix(token, "--") {
+		return false
+	}
+	letters := token[1:]
+	return strings.Trim(letters, "abcdefghijklmnopqrstuvwxyz") == "" && strings.ContainsAny(letters, "ce")
 }
 
 func isInterpreter(token string) bool {

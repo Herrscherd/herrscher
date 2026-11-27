@@ -13,3 +13,8 @@ func EstimateTokens(text string) int {
 func EstimateBytes(size int) int {
 	return (size + bytesPerToken - 1) / bytesPerToken
 }
+
+// BytesForTokens is the largest size in bytes whose estimate fits in tokens.
+func BytesForTokens(tokens int) int {
+	return tokens * bytesPerToken
+}

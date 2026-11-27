@@ -106,8 +106,16 @@ func (c Config) TelemetryOff() bool {
 // Enabled, means the feature is on. Roots are extra skill roots appended after
 // the built-in workspace and global (~/.claude/skills) defaults.
 type SkillsConfig struct {
-	Enabled *bool    `json:"enabled,omitempty"`
-	Roots   []string `json:"roots,omitempty"`
+	Enabled *bool               `json:"enabled,omitempty"`
+	Roots   []string            `json:"roots,omitempty"`
+	Budget  *SkillsBudgetConfig `json:"budget,omitempty"`
+}
+
+// SkillsBudgetConfig caps the skill text injected each turn, in estimated tokens.
+// A nil pointer, or a zero field, leaves that block unbounded.
+type SkillsBudgetConfig struct {
+	MenuTokens      int `json:"menuTokens,omitempty"`
+	ExpansionTokens int `json:"expansionTokens,omitempty"`
 }
 
 // AccountsConfig configures how a new session picks its account. A nil Fallback

@@ -146,10 +146,13 @@ func TestSetReplyKeepsChannelsWhenTheRuleWriteFails(t *testing.T) {
 		t.Fatal("the test handler must run on a file store")
 	}
 	createRin(t, h)
-	if err := store.SetChannels("rin", []agent.Channel{{Gateway: "chat", Conversation: "222"}}); err != nil {
+	if err := store.SetReplyWithChannels("rin", contracts.ReplyOnMention, []agent.Channel{{Gateway: "chat", Conversation: "222"}}); err != nil {
 		t.Fatalf("seed channels: %v", err)
 	}
 	replyPath := filepath.Join(store.Root(), "rin", "reply")
+	if err := os.Remove(replyPath); err != nil {
+		t.Fatalf("drop the seeded reply file: %v", err)
+	}
 	if err := os.Mkdir(replyPath, 0o755); err != nil {
 		t.Fatalf("block the reply file: %v", err)
 	}

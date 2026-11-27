@@ -209,10 +209,10 @@ func (h *Handler) agentSetReplyRun(_ context.Context, input contracts.Input) (co
 	defer h.invalidateVoices()
 	if len(operands) > 0 {
 		if err := h.agents.SetReplyWithChannels(agentName, rule, channels); err != nil {
-			return contracts.Result{}, err
+			return contracts.Result{}, h.labelled("set reply", clitext.HostErrSetVoice, err)
 		}
 	} else if err := h.agents.SetReply(agentName, rule); err != nil {
-		return contracts.Result{}, err
+		return contracts.Result{}, h.labelled("set reply", clitext.HostErrSetVoice, err)
 	}
 	return contracts.DataResult(h.text(clitext.HostAgentReplySet, clitext.Params{clitext.ParamName: agentName, clitext.ParamRule: rule.String()})), nil
 }

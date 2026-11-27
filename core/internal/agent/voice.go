@@ -82,6 +82,8 @@ func (s *Store) Reply(name string) (contracts.ReplyRule, error) {
 // SetReply writes the reply rule of an existing agent. A rule that names no
 // known rule is refused with [contracts.ErrUnknownReplyRule].
 func (s *Store) SetReply(name string, rule contracts.ReplyRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	home, err := s.home(name)
 	if err != nil {
 		return err
@@ -121,27 +123,14 @@ func (s *Store) Channels(name string) ([]Channel, error) {
 	return channels, nil
 }
 
-// SetChannels replaces the channels of an existing agent. They are sorted and
-// deduplicated on write; a channel that is not valid is refused with
-// [ErrBadChannel] and nothing is written.
-func (s *Store) SetChannels(name string, channels []Channel) error {
-	home, err := s.home(name)
-	if err != nil {
-		return err
-	}
-	text, err := channelsFileText(channels)
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(filepath.Join(home, channelsFile), text, fileMode)
-}
-
 // SetReplyWithChannels replaces the channels and the reply rule of an existing
 // agent. Both are checked before anything is written, then the channels are
 // written and the rule after them. When the rule cannot be written, the channels
 // are put back as they were, or removed when the agent had none, and the rule
 // error is returned.
 func (s *Store) SetReplyWithChannels(name string, rule contracts.ReplyRule, channels []Channel) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	home, err := s.home(name)
 	if err != nil {
 		return err
@@ -163,7 +152,7 @@ func (s *Store) SetReplyWithChannels(name string, rule contracts.ReplyRule, chan
 		return err
 	}
 	if err := atomicfile.Write(filepath.Join(home, replyFile), ruleText, fileMode); err != nil {
-		return errors.Join(err, restoreChannels(channelsPath, previous, existed))
+		return errors.Join(err, leftAsWritten(name, restoreChannels(channelsPath, previous, existed)))
 	}
 	return nil
 }
@@ -197,6 +186,13 @@ func readOptional(path string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return raw, true, nil
+}
+
+func leftAsWritten(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("restore channels of %q, left as written: %w", name, err)
 }
 
 func restoreChannels(path string, previous []byte, existed bool) error {

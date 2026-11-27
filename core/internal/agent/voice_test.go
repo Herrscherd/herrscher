@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"sync"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -95,7 +97,7 @@ func TestChannelsSortedDedupedAndBadLineRefused(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	written := []Channel{{"other", "-1"}, {"chat", "2"}, {"chat", "2"}}
-	if err := s.SetChannels("rin", written); err != nil {
+	if err := s.SetReplyWithChannels("rin", contracts.ReplyInChannels, written); err != nil {
 		t.Fatalf("set channels: %v", err)
 	}
 	got, err := s.Channels("rin")
@@ -106,7 +108,7 @@ func TestChannelsSortedDedupedAndBadLineRefused(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("channels = %v; want %v", got, want)
 	}
-	if err = s.SetChannels("rin", []Channel{{"chat", ""}}); !errors.Is(err, ErrBadChannel) {
+	if err = s.SetReplyWithChannels("rin", contracts.ReplyInChannels, []Channel{{"chat", ""}}); !errors.Is(err, ErrBadChannel) {
 		t.Fatalf("err = %v; want ErrBadChannel", err)
 	}
 	kept, err := s.Channels("rin")
@@ -157,5 +159,39 @@ func TestSetReplyWithChannelsRemovesChannelsFileWhenRuleFails(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(a.Home, channelsFile)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("channels file after a failed rule: %v; want none", err)
+	}
+}
+
+func TestConcurrentFailedRuleWritesRestoreTheChannelsTheyFound(t *testing.T) {
+	s := NewStore(t.TempDir())
+	a, err := s.Create(CreateSpec{Name: "rin"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	seed := []Channel{{"chat", "1"}}
+	if err = s.SetReplyWithChannels("rin", contracts.ReplyInChannels, seed); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err = os.Remove(filepath.Join(a.Home, replyFile)); err != nil {
+		t.Fatalf("remove reply: %v", err)
+	}
+	if err = os.Mkdir(filepath.Join(a.Home, replyFile), 0o755); err != nil {
+		t.Fatalf("block the reply file: %v", err)
+	}
+	var wg sync.WaitGroup
+	for i := range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			writeErr := s.SetReplyWithChannels("rin", contracts.ReplyInChannels, []Channel{{"chat", strconv.Itoa(100 + i)}})
+			if writeErr == nil {
+				t.Errorf("a rule written onto a directory must fail")
+			}
+		}()
+	}
+	wg.Wait()
+	got, err := s.Channels("rin")
+	if err != nil || !slices.Equal(got, seed) {
+		t.Fatalf("channels after failed rule writes = %v, %v; want the seed %v", got, err, seed)
 	}
 }

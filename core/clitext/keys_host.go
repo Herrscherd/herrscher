@@ -21,6 +21,7 @@ const (
 	HostErrUnknownReplyRule     = "cli.host.err.unknown_reply_rule"
 	HostErrBadChannel           = "cli.host.err.bad_channel"
 	HostErrReadVoice            = "cli.host.err.read_voice"
+	HostErrSetVoice             = "cli.host.err.set_voice"
 	HostServiceRestarting       = "cli.host.service.restarting"
 	HostServiceRebuilt          = "cli.host.service.rebuilt"
 	HostSessionStartedPost      = "cli.host.session.started_post"
@@ -142,6 +143,7 @@ func hostKeys() map[Key][]string {
 		HostErrUnknownReplyRule:     nil,
 		HostErrBadChannel:           {ParamChannel},
 		HostErrReadVoice:            {ParamErr},
+		HostErrSetVoice:             {ParamErr},
 		HostServiceRestarting:       nil,
 		HostServiceRebuilt:          {ParamVersion},
 		HostSessionStartedPost:      {ParamName},

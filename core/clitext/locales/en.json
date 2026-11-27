@@ -2788,6 +2788,11 @@
     "other": "read reply or channels: {{.Err}}"
   },
   {
+    "id": "cli.host.err.set_voice",
+    "description": "Reply of a host command, err set voice",
+    "other": "write reply or channels: {{.Err}}"
+  },
+  {
     "id": "cli.host.service.restarting",
     "description": "Reply of a host command, service restarting",
     "other": "restarting the daemon…"

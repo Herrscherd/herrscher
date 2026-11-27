@@ -2788,6 +2788,11 @@
     "other": "lecture de la règle ou des salons : {{.Err}}"
   },
   {
+    "id": "cli.host.err.set_voice",
+    "description": "Réponse d'une commande de l'hôte, erreur d'écriture de la voix",
+    "other": "écriture de la règle ou des salons : {{.Err}}"
+  },
+  {
     "id": "cli.host.service.restarting",
     "description": "Reply of a host command, service restarting",
     "other": "redémarrage du démon…"

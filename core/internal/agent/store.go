@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -17,6 +18,7 @@ const defaultUserBudget = 1500
 type Store struct {
 	root       string
 	userBudget int
+	mu         sync.Mutex
 }
 
 // NewStore returns a Store rooted at root (created lazily on first Create).

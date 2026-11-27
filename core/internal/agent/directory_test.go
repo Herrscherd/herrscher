@@ -33,11 +33,8 @@ func TestAgentVoicesSortedWithOwnTokenAndChannelsOfTheGateway(t *testing.T) {
 			t.Fatalf("create %s: %v", name, err)
 		}
 	}
-	if err := store.SetReply("rin", contracts.ReplyInChannels); err != nil {
-		t.Fatalf("set reply: %v", err)
-	}
-	if err := store.SetChannels("rin", []Channel{{"chat", "111"}, {"other", "-9"}}); err != nil {
-		t.Fatalf("set channels: %v", err)
+	if err := store.SetReplyWithChannels("rin", contracts.ReplyInChannels, []Channel{{"chat", "111"}, {"other", "-9"}}); err != nil {
+		t.Fatalf("set reply and channels: %v", err)
 	}
 	voices := dir.AgentVoices("chat")
 	if len(voices) != 2 || voices[0].Agent != "anna" || voices[1].Agent != "rin" {
@@ -148,11 +145,8 @@ func writeRulesAndChannels(t *testing.T, store *Store, rounds int) {
 	t.Helper()
 	rules := []contracts.ReplyRule{contracts.ReplyOnMention, contracts.ReplyInChannels, contracts.ReplyNever}
 	for i := range rounds {
-		if err := store.SetReply("rin", rules[i%len(rules)]); err != nil {
-			t.Errorf("set reply: %v", err)
-		}
-		if err := store.SetChannels("rin", []Channel{{"chat", strconv.Itoa(i)}}); err != nil {
-			t.Errorf("set channels: %v", err)
+		if err := store.SetReplyWithChannels("rin", rules[i%len(rules)], []Channel{{"chat", strconv.Itoa(i)}}); err != nil {
+			t.Errorf("set reply and channels: %v", err)
 		}
 	}
 }

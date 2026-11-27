@@ -2,7 +2,6 @@ package host
 
 import (
 	"io"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -18,9 +17,7 @@ func TestRestartWithResumeKeepsOldTokenAndMarkOnDiskWhenPersistFails(t *testing.
 	if err := st.AddSession(state.Session{Name: name, ResumeToken: "old", InterruptedTurn: "turn-1", Incarnation: "incarnation"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockStateSaves(t, path)
 	partDir := t.TempDir()
 	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(io.Discard))
 	h.runtime = isolatedRuntimeDir(t)

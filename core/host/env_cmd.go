@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 const (
@@ -159,11 +160,7 @@ func (d *envDocument) write(path string) error {
 		out.WriteString(line.raw)
 		out.WriteByte('\n')
 	}
-	temp := path + ".tmp"
-	if err := os.WriteFile(temp, []byte(out.String()), envFileMode); err != nil {
-		return err
-	}
-	return os.Rename(temp, path)
+	return atomicfile.Write(path, []byte(out.String()), envFileMode)
 }
 
 func (d *envDocument) render(key string) (string, error) {

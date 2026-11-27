@@ -271,3 +271,24 @@ func TestGrokStatusIgnoresAKeyInheritedFromTheDaemon(t *testing.T) {
 		t.Fatalf("claude env = %q, want it untouched", got)
 	}
 }
+
+func TestSetDefaultWritesPrivatelyPastAStrayStagingName(t *testing.T) {
+	store := newStore(t)
+	name := mustName(t, "work")
+	if _, err := store.Create("claude", name); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(store.Root, defaultsFileName)+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefault("claude", name); err != nil {
+		t.Fatalf("SetDefault blocked by a stray staging name: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(store.Root, defaultsFileName))
+	if err != nil || info.Mode().Perm() != fileMode {
+		t.Fatalf("defaults mode = %v, %v; want %v", info.Mode().Perm(), err, fileMode)
+	}
+	if got, err := store.Default("claude"); err != nil || got != "work" {
+		t.Fatalf("Default = %q, %v; want work", got, err)
+	}
+}

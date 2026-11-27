@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 const (
@@ -266,11 +268,7 @@ func (d *Document) Write(path string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
 		return "", fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
-	temp := path + ".tmp"
-	if err := os.WriteFile(temp, append(out, '\n'), documentMode); err != nil {
-		return "", fmt.Errorf("write %s: %w", temp, err)
-	}
-	if err := os.Rename(temp, path); err != nil {
+	if err := atomicfile.Write(path, append(out, '\n'), documentMode); err != nil {
 		return "", fmt.Errorf("replace %s: %w", path, err)
 	}
 	return backup, nil

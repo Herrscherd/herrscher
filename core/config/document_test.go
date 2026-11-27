@@ -124,3 +124,27 @@ func TestAKeyThatCrossesAValueOrMissesIsNamed(t *testing.T) {
 		t.Errorf("Get of an empty segment: %v, want ErrEmptyKey", err)
 	}
 }
+
+func TestWriteReplacesTheFilePrivatelyPastAStrayStagingName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	doc, err := ReadDocument(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = doc.Set("cmd", "claude --verbose"); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(path+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = doc.Write(path); err != nil {
+		t.Fatalf("Write blocked by a stray staging name: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != documentMode {
+		t.Fatalf("config mode = %v, %v; want %v", info.Mode().Perm(), err, documentMode)
+	}
+	if cfg, err := Load(path); err != nil || cfg.Cmd != "claude --verbose" {
+		t.Fatalf("Load = %+v, %v; want the edit", cfg, err)
+	}
+}

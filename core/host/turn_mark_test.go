@@ -173,14 +173,10 @@ func TestFailedClearOfAFinishedTurnAnnouncesNothingAtRestart(t *testing.T) {
 	h := hubWarningInto(t, st, partDir, warnings)
 	h.openTurnMark("main", "turn-1")
 	h.markTurnFinished("main", "turn-1")
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	unblock := blockStateSaves(t, path)
 	h.clearTurnMark("main", "turn-1")
 	awaitSinkQuiet(t, h.sink)
-	if err := os.Remove(path + ".tmp"); err != nil {
-		t.Fatal(err)
-	}
+	unblock()
 
 	if got, _ := st.FindSession("main"); got.InterruptedTurn != "turn-1" || got.FinishedTurn != "turn-1" {
 		t.Fatalf("mark = %q, finished = %q after a failed clear, want both restored", got.InterruptedTurn, got.FinishedTurn)

@@ -1,6 +1,8 @@
 package host
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -39,5 +41,33 @@ func TestEnvWrappedCommandName(t *testing.T) {
 				t.Fatalf("commandBinary(%q) = %q, want %q", tt.cmd, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestEnvDocumentWritesPrivatelyPastAStrayStagingName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "herrscher.env")
+	if err := os.WriteFile(path, []byte("A=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := readEnvDocument(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = doc.set("B", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(path+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = doc.write(path); err != nil {
+		t.Fatalf("write blocked by a stray staging name: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != envFileMode {
+		t.Fatalf("env file mode = %v, %v; want %v", info.Mode().Perm(), err, envFileMode)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != "A=1\nB=2\n" {
+		t.Fatalf("file = %q, %v; want A=1 and B=2", raw, err)
 	}
 }

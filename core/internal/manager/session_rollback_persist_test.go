@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,9 +15,7 @@ func TestARollbackThatCannotPersistIsReported(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "beta", ChannelID: "42", Type: "text", Vendor: "claude"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockStateSaves(t, path)
 	sup := &fakeSup{}
 	h := NewHandler(clitext.NewMessages(), &fakeChannelAdmin{}, sup, &fakeWT{path: t.TempDir(), scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -20,6 +19,7 @@ import (
 )
 
 type jammedRestartSup struct {
+	t          *testing.T
 	statePath  string
 	restartErr error
 	restarted  []state.Session
@@ -34,9 +34,7 @@ func (s *jammedRestartSup) RestartWithin(sess state.Session, _ time.Duration) er
 	if len(s.restarted) > 1 {
 		return nil
 	}
-	if err := os.Mkdir(s.statePath+".tmp", 0o700); err != nil {
-		return err
-	}
+	blockStateSaves(s.t, s.statePath)
 	return s.restartErr
 }
 
@@ -65,7 +63,7 @@ func TestSessionSwitchNamesTheLostSessionWhenRestartAndRollbackFail(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "s.json")
 			err := switchWithLostRollback(t, path, tc.lang, restartErr)
-			assertLostSession(t, err, restartErr, path+".tmp", tc.lang, tc.wantError, tc.wantRendered)
+			assertLostSession(t, err, restartErr, filepath.Dir(path), tc.lang, tc.wantError, tc.wantRendered)
 		})
 	}
 }
@@ -76,7 +74,7 @@ func switchWithLostRollback(t *testing.T, path string, lang i18n.Language, resta
 	if err := st.AddSession(state.Session{Name: "s1", ChannelID: "42", Type: "text", Vendor: "claude", Cmd: "claude"}); err != nil {
 		t.Fatal(err)
 	}
-	sup := &jammedRestartSup{statePath: path, restartErr: restartErr}
+	sup := &jammedRestartSup{t: t, statePath: path, restartErr: restartErr}
 	h := NewHandler(clitext.NewMessages(), &fakeChannelAdmin{}, sup, &fakeWT{path: t.TempDir(), scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
 	h.SetLanguage(lang)
 	_, err := h.sessionSwitchRun(context.Background(), args(
@@ -91,14 +89,14 @@ func switchWithLostRollback(t *testing.T, path string, lang i18n.Language, resta
 	return err
 }
 
-func assertLostSession(t *testing.T, err, restartErr error, faultPath string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
+func assertLostSession(t *testing.T, err, restartErr error, faultDir string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
 	t.Helper()
 	var pathErr *fs.PathError
 	if !errors.As(err, &pathErr) {
 		t.Fatalf("no *fs.PathError in the chain, the rollback cause is lost: %v", err)
 	}
-	if pathErr.Path != faultPath {
-		t.Fatalf("rollback failed on %q, want the jammed state file %q", pathErr.Path, faultPath)
+	if filepath.Dir(pathErr.Path) != faultDir {
+		t.Fatalf("rollback failed on %q, want a write inside the jammed state directory %q", pathErr.Path, faultDir)
 	}
 	if !errors.Is(err, restartErr) {
 		t.Fatalf("errors.Is(restart cause) = false, the cause is lost: %v", err)

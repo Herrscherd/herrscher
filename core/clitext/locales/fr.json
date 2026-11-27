@@ -6322,6 +6322,21 @@
     "other": "{{.Command}} ne se lance pas, drives : {{.Count}}. Installe rclone ou renseigne HERRSCHER_RCLONE."
   },
   {
+    "id": "cli.host.fault.drive_name_missing",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "nomme un drive (voir `drive list`)"
+  },
+  {
+    "id": "cli.host.fault.drive_agent_missing",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "nomme un agent, ou * pour tout agent que le drive ne nomme pas"
+  },
+  {
+    "id": "cli.host.fault.drive_local_forbidden",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "seuls une session et le terminal de l'opérateur lisent vers un fichier local ou écrivent depuis un fichier local"
+  },
+  {
     "id": "cli.host.config.set",
     "description": "Reply of config set",
     "other": "{{.Key}} réglé dans {{.Path}}. Le démon le lit à son prochain démarrage : `herrscher service restart`."

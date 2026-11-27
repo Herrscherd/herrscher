@@ -100,16 +100,14 @@ func TestATargetStaysInsideTheExposedFolders(t *testing.T) {
 }
 
 func TestAnAgentTheDriveDoesNotNameHoldsTheDefault(t *testing.T) {
-	drive := Drive{Name: "gdrive", Default: AccessRead}
-	drive.Grant("writer", AccessWrite)
-	drive.Grant("banned", AccessNone)
+	drive := Drive{Name: "gdrive", Default: AccessRead}.WithAccess("writer", AccessWrite).WithAccess("banned", AccessNone)
 	cases := map[string]Access{"writer": AccessWrite, "banned": AccessNone, "other": AccessRead, "": AccessRead}
 	for agent, want := range cases {
 		if got := drive.AccessOf(agent); got != want {
 			t.Errorf("AccessOf(%q) = %s, want %s", agent, got, want)
 		}
 	}
-	drive.Grant(AllAgents, AccessNone)
+	drive = drive.WithAccess(AllAgents, AccessNone)
 	if got := drive.AccessOf("other"); got != AccessNone {
 		t.Fatalf("granting * sets the default, got %s", got)
 	}

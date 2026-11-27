@@ -54,7 +54,7 @@ func ParseName(raw string) (Name, error) {
 func (n Name) String() string { return n.value }
 
 // Path is a checked path inside a drive: relative, slash separated, with no
-// empty, dot or dot dot segment. The zero Path is the root of the drive.
+// empty segment and no . or .. segment. The zero Path is the root of the drive.
 type Path struct {
 	clean string
 }

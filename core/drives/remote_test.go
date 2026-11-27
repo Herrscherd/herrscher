@@ -15,8 +15,8 @@ func TestAKeyRemoteKeepsItsSecretInHerrschersConfigAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	remote := KeyRemote{Kind: KindR2, AccessKeyID: "AKID", Secret: "s3cr/t+key=", Endpoint: R2Endpoint("acct")}
-	if err := catalog.AddKeyRemote(t.Context(), name, remote); err != nil {
-		t.Fatalf("AddKeyRemote: %v", err)
+	if addErr := catalog.AddKeyRemote(t.Context(), name, remote); addErr != nil {
+		t.Fatalf("AddKeyRemote: %v", addErr)
 	}
 	raw, err := os.ReadFile(catalog.RcloneConfig())
 	if err != nil {

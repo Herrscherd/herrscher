@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"strings"
@@ -31,7 +30,7 @@ type BadSettingError struct {
 }
 
 func (e *BadSettingError) Error() string {
-	return fmt.Sprintf("%s is empty or holds a space, a quote, a backslash, a bracket, # or ;", e.Setting)
+	return e.Setting + " is empty or holds a space, a quote, a backslash, a bracket, # or ;"
 }
 
 // KeyRemote is what an S3 or R2 remote needs. Provider is the S3 provider

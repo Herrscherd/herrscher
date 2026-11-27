@@ -67,6 +67,13 @@ type driveVerbs struct {
 	lang     languageSource
 }
 
+func addAccessCommands(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, store *state.State, partDir string) error {
+	if err := addRoleCommands(reg, cliMessages, lang, store); err != nil {
+		return err
+	}
+	return addVerbs(reg, newDriveVerbs(cliMessages, lang, store, partDir).commands()...)
+}
+
 func newDriveVerbs(cliMessages *clitext.Messages, lang languageSource, store *state.State, partDir string) driveVerbs {
 	return driveVerbs{service: driveService(partDir), store: store, messages: cliMessages, lang: lang}
 }
@@ -175,11 +182,12 @@ func (d driveVerbs) list(ctx context.Context, input contracts.Input) (contracts.
 }
 
 func driveLine(drive drives.Drive) string {
-	access := drive.Default.String()
+	var access strings.Builder
+	access.WriteString(drive.Default.String())
 	for _, agent := range slices.Sorted(maps.Keys(drive.Agents)) {
-		access += ", " + agent + ": " + drive.Agents[agent].String()
+		access.WriteString(", " + agent + ": " + drive.Agents[agent].String())
 	}
-	return fmt.Sprintf("%s  %s  %s  %s", drive.Name, drive.Kind, drive.FolderList(), access)
+	return fmt.Sprintf("%s  %s  %s  %s", drive.Name, drive.Kind, drive.FolderList(), access.String())
 }
 
 func (d driveVerbs) ls(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -275,13 +283,13 @@ func (d driveVerbs) log(ctx context.Context, input contracts.Input) (contracts.R
 		return contracts.DataResult(d.text(clitext.HostDriveLogEmpty, nil)), nil
 	}
 	lines := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		lines = append(lines, journalLine(entry))
+	for index := range entries {
+		lines = append(lines, journalLine(&entries[index]))
 	}
 	return contracts.DataResult(strings.Join(lines, "\n")), nil
 }
 
-func journalLine(entry drives.Entry) string {
+func journalLine(entry *drives.Entry) string {
 	who := entry.Session
 	if who == "" {
 		who = "operator"
@@ -313,7 +321,7 @@ func (d driveVerbs) grant(ctx context.Context, input contracts.Input) (contracts
 		return contracts.Result{}, errDriveAgentMissing
 	}
 	if err := d.service.Catalog().Update(ctx, target.drive, func(drive *drives.Drive) error {
-		drive.Grant(agent, access)
+		*drive = drive.WithAccess(agent, access)
 		return nil
 	}); err != nil {
 		return contracts.Result{}, err
@@ -364,18 +372,18 @@ func (e *driveLimitError) Error() string {
 
 func (h *hub) guardDrive(ctx context.Context, session, verb string, input contracts.Input) error {
 	need := drives.AccessRead
-	op := drives.OpRead
+	operation := drives.OpRead
 	switch verb {
 	case verbDriveLs:
-		op = drives.OpList
+		operation = drives.OpList
 	case verbDriveWrite:
-		need, op = drives.AccessWrite, drives.OpWrite
+		need, operation = drives.AccessWrite, drives.OpWrite
 	}
 	target := driveTargetOf(input)
 	if target.drive == "" {
 		return errDriveNameMissing
 	}
 	caller := driveCallerOf(h.st, authz.SessionPrincipal(session))
-	_, err := driveService(h.partDir).Check(ctx, caller, target.drive, need, op, target.path)
+	_, err := driveService(h.partDir).Check(ctx, caller, target.drive, need, operation, target.path)
 	return err
 }

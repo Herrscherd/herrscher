@@ -24,6 +24,8 @@ const (
 	exitFileNotFound   = 4
 	rcloneWaitDelay    = 5 * time.Second
 	versionOutputBytes = 4 << 10
+	logPrefixFields    = 3
+	logDateSlashes     = 2
 )
 
 // ErrNoSuchFile reports a path the remote does not hold.
@@ -150,7 +152,7 @@ func (r Rclone) prepare(ctx context.Context, args []string) *exec.Cmd {
 	return cmd
 }
 
-func (r Rclone) run(ctx context.Context, op string, stdin io.Reader, limit int64, args ...string) ([]byte, error) {
+func (r Rclone) run(ctx context.Context, operation string, stdin io.Reader, limit int64, args ...string) ([]byte, error) {
 	cmd := r.prepare(ctx, append([]string{"--ask-password=false"}, args...))
 	if stdin == nil {
 		stdin = bytes.NewReader(nil)
@@ -164,14 +166,14 @@ func (r Rclone) run(ctx context.Context, op string, stdin io.Reader, limit int64
 		return nil, &TooLargeError{Limit: limit}
 	}
 	if runErr != nil {
-		return nil, rcloneFailure(op, runErr, errOut.String())
+		return nil, rcloneFailure(operation, runErr, errOut.String())
 	}
 	return out.Bytes(), nil
 }
 
-func rcloneFailure(op string, runErr error, stderr string) error {
+func rcloneFailure(operation string, runErr error, stderr string) error {
 	code := exitCode(runErr)
-	failure := &RcloneError{Op: op, Code: code, Detail: lastLine(stderr), Cause: runErr}
+	failure := &RcloneError{Op: operation, Code: code, Detail: lastLine(stderr), Cause: runErr}
 	if code == exitDirNotFound || code == exitFileNotFound {
 		failure.Cause = errors.Join(ErrNoSuchFile, runErr)
 	}
@@ -190,8 +192,8 @@ func lastLine(text string) string {
 	line := strings.TrimSpace(lines[len(lines)-1])
 	if _, after, found := strings.Cut(line, " : "); found {
 		line = after
-	} else if fields := strings.SplitN(line, " ", 3); len(fields) == 3 && strings.Count(fields[0], "/") == 2 {
-		line = fields[2]
+	} else if fields := strings.SplitN(line, " ", logPrefixFields); len(fields) == logPrefixFields && strings.Count(fields[0], "/") == logDateSlashes {
+		line = fields[logPrefixFields-1]
 	}
 	if runes := []rune(line); len(runes) > detailRunes {
 		line = string(runes[:detailRunes])

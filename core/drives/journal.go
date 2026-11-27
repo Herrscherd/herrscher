@@ -81,16 +81,16 @@ func (j Journal) Append(ctx context.Context, entry Entry) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(j.path), dirMode); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(filepath.Dir(j.path), dirMode); mkdirErr != nil {
+		return mkdirErr
 	}
 	release, err := filelock.Acquire(ctx, j.path+lockSuffix)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := j.rotateWhenFull(); err != nil {
-		return err
+	if rotateErr := j.rotateWhenFull(); rotateErr != nil {
+		return rotateErr
 	}
 	file, err := os.OpenFile(j.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
@@ -131,7 +131,7 @@ func (j Journal) Read(filter Filter, limit int) ([]Entry, error) {
 }
 
 func readEntries(path string, filter Filter) ([]Entry, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

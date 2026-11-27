@@ -12,6 +12,11 @@ import (
 //go:embed rclone.sh
 var files embed.FS
 
+const (
+	fileMode = 0o600
+	dirMode  = 0o700
+)
+
 // Rclone is an installed fake rclone: Command runs it, Root holds one directory
 // per remote, and Log is the file where each run appends its arguments and the
 // RCLONE_ variables it saw.
@@ -30,11 +35,11 @@ func Install(tb testing.TB) Rclone {
 	}
 	dir := tb.TempDir()
 	path := filepath.Join(dir, "rclone.sh")
-	if err := os.WriteFile(path, script, 0o600); err != nil {
+	if err := os.WriteFile(path, script, fileMode); err != nil {
 		tb.Fatalf("write fake rclone: %v", err)
 	}
 	fake := Rclone{Command: "sh " + path, Root: filepath.Join(dir, "remotes"), Log: filepath.Join(dir, "rclone.log")}
-	if err := os.MkdirAll(fake.Root, 0o700); err != nil {
+	if err := os.MkdirAll(fake.Root, dirMode); err != nil {
 		tb.Fatalf("make fake remotes: %v", err)
 	}
 	tb.Setenv("FAKE_RCLONE_ROOT", fake.Root)
@@ -46,10 +51,10 @@ func Install(tb testing.TB) Rclone {
 func (r Rclone) Put(tb testing.TB, remote, path, content string) {
 	tb.Helper()
 	full := filepath.Join(r.Root, remote, filepath.FromSlash(path))
-	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(full), dirMode); err != nil {
 		tb.Fatalf("make fake folder: %v", err)
 	}
-	if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(full, []byte(content), fileMode); err != nil {
 		tb.Fatalf("write fake file: %v", err)
 	}
 }
@@ -57,7 +62,7 @@ func (r Rclone) Put(tb testing.TB, remote, path, content string) {
 // Get reads path of remote, empty when it is absent.
 func (r Rclone) Get(tb testing.TB, remote, path string) string {
 	tb.Helper()
-	raw, err := os.ReadFile(filepath.Join(r.Root, remote, filepath.FromSlash(path)))
+	raw, err := os.ReadFile(filepath.Clean(filepath.Join(r.Root, remote, filepath.FromSlash(path))))
 	if err != nil {
 		return ""
 	}

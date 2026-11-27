@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"golang.org/x/term"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/drives"
@@ -22,7 +23,7 @@ const (
 	driveSubAdd     = "add"
 	driveFlagTo     = "--to"
 	driveFlagFrom   = "--from"
-	driveSecretFlag = "--secret-env"
+	driveKeyEnvFlag = "--secret-env"
 	driveConfigMode = 0o600
 )
 
@@ -232,7 +233,7 @@ func driveSecret(messages *clitext.Messages, lang i18n.Language, secretEnv strin
 	}
 	stdin := int(os.Stdin.Fd())
 	if !term.IsTerminal(stdin) {
-		return "", renderError(messages, lang, errDriveSecretMissing, clitext.DriveSecretMissing, clitext.Params{clitext.ParamName: driveSecretFlag})
+		return "", renderError(messages, lang, errDriveSecretMissing, clitext.DriveSecretMissing, clitext.Params{clitext.ParamName: driveKeyEnvFlag})
 	}
 	if err := emitf(os.Stderr, "%s", messages.For(lang).Text(clitext.DriveSecretPrompt, nil)); err != nil {
 		return "", err
@@ -243,7 +244,7 @@ func driveSecret(messages *clitext.Messages, lang i18n.Language, secretEnv strin
 	}
 	secret := strings.TrimSpace(string(typed))
 	if secret == "" {
-		return "", renderError(messages, lang, errDriveSecretMissing, clitext.DriveSecretMissing, clitext.Params{clitext.ParamName: driveSecretFlag})
+		return "", renderError(messages, lang, errDriveSecretMissing, clitext.DriveSecretMissing, clitext.Params{clitext.ParamName: driveKeyEnvFlag})
 	}
 	return secret, nil
 }

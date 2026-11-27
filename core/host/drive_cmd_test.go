@@ -21,6 +21,7 @@ import (
 
 type driveRig struct {
 	escalationRig
+
 	fake     drivestest.Rclone
 	catalog  drives.Catalog
 	worktree string
@@ -121,61 +122,69 @@ func TestASessionWithoutAccessIsRefusedWithoutAQuestion(t *testing.T) {
 	}
 }
 
-func TestEveryWriteIsAskedAndTheAlwaysRulePassesTheSameWrite(t *testing.T) {
-	rig := newDriveRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Folders: []string{"Neublox"}, Agents: map[string]drives.Access{"karamon": drives.AccessWrite}})
-	if err := os.WriteFile(filepath.Join(rig.worktree, "out.md"), []byte("first"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	argv := []string{"drive", "write", "gdrive", "Neublox/report.md", "--from", "out.md"}
-
-	done := rig.dispatchAsync(t, argv)
-	pending := onlyPending(t, rig.approvals)
+func (r driveRig) answerWrite(t *testing.T, argv []string, answer approvalAnswer) error {
+	t.Helper()
+	done := r.dispatchAsync(t, argv)
+	pending := onlyPending(t, r.approvals)
 	if pending.Tool != approval.VerbTool || pending.Subject != strings.Join(argv, " ") {
 		t.Fatalf("pending = %+v, want the write asked as Herrscher(%s)", pending, strings.Join(argv, " "))
 	}
-	if !settleApproval(rig.approvals, pending.ID, approvalAnswer{scope: scopeAlways}) {
+	if !settleApproval(r.approvals, pending.ID, answer) {
 		t.Fatal("the question vanished before the operator answered")
 	}
-	if err := <-done; err != nil {
+	return <-done
+}
+
+func (r driveRig) writeSource(t *testing.T, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(r.worktree, "out.md"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func newWriterRig(t *testing.T) driveRig {
+	t.Helper()
+	return newDriveRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Folders: []string{"Neublox"}, Agents: map[string]drives.Access{"karamon": drives.AccessWrite}})
+}
+
+func TestTheAlwaysRulePassesTheSameWriteWithoutAskingAgain(t *testing.T) {
+	rig := newWriterRig(t)
+	argv := []string{"drive", "write", "gdrive", "Neublox/report.md", "--from", "out.md"}
+	rig.writeSource(t, "first")
+
+	if err := rig.answerWrite(t, argv, approvalAnswer{scope: scopeAlways}); err != nil {
 		t.Fatalf("the approved write failed: %v", err)
 	}
 	if got := rig.fake.Get(t, "gdrive", "Neublox/report.md"); got != "first" {
 		t.Fatalf("remote = %q, want first", got)
 	}
-
-	if err := os.WriteFile(filepath.Join(rig.worktree, "out.md"), []byte("second"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	rig.writeSource(t, "second")
 	if out, err := rig.dispatch(t, argv...); err != nil {
 		t.Fatalf("the write the always rule covers failed: %q, %v", out, err)
-	}
-	if rules := rig.store.ApprovalRules(); len(rules) != 1 || !strings.Contains(rules[0], "drive write gdrive Neublox/report.md --from out.md") {
-		t.Fatalf("rules = %v, want the exact write", rules)
 	}
 	if got := rig.fake.Get(t, "gdrive", "Neublox/report.md"); got != "second" {
 		t.Fatalf("remote = %q, want second", got)
 	}
-	otherArgv := []string{"drive", "write", "gdrive", "Neublox/other.md", "--from", "out.md"}
-	other := rig.dispatchAsync(t, otherArgv)
-	asked := onlyPending(t, rig.approvals)
-	if asked.Subject != strings.Join(otherArgv, " ") {
-		t.Fatalf("pending = %+v, want the write to another file asked", asked)
+	if rules := rig.store.ApprovalRules(); len(rules) != 1 || !strings.Contains(rules[0], strings.Join(argv, " ")) {
+		t.Fatalf("rules = %v, want the exact write", rules)
 	}
-	answerApproval(rig.approvals, asked.ID, approval.Deny)
-	if err := <-other; err == nil {
+	if entries := rig.journal(t); len(entries) != 2 || entries[0].Op != drives.OpWrite || entries[1].Outcome != drives.OutcomeDone {
+		t.Fatalf("journal = %+v, want the two writes", entries)
+	}
+}
+
+func TestAWriteToAnotherFileIsAskedAgainAndARefusalSendsNothing(t *testing.T) {
+	rig := newWriterRig(t)
+	rig.writeSource(t, "report")
+	if err := rig.answerWrite(t, []string{"drive", "write", "gdrive", "Neublox/report.md", "--from", "out.md"}, approvalAnswer{scope: scopeAlways}); err != nil {
+		t.Fatalf("the approved write failed: %v", err)
+	}
+
+	if err := rig.answerWrite(t, []string{"drive", "write", "gdrive", "Neublox/other.md", "--from", "out.md"}, approvalAnswer{scope: scopeDeny}); err == nil {
 		t.Fatal("a refused write ran")
 	}
 	if got := rig.fake.Get(t, "gdrive", "Neublox/other.md"); got != "" {
 		t.Fatalf("the refused write reached the remote: %q", got)
-	}
-	writes := 0
-	for _, entry := range rig.journal(t) {
-		if entry.Op == drives.OpWrite && entry.Outcome == drives.OutcomeDone {
-			writes++
-		}
-	}
-	if writes != 2 {
-		t.Fatalf("journal holds %d done writes, want 2: %+v", writes, rig.journal(t))
 	}
 }
 

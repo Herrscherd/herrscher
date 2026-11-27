@@ -1,6 +1,7 @@
 package drives
 
 import (
+	"maps"
 	"slices"
 	"strings"
 )
@@ -27,16 +28,17 @@ func (d Drive) AccessOf(agent string) Access {
 	return d.Default
 }
 
-// Grant sets the access of one agent, or the default when agent is AllAgents.
-func (d *Drive) Grant(agent string, access Access) {
+// WithAccess is the drive with the access of one agent set, or the default when agent is AllAgents.
+func (d Drive) WithAccess(agent string, access Access) Drive {
 	if agent == AllAgents {
 		d.Default = access
-		return
+		return d
 	}
-	if d.Agents == nil {
-		d.Agents = make(map[string]Access)
-	}
-	d.Agents[agent] = access
+	agents := make(map[string]Access, len(d.Agents)+1)
+	maps.Copy(agents, d.Agents)
+	agents[agent] = access
+	d.Agents = agents
+	return d
 }
 
 // ExposedFolders parses the folders the drive exposes. An empty list exposes the whole remote.

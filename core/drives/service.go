@@ -98,7 +98,7 @@ func (s Service) Visible(caller Caller) ([]Drive, error) {
 }
 
 // Check finds the drive and refuses a caller whose access does not cover need. The refusal is journaled.
-func (s Service) Check(ctx context.Context, caller Caller, name string, need Access, op Op, path string) (Drive, error) {
+func (s Service) Check(ctx context.Context, caller Caller, name string, need Access, operation Op, path string) (Drive, error) {
 	drive, err := s.catalog.Find(name)
 	if err != nil {
 		return Drive{}, err
@@ -111,7 +111,7 @@ func (s Service) Check(ctx context.Context, caller Caller, name string, need Acc
 		return drive, nil
 	}
 	denied := &AccessDeniedError{Drive: name, Agent: caller.Agent, Need: need, Held: held}
-	s.record(ctx, caller, Entry{Drive: name, Path: path, Op: op, Outcome: OutcomeRefused, Reason: denied.Error()})
+	s.record(ctx, caller, Entry{Drive: name, Path: path, Op: operation, Outcome: OutcomeRefused, Reason: denied.Error()})
 	return Drive{}, denied
 }
 
@@ -198,20 +198,20 @@ func (s Service) Log(filter Filter, limit int) ([]Entry, error) {
 	return s.catalog.Journal().Read(filter, limit)
 }
 
-func (s Service) locate(ctx context.Context, caller Caller, name, rawPath string, need Access, op Op) (Drive, Path, error) {
-	drive, err := s.Check(ctx, caller, name, need, op, rawPath)
+func (s Service) locate(ctx context.Context, caller Caller, name, rawPath string, need Access, operation Op) (Drive, Path, error) {
+	drive, err := s.Check(ctx, caller, name, need, operation, rawPath)
 	if err != nil {
 		return Drive{}, Path{}, err
 	}
 	path, err := ParsePath(rawPath)
-	if err == nil && op != OpList && path.IsRoot() {
+	if err == nil && operation != OpList && path.IsRoot() {
 		err = ErrPathRequired
 	}
-	if err == nil && (op != OpList || !path.IsRoot()) {
+	if err == nil && (operation != OpList || !path.IsRoot()) {
 		_, err = drive.Target(path)
 	}
 	if err != nil {
-		s.record(ctx, caller, Entry{Drive: name, Path: rawPath, Op: op, Outcome: OutcomeRefused, Reason: err.Error()})
+		s.record(ctx, caller, Entry{Drive: name, Path: rawPath, Op: operation, Outcome: OutcomeRefused, Reason: err.Error()})
 		return Drive{}, Path{}, err
 	}
 	return drive, path, nil

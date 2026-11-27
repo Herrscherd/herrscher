@@ -11,6 +11,16 @@ const (
 	HostAgentCreated            = "cli.host.agent.created"
 	HostAgentListEmpty          = "cli.host.agent.list_empty"
 	HostAgentSoulUpdated        = "cli.host.agent.soul_updated"
+	HostAgentReplySet           = "cli.host.agent.reply_set"
+	HostAgentShowReply          = "cli.host.agent.show_reply"
+	HostAgentShowChannels       = "cli.host.agent.show_channels"
+	HostAgentShowNoChannels     = "cli.host.agent.show_no_channels"
+	HostAgentShowToken          = "cli.host.agent.show_token"
+	HostAgentTokenSet           = "cli.host.agent.token_set"
+	HostAgentTokenNotSet        = "cli.host.agent.token_not_set"
+	HostErrUnknownReplyRule     = "cli.host.err.unknown_reply_rule"
+	HostErrBadChannel           = "cli.host.err.bad_channel"
+	HostErrReadVoice            = "cli.host.err.read_voice"
 	HostServiceRestarting       = "cli.host.service.restarting"
 	HostServiceRebuilt          = "cli.host.service.rebuilt"
 	HostSessionStartedPost      = "cli.host.session.started_post"
@@ -122,6 +132,16 @@ func hostKeys() map[Key][]string {
 		HostAgentCreated:            {ParamName, ParamHome},
 		HostAgentListEmpty:          nil,
 		HostAgentSoulUpdated:        {ParamName},
+		HostAgentReplySet:           {ParamName, ParamRule},
+		HostAgentShowReply:          {ParamRule},
+		HostAgentShowChannels:       {ParamChannels},
+		HostAgentShowNoChannels:     nil,
+		HostAgentShowToken:          {ParamKind, ParamState},
+		HostAgentTokenSet:           nil,
+		HostAgentTokenNotSet:        nil,
+		HostErrUnknownReplyRule:     nil,
+		HostErrBadChannel:           {ParamChannel},
+		HostErrReadVoice:            {ParamErr},
 		HostServiceRestarting:       nil,
 		HostServiceRebuilt:          {ParamVersion},
 		HostSessionStartedPost:      {ParamName},

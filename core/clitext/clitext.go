@@ -207,6 +207,7 @@ const (
 	ParamWhere      = "Where"
 	ParamCadence    = "Cadence"
 	ParamAgent      = "Agent"
+	ParamChannels   = "Channels"
 )
 
 // ParamRollbackErr names the error of the rollback that followed a failed session switch.

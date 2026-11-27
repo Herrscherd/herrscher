@@ -4,33 +4,44 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+	"unicode"
+
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 const (
 	providerCloudflare = "Cloudflare"
 	providerAWS        = "AWS"
 	regionAuto         = "auto"
-	firstPrintable     = '!'
-	lastPrintable      = '~'
+	secretsFile        = "secrets.json"
+	remoteEnvPrefix    = "RCLONE_CONFIG_"
+	secretSetting      = "secret_access_key"
 )
 
-// ErrRemoteExists reports a remote the rclone configuration of herrscher already holds.
-var ErrRemoteExists = errors.New("herrscher's rclone configuration already holds a remote of that name")
+var (
+	// ErrRemoteExists reports a name herrscher's rclone configuration already holds.
+	ErrRemoteExists = errors.New("herrscher's rclone configuration already holds a remote of that name")
+	// ErrNotKeyKind reports a key remote asked for a kind that signs in with OAuth.
+	ErrNotKeyKind = errors.New("this kind signs in through the browser, not with an access key")
+	// ErrSecretMissing reports a key drive whose secret herrscher no longer holds.
+	ErrSecretMissing = errors.New("the secret of this drive is missing: remove it and add it again")
+)
 
-// ErrNotKeyKind reports a key remote asked for a kind that signs in with OAuth.
-var ErrNotKeyKind = errors.New("this kind signs in through the browser, not with an access key")
-
-// BadSettingError reports a value herrscher will not write into the rclone configuration.
+// BadSettingError reports a value herrscher will not hand to rclone.
 type BadSettingError struct {
 	Setting string
 }
 
 func (e *BadSettingError) Error() string {
-	return e.Setting + " is empty or holds a space, a quote, a backslash, a bracket, # or ;"
+	return e.Setting + " is empty or holds a space or a control character"
 }
 
 // KeyRemote is what an S3 or R2 remote needs. Provider is the S3 provider
@@ -76,98 +87,128 @@ func (c Catalog) HasRemote(name Name) (bool, error) {
 	return false, scanner.Err()
 }
 
-// AddKeyRemote appends an S3 or R2 remote to the rclone configuration of
-// herrscher. The secret is written there alone, readable by its owner.
-func (c Catalog) AddKeyRemote(ctx context.Context, name Name, remote KeyRemote) error {
-	section, err := keySection(name, remote)
-	if err != nil {
-		return err
-	}
-	release, err := c.hold(ctx)
-	if err != nil {
-		return err
-	}
-	defer release()
-	exists, err := c.HasRemote(name)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrRemoteExists
-	}
-	file, err := os.OpenFile(c.RcloneConfig(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
-	if err != nil {
-		return err
-	}
-	_, writeErr := file.WriteString(section)
-	return errors.Join(writeErr, file.Close())
-}
-
-func keySection(name Name, remote KeyRemote) (string, error) {
+// AddKeyDrive records an S3 or R2 drive. The remote never enters the rclone
+// configuration: its settings are kept with the drive, its secret in a file of
+// its own readable by the owner alone, and both reach rclone through the
+// environment of each run, so a token refresh that rewrites the rclone
+// configuration can never lose it.
+func (c Catalog) AddKeyDrive(ctx context.Context, drive Drive, remote KeyRemote) error {
 	settings, err := keySettings(remote)
 	if err != nil {
-		return "", err
+		return err
 	}
-	var section strings.Builder
-	section.WriteString("\n[" + name.String() + "]\n")
-	for _, setting := range settings {
-		if setting.value == "" && !setting.required {
-			continue
-		}
-		if !safeSettingValue(setting.value) {
-			return "", &BadSettingError{Setting: setting.key}
-		}
-		section.WriteString(setting.key + " = " + setting.value + "\n")
+	if !safeSettingValue(remote.Secret) {
+		return &BadSettingError{Setting: secretSetting}
 	}
-	return section.String(), nil
+	drive.Settings = settings
+	return c.edit(ctx, func(all []Drive) ([]Drive, error) {
+		if slices.ContainsFunc(all, func(d Drive) bool { return d.Name == drive.Name }) {
+			return nil, ErrDriveExists
+		}
+		secrets, loadErr := c.loadSecrets()
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		secrets[drive.Name] = remote.Secret
+		if saveErr := c.saveSecrets(secrets); saveErr != nil {
+			return nil, saveErr
+		}
+		return append(all, drive), nil
+	})
 }
 
-type setting struct {
-	key      string
-	value    string
-	required bool
+// Environment is what rclone needs in its environment to reach drive: the
+// settings and the secret of a key drive, nothing for an OAuth drive, whose
+// token lives in the rclone configuration.
+func (c Catalog) Environment(drive Drive) ([]string, error) {
+	if len(drive.Settings) == 0 {
+		return nil, nil
+	}
+	secrets, err := c.loadSecrets()
+	if err != nil {
+		return nil, err
+	}
+	secret, ok := secrets[drive.Name]
+	if !ok {
+		return nil, ErrSecretMissing
+	}
+	prefix := remoteEnvPrefix + strings.ToUpper(drive.Name) + "_"
+	env := make([]string, 0, len(drive.Settings)+1)
+	for _, key := range slices.Sorted(maps.Keys(drive.Settings)) {
+		env = append(env, prefix+strings.ToUpper(key)+"="+drive.Settings[key])
+	}
+	return append(env, prefix+strings.ToUpper(secretSetting)+"="+secret), nil
 }
 
-func keySettings(remote KeyRemote) ([]setting, error) {
+func (c Catalog) loadSecrets() (map[string]string, error) {
+	raw, err := os.ReadFile(filepath.Join(c.dir, secretsFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return make(map[string]string), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	secrets := make(map[string]string)
+	if err := json.Unmarshal(raw, &secrets); err != nil {
+		return nil, err
+	}
+	return secrets, nil
+}
+
+func (c Catalog) saveSecrets(secrets map[string]string) error {
+	raw, err := json.Marshal(secrets)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(filepath.Join(c.dir, secretsFile), raw, fileMode)
+}
+
+func (c Catalog) forgetSecret(name string) error {
+	secrets, err := c.loadSecrets()
+	if err != nil {
+		return err
+	}
+	if _, ok := secrets[name]; !ok {
+		return nil
+	}
+	delete(secrets, name)
+	return c.saveSecrets(secrets)
+}
+
+func keySettings(remote KeyRemote) (map[string]string, error) {
+	var settings map[string]string
 	switch remote.Kind {
 	case KindR2:
-		return []setting{
-			{key: "type", value: kindS3Name, required: true},
-			{key: "provider", value: providerCloudflare, required: true},
-			{key: "env_auth", value: "false", required: true},
-			{key: "access_key_id", value: remote.AccessKeyID, required: true},
-			{key: "secret_access_key", value: remote.Secret, required: true},
-			{key: "region", value: regionAuto, required: true},
-			{key: "endpoint", value: remote.Endpoint, required: true},
-			{key: "no_check_bucket", value: "true", required: true},
-		}, nil
+		settings = map[string]string{"provider": providerCloudflare, "region": regionAuto, "endpoint": remote.Endpoint, "no_check_bucket": "true"}
 	case KindS3:
 		provider := remote.Provider
 		if provider == "" {
 			provider = providerAWS
 		}
-		return []setting{
-			{key: "type", value: kindS3Name, required: true},
-			{key: "provider", value: provider, required: true},
-			{key: "env_auth", value: "false", required: true},
-			{key: "access_key_id", value: remote.AccessKeyID, required: true},
-			{key: "secret_access_key", value: remote.Secret, required: true},
-			{key: "region", value: remote.Region},
-			{key: "endpoint", value: remote.Endpoint},
-		}, nil
+		settings = map[string]string{"provider": provider}
+		for key, value := range map[string]string{"region": remote.Region, "endpoint": remote.Endpoint} {
+			if value != "" {
+				settings[key] = value
+			}
+		}
 	case KindGoogleDrive, KindDropbox, KindOneDrive:
 	}
-	return nil, ErrNotKeyKind
+	if settings == nil {
+		return nil, ErrNotKeyKind
+	}
+	settings["type"] = kindS3Name
+	settings["env_auth"] = "false"
+	settings["access_key_id"] = remote.AccessKeyID
+	for key, value := range settings {
+		if !safeSettingValue(value) {
+			return nil, &BadSettingError{Setting: key}
+		}
+	}
+	return settings, nil
 }
 
 func safeSettingValue(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, char := range value {
-		if char < firstPrintable || char > lastPrintable || strings.ContainsRune(`#;"'\[]`, char) {
-			return false
-		}
-	}
-	return true
+	return value != "" && !strings.ContainsFunc(value, func(char rune) bool {
+		return unicode.IsSpace(char) || unicode.IsControl(char)
+	})
 }

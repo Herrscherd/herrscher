@@ -80,6 +80,8 @@ func pathFault(raw string) string {
 		return "holds a backslash"
 	case strings.ContainsFunc(raw, unicode.IsControl):
 		return "holds a control character"
+	case strings.ContainsFunc(raw, invisible):
+		return "holds an invisible or format character"
 	}
 	trimmed := strings.TrimRight(raw, "/")
 	if trimmed == "" {
@@ -94,6 +96,14 @@ func pathFault(raw string) string {
 		}
 	}
 	return ""
+}
+
+func invisible(char rune) bool {
+	if char == ' ' {
+		return false
+	}
+	return unicode.In(char, unicode.Cf, unicode.Co, unicode.Cs, unicode.Zs, unicode.Zl, unicode.Zp,
+		unicode.Other_Default_Ignorable_Code_Point, unicode.Variation_Selector, unicode.Noncharacter_Code_Point)
 }
 
 func (p Path) String() string { return p.clean }

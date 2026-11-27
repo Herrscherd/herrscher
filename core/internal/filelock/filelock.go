@@ -26,12 +26,24 @@ var ErrSymlink = errors.New("the lock file is a symbolic link")
 // function that releases it. It stops with the error of ctx when ctx ends
 // first.
 func Acquire(ctx context.Context, path string) (func(), error) {
+	return acquire(ctx, path, TryLock)
+}
+
+// AcquireShared waits until no exclusive lock holds path and takes a shared
+// one, which other shared holders may hold at the same time. It returns the
+// function that releases it, and stops with the error of ctx when ctx ends
+// first.
+func AcquireShared(ctx context.Context, path string) (func(), error) {
+	return acquire(ctx, path, TryLockShared)
+}
+
+func acquire(ctx context.Context, path string, try func(*os.File) (bool, error)) (func(), error) {
 	file, err := Open(path)
 	if err != nil {
 		return nil, err
 	}
 	for {
-		locked, lockErr := TryLock(file)
+		locked, lockErr := try(file)
 		if lockErr != nil {
 			closeFile(file)
 			return nil, lockErr

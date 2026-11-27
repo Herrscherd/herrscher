@@ -25,6 +25,15 @@ func TestParsePathRefusesWhatCouldLeaveTheDrive(t *testing.T) {
 		{raw: "Neublox/x\x00", refuse: true},
 		{raw: "Neublox/x\nrm", refuse: true},
 		{raw: "\xff", refuse: true},
+		{raw: "Neublox/caf\u00e9 \u65e5\u672c.md", clean: "Neublox/caf\u00e9 \u65e5\u672c.md"},
+		{raw: "Neublox/\u202egnp.exe", refuse: true},
+		{raw: "Neu\u200bblox/a.md", refuse: true},
+		{raw: "Neublox/a\u00a0b", refuse: true},
+		{raw: "Neublox/\u3164", refuse: true},
+		{raw: "Neublox/a\ufe0f", refuse: true},
+		{raw: "Neublox/a\u034fb", refuse: true},
+		{raw: "Neublox/a\u2028b", refuse: true},
+		{raw: "Neublox/\ue000", refuse: true},
 	}
 	for _, tc := range cases {
 		path, err := ParsePath(tc.raw)

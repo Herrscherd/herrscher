@@ -167,17 +167,18 @@ func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
 			return admission{}, err
 		}
 	}
+	subject := callSubject(path, input, args)
 	allowed, why := authz.Decide(req, role)
 	if allowed {
-		return h.admitted(principal.Session, path, args, role, req.Contributed)
+		return h.admitted(principal.Session, path, subject, role, req.Contributed)
 	}
 	if authz.Escalable(req, role) && h.desk != nil {
-		return h.escalate(ctx, principal.Session, path, args)
+		return h.escalate(ctx, principal.Session, path, subject)
 	}
 	return admission{}, &accessDeniedError{Reason: why}
 }
 
-func (h *hub) admitted(session string, path, args []string, role authz.Role, contributed bool) (admission, error) {
+func (h *hub) admitted(session string, path []string, subject string, role authz.Role, contributed bool) (admission, error) {
 	if session == "" {
 		return admission{}, nil
 	}
@@ -191,11 +192,10 @@ func (h *hub) admitted(session string, path, args []string, role authz.Role, con
 	if role == authz.RoleSteward && !authz.AgentRuns(path, contributed) {
 		how = admittedSteward
 	}
-	return admission{session: session, verb: strings.Join(path, " "), subject: verbSubject(args), how: how}, nil
+	return admission{session: session, verb: strings.Join(path, " "), subject: subject, how: how}, nil
 }
 
-func (h *hub) escalate(ctx context.Context, session string, path, args []string) (admission, error) {
-	subject := verbSubject(args)
+func (h *hub) escalate(ctx context.Context, session string, path []string, subject string) (admission, error) {
 	decision, reason := h.desk.decideVerb(ctx, session, approval.Request{Tool: approval.VerbTool, Subject: subject})
 	if decision != approval.Allow {
 		h.announceSelfCall(session, "selftools.refused", subject, reason)
@@ -209,6 +209,13 @@ func (h *hub) escalate(ctx context.Context, session string, path, args []string)
 
 func listsApprovalRules(path []string, input contracts.Input) bool {
 	return strings.Join(path, " ") == "approve rule" && input.Get("rule") == "" && input.Get("rm") == "" && len(input.Rest) == 0
+}
+
+func callSubject(path []string, input contracts.Input, args []string) string {
+	if canonical, ok := canonicalDriveSubject(path, input); ok {
+		return canonical
+	}
+	return verbSubject(args)
 }
 
 func verbSubject(args []string) string {

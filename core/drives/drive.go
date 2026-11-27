@@ -11,13 +11,16 @@ const AllAgents = "*"
 
 // Drive is one drive of the catalogue: its rclone remote, the folders it
 // exposes and the access each agent holds. Default is the access of an agent
-// the drive does not name, and of a session that runs no agent.
+// the drive does not name, and of a session that runs no agent. Settings are
+// the rclone settings of a key drive, its secret aside.
 type Drive struct {
 	Name    string            `json:"name"`
 	Kind    Kind              `json:"kind"`
 	Folders []string          `json:"folders,omitempty"`
 	Default Access            `json:"default"`
 	Agents  map[string]Access `json:"agents,omitempty"`
+
+	Settings map[string]string `json:"settings,omitempty"`
 }
 
 // AccessOf is the access the agent holds on the drive.

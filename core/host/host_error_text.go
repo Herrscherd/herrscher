@@ -79,6 +79,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errNoBackendPlugin, "cli.host.fault.no_backend_plugin"},
 		{errHostNoneRegistered, "cli.host.fault.host_none_registered"},
 		{errDriveNameMissing, "cli.host.fault.drive_name_missing"},
+		{errDriveMixedForms, "cli.host.fault.drive_mixed_forms"},
 		{errDriveAgentMissing, "cli.host.fault.drive_agent_missing"},
 		{errDriveLocalForbidden, "cli.host.fault.drive_local_forbidden"},
 		{errGatewayOnlyNoModel, "cli.host.fault.gateway_only_no_model"},

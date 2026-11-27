@@ -72,10 +72,7 @@ func (c Catalog) Journal() Journal { return Journal{path: filepath.Join(c.dir, j
 
 // Ensure creates the directory, readable by its owner alone.
 func (c Catalog) Ensure() error {
-	if err := os.MkdirAll(c.dir, dirMode); err != nil {
-		return err
-	}
-	return os.Chmod(c.dir, dirMode)
+	return ensureDir(filepath.Join(c.dir, catalogFile))
 }
 
 // Load reads every drive. A catalogue never written holds none.
@@ -141,8 +138,19 @@ func (c Catalog) Remove(ctx context.Context, name string) error {
 		if index < 0 {
 			return nil, &NotFoundError{Name: name}
 		}
+		if err := c.forgetSecret(name); err != nil {
+			return nil, err
+		}
 		return slices.Delete(all, index, index+1), nil
 	})
+}
+
+func ensureDir(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
+		return err
+	}
+	return os.Chmod(dir, dirMode)
 }
 
 func (c Catalog) hold(ctx context.Context) (func(), error) {

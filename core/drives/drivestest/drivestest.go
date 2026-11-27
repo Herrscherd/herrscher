@@ -78,3 +78,31 @@ func (r Rclone) Runs(tb testing.TB) []string {
 	}
 	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }
+
+// Hold makes every cat of the fake wait until Release, so a test can see what
+// another run does meanwhile.
+type Hold struct {
+	path string
+}
+
+// HoldReads installs a hold on the cat runs of the fake.
+func (r Rclone) HoldReads(tb testing.TB) Hold {
+	tb.Helper()
+	hold := Hold{path: filepath.Join(filepath.Dir(r.Log), "hold")}
+	tb.Setenv("FAKE_RCLONE_HOLD", hold.path)
+	return hold
+}
+
+// Started reports whether a cat reached the hold.
+func (h Hold) Started() bool {
+	_, err := os.Stat(h.path + ".started")
+	return err == nil
+}
+
+// Release lets every held cat go on.
+func (h Hold) Release(tb testing.TB) {
+	tb.Helper()
+	if err := os.WriteFile(h.path, nil, fileMode); err != nil {
+		tb.Fatalf("release the fake hold: %v", err)
+	}
+}

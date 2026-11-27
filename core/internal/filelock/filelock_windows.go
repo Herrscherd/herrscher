@@ -20,7 +20,17 @@ func Open(path string) (*os.File, error) {
 // TryLock takes the exclusive lock of f without waiting. It reports false when
 // another process holds it.
 func TryLock(f *os.File) (bool, error) {
-	err := windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &windows.Overlapped{Offset: lockedOffset})
+	return lockFile(f, windows.LOCKFILE_EXCLUSIVE_LOCK)
+}
+
+// TryLockShared takes a shared lock of f without waiting. It reports false
+// when another process holds the exclusive lock.
+func TryLockShared(f *os.File) (bool, error) {
+	return lockFile(f, 0)
+}
+
+func lockFile(f *os.File, mode uint32) (bool, error) {
+	err := windows.LockFileEx(windows.Handle(f.Fd()), mode|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &windows.Overlapped{Offset: lockedOffset})
 	switch {
 	case err == nil:
 		return true, nil

@@ -71,8 +71,8 @@ The daemon decides each call under the role of the session, as it decides the
   never one that binds the whole daemon.
   The session's approval mode does not change this: even a `bypass` session
   asks.
-- **Some verbs are never run for a session.** `role *`, `approve allow` and
-  `approve deny` are refused outright, even with the operator's approval: a
+- **Some verbs are never run for a session.** `role *`, `approve allow`,
+  `approve deny` and `drive grant` are refused outright, even with the operator's approval: a
   session does not grant itself rights and does not answer its own questions.
 - **The subtree still binds.** A verb that names another session than the
   caller or one it delegated is refused, asked or not.
@@ -114,8 +114,8 @@ The daemon decides each call under the role of the session, as it decides the
 `herrscher role grant session:<name> steward` lets one session configure the
 daemon without asking. A `steward` runs what an `operator` runs, with these
 exceptions on top of the verbs never run for a session, still put to the
-operator: `drive write`, `drive grant` and `drive remove`, so every write to a
-drive is asked; `approve rule` and `approve mode`, which change the policy every
+operator: `drive write` and `drive remove`, so every write to a drive is
+asked; `approve rule` and `approve mode`, which change the policy every
 session answers to; `session create`, which opens a session outside the
 steward's subtree; and `config set|unset` and `env set|unset`, which decide who
 commands the daemon (the owner, the gateway allow lists) and where the API keys
@@ -165,7 +165,8 @@ report in a terminal.
 `drive list`, `drive ls`, `drive read` and `drive log` are reads the agent
 runs at once, within the access its agent holds on each drive, and each has a
 tool of its own. `drive write` needs `write` access and is asked every time,
-of a steward too; `drive grant` and `drive remove` are asked. The drives, the
+of a steward too; `drive remove` is asked, and `drive grant` is never run for
+a session, as it grants rights. The drives, the
 paths and the journal are described in [Drives](drives.md).
 
 ## Issues and review threads

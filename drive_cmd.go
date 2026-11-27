@@ -156,12 +156,9 @@ func runDriveAdd(ctx context.Context, messages *clitext.Messages, args []string)
 	if err := refuseTakenDrive(catalog, request.name); err != nil {
 		return err
 	}
-	if err := connectRemote(ctx, messages, lang, catalog, request); err != nil {
-		return err
-	}
 	drive := drives.Drive{Name: request.name.String(), Kind: request.kind, Folders: request.folders, Default: request.access}
-	if err := catalog.Add(ctx, drive); err != nil {
-		return errors.Join(err, host.DriveRclone(catalog).DeleteRemote(context.WithoutCancel(ctx), drive.Name))
+	if err := connectDrive(ctx, messages, lang, catalog, request, drive); err != nil {
+		return err
 	}
 	return writeText(os.Stdout, messages.For(lang), clitext.DriveAdded, clitext.Params{clitext.ParamDrive: drive.Name, clitext.ParamKind: drive.Kind.String(), clitext.ParamAccess: drive.Default.String()})
 }
@@ -187,22 +184,29 @@ func refuseTakenDrive(catalog drives.Catalog, name drives.Name) error {
 	return nil
 }
 
-func connectRemote(ctx context.Context, messages *clitext.Messages, lang i18n.Language, catalog drives.Catalog, request driveAddRequest) error {
-	if request.kind.SignsInWithOAuth() {
-		if err := writeText(os.Stdout, messages.For(lang), clitext.DriveSignInStarting, clitext.Params{clitext.ParamKind: request.kind.String()}); err != nil {
+func connectDrive(ctx context.Context, messages *clitext.Messages, lang i18n.Language, catalog drives.Catalog, request driveAddRequest, drive drives.Drive) error {
+	if !request.kind.SignsInWithOAuth() {
+		remote, err := keyRemote(messages, lang, request)
+		if err != nil {
 			return err
 		}
-		terminal := drives.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
-		if err := host.DriveRclone(catalog).CreateRemote(ctx, request.name.String(), request.kind.RcloneType(), drives.OAuthParams(request.kind), terminal); err != nil {
-			return err
-		}
-		return os.Chmod(catalog.RcloneConfig(), driveConfigMode)
+		return catalog.AddKeyDrive(ctx, drive, remote)
 	}
-	remote, err := keyRemote(messages, lang, request)
-	if err != nil {
+	if err := writeText(os.Stdout, messages.For(lang), clitext.DriveSignInStarting, clitext.Params{clitext.ParamKind: request.kind.String()}); err != nil {
 		return err
 	}
-	return catalog.AddKeyRemote(ctx, request.name, remote)
+	rclone := host.DriveRclone(catalog)
+	terminal := drives.Terminal{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	if err := rclone.CreateRemote(ctx, drive.Name, request.kind.RcloneType(), drives.OAuthParams(request.kind), terminal); err != nil {
+		return err
+	}
+	if err := os.Chmod(catalog.RcloneConfig(), driveConfigMode); err != nil {
+		return err
+	}
+	if err := catalog.Add(ctx, drive); err != nil {
+		return errors.Join(err, rclone.DeleteRemote(context.WithoutCancel(ctx), drive.Name))
+	}
+	return nil
 }
 
 func keyRemote(messages *clitext.Messages, lang i18n.Language, request driveAddRequest) (drives.KeyRemote, error) {

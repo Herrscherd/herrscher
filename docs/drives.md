@@ -17,9 +17,21 @@ herrscher keeps its own rclone configuration, `drives/rclone.conf` beside
 `state.json`, readable by you alone, and never touches the one in
 `~/.config/rclone`. Every rclone it starts gets `--config` on that file and an
 environment with every `RCLONE_` variable removed, so your own rclone setup
-neither leaks in nor gets written. The tokens and keys live in that file and
-nowhere else: not in a worktree, not in the arguments of a verb, not in an
-approval question, not on a gateway.
+neither leaks in nor gets written.
+
+Only rclone writes that file: `rclone config create` when you sign in,
+`rclone config delete` when you remove a drive, and rclone itself when it
+refreshes a token. herrscher never edits it. Every rclone run that may refresh a
+token holds a shared lock, `drives/rclone.conf.lock`, and a sign in or a
+removal holds it alone, so neither runs while a refresh may rewrite the file. A
+sign in in progress makes the drive verbs wait until it ends.
+
+The OAuth tokens live in `drives/rclone.conf`. An S3 or R2 drive never enters
+it: its settings are kept with the drive in `drives/drives.json`, its secret in
+`drives/secrets.json` (0600), and both reach rclone as `RCLONE_CONFIG_<NAME>_*`
+variables in the environment of each run, which only your account can read. No
+token or key is ever in a worktree, in the arguments of a process, in an
+approval question or on a gateway.
 
 ## Connecting a drive
 
@@ -45,8 +57,8 @@ herrscher drive add backups --kind s3 --access-key <key id> --region eu-west-3 -
   history and the process list. `r2` needs `--account`, the Cloudflare account
   id, and derives its endpoint. `s3` takes `--region`, `--endpoint` for a
   store that is not AWS, and `--provider` (`AWS` by default, any provider
-  rclone knows otherwise). A value with a space, a quote, a backslash, a
-  bracket, `#` or `;` is refused rather than written.
+  rclone knows otherwise). An empty value, or one with a space or a control
+  character, is refused.
 - `--folders` lists the folders the agents see, comma separated, relative to
   the root of the remote (for `s3` and `r2`, the bucket comes first). Without
   it, the whole remote is exposed.
@@ -63,14 +75,19 @@ gateways, within what their [role](approvals.md#a-daemon-that-knows-who-is-calli
 lets them run, act on every drive.
 
 `drive grant <drive> --agent <name> --access none|read|write` sets the access
-of one agent, and `--agent '*'` the default. `drive list` shows each drive,
+of one agent, and `--agent '*'` the default. Only you grant it: a session is
+never let run `drive grant`, not even with your approval, not even as a
+steward, since it would grant itself rights. `drive list` shows each drive,
 its kind, its folders and the access of each agent. A session sees only the
 drives its agent can at least read, with its own access and nothing about the
 others.
 
-Every path is checked before rclone runs. It is relative, slash separated,
-UTF-8, with no empty, `.` or `..` segment, no backslash and no control
-character, and it must sit inside one of the exposed folders: `Neublox/a.md`
+Every path is checked before rclone runs, and for a session before you are
+asked anything. It is relative, slash separated, UTF-8, with no empty, `.` or
+`..` segment, no backslash, no control character, and no invisible or format
+character (bidirectional overrides, zero width characters, spaces other than
+the plain one, variation selectors, private use characters), so two paths that
+look the same are the same path. It must sit inside one of the exposed folders: `Neublox/a.md`
 is inside `Neublox`, `NeubloxOther/a.md` is not. herrscher builds the rclone
 location itself, `<drive>:<path>`, and passes it after `--`.
 
@@ -80,24 +97,39 @@ location itself, `<drive>:<path>`, and passes it after `--`.
 |---|---|---|
 | `drive list` | the drives and their access | runs it |
 | `drive ls <drive> [path]` | one level of a folder, 1000 entries at most; the root of a drive with folders lists those folders | needs read |
-| `drive read <drive> <path>` | the file as text, 1 MiB at most, refused when it is not UTF-8 | needs read |
+| `drive read <drive> <path>` | the file as text, 1 MiB at most, refused when it is not UTF-8 or is a folder | needs read |
 | `drive read <drive> <path> --to <file>` | copies the file, 64 MiB at most, into the session's worktree | needs read |
 | `drive write <drive> <path> --from <file>` | sends a file of the session's worktree, 64 MiB at most | needs write, and asks you |
 | `drive log [--drive d] [--agent a] [--session s] [--limit n]` | the journal, 50 entries by default | sees its own entries |
-| `drive grant <drive> --agent <name> --access <level>` | sets an access | asks you |
+| `drive grant <drive> --agent <name> --access <level>` | sets an access | never |
 | `drive remove <drive>` | disconnects the drive and deletes its token or key | asks you |
 
 The self tools give `drive list`, `drive ls`, `drive read` and `drive log` a
 tool each (`drive_list`, `drive_ls`, `drive_read`, `drive_log`). `drive write`
 goes through `herrscher_run`.
 
+The drive and the path are named once, either as words
+(`drive write gdrive Neublox/a.md --from out.md`) or as `--drive` and `--path`.
+Both forms together, or a word more, are refused before anything else.
+
 A session's `--to` and `--from` are paths inside its worktree, and herrscher
-opens them through an `os.Root` of the worktree: `..`, an absolute path and a
-symbolic link that leads out are refused. From your terminal, `herrscher drive`
-turns a relative `--to` or `--from` into an absolute path before it reaches the
-daemon. A gateway user who is neither a session nor the operator's terminal
-cannot use `--to` or `--from` at all, so no chat message writes a file on the
-daemon's machine.
+opens them through an `os.Root` of the worktree:
+
+- `..`, an absolute path and a path through a symbolic link are refused;
+- a path under `.git`, at any depth, or under a file herrscher materializes for
+  the agent (`.claude`, `.codex`, `.cursor`, `.grok`, `.herrscher`, `.mcp.json`,
+  `AGENTS.md`) is refused, letter case aside, so a read cannot replace the
+  approval hook or repoint the repository;
+- `--from` must be a regular file, opened without following a link and without
+  waiting, so a FIFO or a device is refused at once;
+- `--to` streams into a staging file beside the target, readable by you alone
+  (0600, folders 0700), renamed over the target once complete: no copy is held
+  in the daemon's memory, and a failed copy leaves nothing behind.
+
+From your terminal, `herrscher drive` turns a relative `--to` or `--from` into
+an absolute path before it reaches the daemon. Any other caller, a human of the
+gateways or a caller with no identity, cannot use `--to` or `--from` at all, so
+no chat message writes a file on the daemon's machine.
 
 ## Each write is asked
 
@@ -105,18 +137,21 @@ A session that holds `write` on a drive still asks for each write. The question
 reaches its gateways like any other verb a session may not run alone, with the
 four answers of [Approvals](approvals.md): `allow`, `allow --session`,
 `allow --always` and `deny`. It reads
-`Herrscher(drive write gdrive Neublox/report.md --from out.md)`, the exact
-arguments the agent sent.
+`Herrscher(drive write gdrive Neublox/report.md --from out.md)`, whatever form
+the agent used: herrscher asks about the drive, the path and the source it is
+about to use, in that order, never about the arguments as typed.
 
 - `allow --always` writes the rule for that exact call: the same file, from the
   same source, passes from then on. It approves the pair, not the content, so
   a later write of other bytes from the same source passes too.
-- A wider rule is written by hand, on the form the agent sends, such as
-  `herrscher approve rule --session s1 'allow Herrscher(drive write gdrive Neublox/*)'`.
-- The access check runs before the question. A session whose agent holds less
-  than `write` is refused at once and you are not asked.
-- A `steward` session is asked too: `drive write`, `drive grant` and
-  `drive remove` are among the verbs a steward still puts to you. A `bypass`
+- A wider rule is written by hand on that form, such as
+  `herrscher approve rule --session s1 'allow Herrscher(drive write gdrive Neublox/*)'`,
+  which covers every file under `Neublox` of `gdrive` and nothing else.
+- The access, the path and the source are checked before the question. A
+  session whose agent holds less than `write`, a path outside the folders, or a
+  protected source is refused at once and you are not asked.
+- A `steward` session is asked too: `drive write` and `drive remove` are among
+  the verbs a steward still puts to you, and `drive grant` is never run for it. A `bypass`
   session asks as well, since the approval mode of a session does not decide its
   self tool calls.
 
@@ -126,8 +161,13 @@ Every listing, read and write, done, refused or failed, is a line of
 `drives/journal.jsonl`: the time, the session and its agent, the drive, the
 path, the operation, the bytes and the outcome, with the reason of a refusal or
 a failure. Your own operations are journaled with no session. The file is
-rotated at 4 MiB, the previous one kept as `journal.jsonl.1`, and `drive log`
-reads both.
+rotated at 4 MiB, and eight previous files are kept (`journal.jsonl.1` to
+`journal.jsonl.8`), which `drive log` reads too, oldest first. A line it cannot
+read is counted and said under the listing.
+
+A session that keeps being refused cannot push the history out: at most 20
+refusals of one session are recorded per minute, and the next recorded refusal
+says how many were left out before it.
 
 ## Limits
 

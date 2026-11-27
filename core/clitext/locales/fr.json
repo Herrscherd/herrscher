@@ -6277,6 +6277,21 @@
     "other": "Le journal des drives ne contient aucune entrée."
   },
   {
+    "id": "cli.host.drive.log_unreadable",
+    "description": "Line under drive log when journal lines could not be read",
+    "other": "{{.Count}} lignes du journal sont illisibles et ont été écartées."
+  },
+  {
+    "id": "cli.host.drive.log_suppressed",
+    "description": "Note on a journal entry after refusals that were left out",
+    "other": "(les {{.Count}} refus de cette session juste avant ont été écartés)"
+  },
+  {
+    "id": "cli.host.fault.drive_mixed_forms",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "nomme le drive et le chemin une fois chacun, en mots ou avec --drive et --path, et rien de plus"
+  },
+  {
     "id": "cli.drive.usage",
     "description": "Usage of herrscher drive add",
     "other": "usage : herrscher drive add <nom> --kind {{.Kind}} [--folders A,B] [--agents none|read|write]\n  s3 : --access-key <id> [--secret-env VAR] [--region R] [--endpoint URL] [--provider P]\n  r2 : --account <id> --access-key <id> [--secret-env VAR]\nLes autres verbes (list, ls, read, write, log, grant, remove) passent par le démon : herrscher drive list."

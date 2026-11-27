@@ -145,11 +145,11 @@ func definitionOf(role Role) (definition, bool) {
 }
 
 func neverForSessions() []string {
-	return []string{roleFamily, "approve allow", "approve deny"}
+	return []string{roleFamily, "approve allow", "approve deny", "drive grant"}
 }
 
 func stewardAsks() []string {
-	return []string{"approve rule", "approve mode", sessionCreate, "config set", "config unset", "env set", "env unset", "drive write", "drive grant", "drive remove"}
+	return []string{"approve rule", "approve mode", sessionCreate, "config set", "config unset", "env set", "env unset", "drive write", "drive remove"}
 }
 
 func isNeverForSessions(verb string) bool {

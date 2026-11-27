@@ -4,12 +4,15 @@ package host
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -70,11 +73,11 @@ func newDriveRig(t *testing.T, drive drives.Drive) driveRig {
 
 func (r driveRig) journal(t *testing.T) []drives.Entry {
 	t.Helper()
-	entries, err := r.catalog.Journal().Read(drives.Filter{}, 0)
+	log, err := r.catalog.Journal().Read(drives.Filter{}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return entries
+	return log.Entries
 }
 
 func TestASessionReadsADriveItsAgentMayRead(t *testing.T) {
@@ -203,5 +206,185 @@ func TestNoDriveVerbPrintsTheTokenOfTheRemote(t *testing.T) {
 		if strings.Contains(out, "leak") {
 			t.Fatalf("%v printed the token: %q", argv, out)
 		}
+	}
+}
+
+func (r driveRig) refusedWithoutAQuestion(t *testing.T, argv ...string) error {
+	t.Helper()
+	_, err := r.dispatch(t, argv...)
+	if err == nil {
+		t.Fatalf("%v ran, want a refusal", argv)
+	}
+	if pending := pendingApprovals(r.approvals); len(pending) != 0 {
+		t.Fatalf("%v asked the operator: %+v", argv, pending)
+	}
+	return err
+}
+
+func TestAWriteNamedTwiceIsRefusedBeforeAnyQuestion(t *testing.T) {
+	rig := newWriterRig(t)
+	rig.writeSource(t, "x")
+	for _, argv := range [][]string{
+		{"drive", "write", "gdrive", "Neublox/ok.md", "--path", "Karamon/secret.md", "--from", "out.md"},
+		{"drive", "write", "gdrive", "Neublox/ok.md", "--drive", "prod", "--path", "bucket/x", "--from", "out.md"},
+		{"drive", "write", "--drive", "gdrive", "gdrive", "Neublox/ok.md", "--from", "out.md"},
+		{"drive", "write", "gdrive", "Neublox/ok.md", "extra", "--from", "out.md"},
+	} {
+		rig.refusedWithoutAQuestion(t, argv...)
+	}
+	for _, path := range []string{"Karamon/secret.md", "Neublox/ok.md", "bucket/x"} {
+		if got := rig.fake.Get(t, "gdrive", path); got != "" {
+			t.Fatalf("%s reached the remote: %q", path, got)
+		}
+	}
+}
+
+func TestAWriteIsAskedUnderOneSubjectWhateverItsForm(t *testing.T) {
+	rig := newWriterRig(t)
+	rig.writeSource(t, "x")
+	done := rig.dispatchAsync(t, []string{"drive", "write", "--drive=gdrive", "--from=out.md", "--path=Neublox/ok.md"})
+	pending := onlyPending(t, rig.approvals)
+	if want := "drive write gdrive Neublox/ok.md --from out.md"; pending.Subject != want {
+		t.Fatalf("subject = %q, want %q", pending.Subject, want)
+	}
+	answerApproval(rig.approvals, pending.ID, approval.Allow)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAFolderRuleCoversTheFolderAndNothingElse(t *testing.T) {
+	rig := newDriveRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Agents: map[string]drives.Access{"karamon": drives.AccessWrite}})
+	rig.writeSource(t, "x")
+	if err := rig.store.AddApprovalRule("allow Herrscher(drive write gdrive Neublox/*)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rig.dispatch(t, "drive", "write", "--path", "Neublox/a.md", "--drive", "gdrive", "--from", "out.md"); err != nil {
+		t.Fatalf("the folder rule did not cover its folder: %v", err)
+	}
+	if got := rig.fake.Get(t, "gdrive", "Neublox/a.md"); got != "x" {
+		t.Fatalf("remote = %q", got)
+	}
+	if err := rig.answerWrite(t, []string{"drive", "write", "gdrive", "Karamon/secret.md", "--from", "out.md"}, approvalAnswer{scope: scopeDeny}); err == nil {
+		t.Fatal("a write outside the ruled folder ran")
+	}
+}
+
+func TestAPathOutsideTheFoldersIsRefusedBeforeAnyQuestion(t *testing.T) {
+	rig := newWriterRig(t)
+	rig.writeSource(t, "x")
+	rig.refusedWithoutAQuestion(t, "drive", "write", "gdrive", "Private/a.md", "--from", "out.md")
+	rig.refusedWithoutAQuestion(t, "drive", "write", "gdrive", "Neublox/../Private/a.md", "--from", "out.md")
+	rig.refusedWithoutAQuestion(t, "drive", "write", "gdrive", "Neublox/a.md", "--from", ".git/config")
+}
+
+func TestAReadNeverReplacesTheApprovalHook(t *testing.T) {
+	rig := newDriveRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Agents: map[string]drives.Access{"karamon": drives.AccessRead}})
+	rig.fake.Put(t, "gdrive", "hook.json", `{"hooks":{}}`)
+	for _, dest := range []string{".claude/settings.local.json", ".git", ".codex/config.toml", ".grok/hooks/x.json", ".cursor/mcp.json", ".mcp.json", ".herrscher/x", "AGENTS.md"} {
+		rig.refusedWithoutAQuestion(t, "drive", "read", "gdrive", "hook.json", "--to", dest)
+	}
+	entries, err := os.ReadDir(rig.worktree)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("the worktree holds %v, %v, want nothing", entries, err)
+	}
+}
+
+func TestASessionNeverGrantsDriveAccessEvenAsSteward(t *testing.T) {
+	rig := newDriveRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive})
+	for _, steward := range []bool{false, true} {
+		if steward {
+			if _, err := rig.store.SetRole("session:s1", "steward", ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rig.refusedWithoutAQuestion(t, "drive", "grant", "gdrive", "--agent", "karamon", "--access", "write")
+	}
+	drive, err := rig.catalog.Find("gdrive")
+	if err != nil || drive.AccessOf("karamon") != drives.AccessNone {
+		t.Fatalf("access = %v, %v, want none", drive.AccessOf("karamon"), err)
+	}
+}
+
+func TestAStewardIsAskedForEveryWriteAndRemoval(t *testing.T) {
+	rig := newWriterRig(t)
+	rig.writeSource(t, "x")
+	if _, err := rig.store.SetRole("session:s1", "steward", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := rig.answerWrite(t, []string{"drive", "write", "gdrive", "Neublox/a.md", "--from", "out.md"}, approvalAnswer{scope: scopeDeny}); err == nil {
+		t.Fatal("a refused write of a steward ran")
+	}
+	if err := rig.answerWrite(t, []string{"drive", "remove", "gdrive"}, approvalAnswer{scope: scopeDeny}); err == nil {
+		t.Fatal("a refused removal of a steward ran")
+	}
+	if _, err := rig.catalog.Find("gdrive"); err != nil {
+		t.Fatalf("the drive is gone: %v", err)
+	}
+}
+
+func TestASessionReadsItsOwnJournalEntriesAlone(t *testing.T) {
+	rig := newDriveRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Default: drives.AccessRead})
+	for _, session := range []string{"s1", "s2"} {
+		if err := rig.catalog.Journal().Append(t.Context(), drives.Entry{Time: time.Now(), Session: session, Drive: "gdrive", Path: "from-" + session, Op: drives.OpRead, Outcome: drives.OutcomeDone}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, argv := range [][]string{{"drive", "log"}, {"drive", "log", "--session", "s2"}} {
+		out, err := rig.dispatch(t, argv...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, "from-s1") || strings.Contains(out, "from-s2") {
+			t.Fatalf("%v = %q, want the entries of s1 alone", argv, out)
+		}
+	}
+}
+
+func TestAFileCopyNeedsASessionOrTheOperatorsTerminal(t *testing.T) {
+	fake := drivestest.Install(t)
+	t.Setenv("HERRSCHER_RCLONE", fake.Command)
+	partDir := t.TempDir()
+	catalog := drives.Open(DrivesDir(filepath.Join(partDir, "state.json")))
+	if err := catalog.Add(t.Context(), drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive}); err != nil {
+		t.Fatal(err)
+	}
+	fake.Put(t, "gdrive", "a.md", "x")
+	verbs := newDriveVerbs(clitext.NewMessages(), fixedLanguage(i18n.English), nil, partDir)
+	dest := filepath.Join(t.TempDir(), "copy")
+	input := contracts.Input{Args: map[string]string{paramDriveTo: dest}, Rest: []string{"gdrive", "a.md"}}
+	for name, ctx := range map[string]context.Context{"no principal": t.Context(), "a gateway human": contracts.WithPrincipal(t.Context(), "chat:42")} {
+		if _, err := verbs.read(ctx, input); !errors.Is(err, errDriveLocalForbidden) {
+			t.Errorf("%s: err = %v, want errDriveLocalForbidden", name, err)
+		}
+	}
+	if _, err := verbs.read(withLocalPrincipal(t.Context()), input); err != nil {
+		t.Fatalf("the operator's terminal: %v", err)
+	}
+	if raw, err := os.ReadFile(dest); err != nil || string(raw) != "x" {
+		t.Fatalf("copy = %q, %v", raw, err)
+	}
+}
+
+func TestTheDrivesCheckDegradesOnlyWhenADriveNeedsRclone(t *testing.T) {
+	partDir := t.TempDir()
+	t.Setenv("HERRSCHER_RCLONE", filepath.Join(t.TempDir(), "absent"))
+	probe := drivesProbe(driveService(partDir))
+	report, facts := probe.Run(t.Context(), false)
+	if report.State != contracts.HealthOK || facts.Drives == nil || facts.Drives.Count != 0 || facts.Drives.Rclone != "" {
+		t.Fatalf("no drive and no rclone: %+v, %+v, want ok", report, facts.Drives)
+	}
+	if err := drives.Open(filepath.Join(partDir, drivesDirName)).Add(t.Context(), drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive}); err != nil {
+		t.Fatal(err)
+	}
+	report, facts = drivesProbe(driveService(partDir)).Run(t.Context(), false)
+	if report.State != contracts.HealthDegraded || facts.Drives.Count != 1 {
+		t.Fatalf("a drive and no rclone: %+v, %+v, want degraded", report, facts.Drives)
+	}
+	fake := drivestest.Install(t)
+	t.Setenv("HERRSCHER_RCLONE", fake.Command)
+	report, facts = drivesProbe(driveService(partDir)).Run(t.Context(), false)
+	if report.State != contracts.HealthOK || facts.Drives.Rclone == "" {
+		t.Fatalf("a drive and rclone: %+v, %+v, want ok with the version", report, facts.Drives)
 	}
 }

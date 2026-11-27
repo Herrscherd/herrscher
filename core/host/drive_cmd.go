@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/drives"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -41,6 +42,7 @@ const (
 
 var (
 	errDriveNameMissing    = errors.New("name a drive (see `drive list`)")
+	errDriveMixedForms     = errors.New("name the drive and the path once each, either as words or as --drive and --path, and nothing more")
 	errDriveAgentMissing   = errors.New("name an agent, or * for every agent the drive does not name")
 	errDriveLocalForbidden = errors.New("only a session or the operator's own terminal reads into or writes from a local file")
 )
@@ -57,7 +59,7 @@ func DriveRclone(catalog drives.Catalog) drives.Rclone {
 
 func driveService(partDir string) drives.Service {
 	catalog := drives.Open(filepath.Join(partDir, drivesDirName))
-	return drives.NewService(catalog, DriveRclone(catalog))
+	return drives.NewService(catalog, DriveRclone(catalog)).Protecting(agent.ControlPaths())
 }
 
 type driveVerbs struct {
@@ -117,17 +119,52 @@ type driveTarget struct {
 	path  string
 }
 
-func driveTargetOf(input contracts.Input) driveTarget {
+func driveTargetOf(input contracts.Input, takesPath bool) (driveTarget, error) {
 	rest := input.Rest
-	drive := strings.TrimSpace(input.Get(paramDrive))
-	if drive == "" && len(rest) > 0 {
-		drive, rest = strings.TrimSpace(rest[0]), rest[1:]
+	drive, flagged := input.Lookup(paramDrive)
+	if !flagged && len(rest) > 0 {
+		drive, rest = rest[0], rest[1:]
+	} else if flagged && len(rest) > 0 && !takesPath {
+		return driveTarget{}, errDriveMixedForms
 	}
-	path := input.Get(paramDrivePath)
-	if _, given := input.Lookup(paramDrivePath); !given && len(rest) > 0 {
-		path = rest[0]
+	path, pathFlagged := input.Lookup(paramDrivePath)
+	if takesPath && !pathFlagged && len(rest) > 0 {
+		path, rest = rest[0], rest[1:]
 	}
-	return driveTarget{drive: drive, path: path}
+	if len(rest) > 0 || (!takesPath && pathFlagged) {
+		return driveTarget{}, errDriveMixedForms
+	}
+	drive = strings.TrimSpace(drive)
+	if drive == "" {
+		return driveTarget{}, errDriveNameMissing
+	}
+	return driveTarget{drive: drive, path: path}, nil
+}
+
+func driveVerbTakesPath(verb string) bool {
+	return verb == verbDriveLs || verb == verbDriveRead || verb == verbDriveWrite
+}
+
+func canonicalDriveSubject(path []string, input contracts.Input) (string, bool) {
+	verb := strings.Join(path, " ")
+	if len(path) == 0 || path[0] != nsDrive || verb == "drive list" || verb == "drive log" {
+		return "", false
+	}
+	target, err := driveTargetOf(input, driveVerbTakesPath(verb))
+	if err != nil {
+		return "", false
+	}
+	tokens := append([]string(nil), path...)
+	tokens = append(tokens, target.drive)
+	if driveVerbTakesPath(verb) {
+		tokens = append(tokens, target.path)
+	}
+	for _, flag := range []string{paramDriveTo, paramDriveFrom, paramDriveAgent, paramDriveAccess} {
+		if value, given := input.Lookup(flag); given {
+			tokens = append(tokens, "--"+flag, value)
+		}
+	}
+	return verbSubject(tokens), true
 }
 
 func (d driveVerbs) caller(ctx context.Context) drives.Caller {
@@ -153,7 +190,7 @@ func driveCallerOf(store *state.State, principal authz.Principal) drives.Caller 
 
 func (d driveVerbs) localCaller(ctx context.Context) (drives.Caller, error) {
 	principal := principalOf(ctx)
-	if principal.Session == "" && principal.ID != authz.LocalPrincipal && principal.ID != "" {
+	if principal.Session == "" && principal.ID != authz.LocalPrincipal {
 		return drives.Caller{}, errDriveLocalForbidden
 	}
 	return d.caller(ctx), nil
@@ -191,7 +228,7 @@ func driveLine(drive drives.Drive) string {
 }
 
 func (d driveVerbs) ls(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := requireDrive(input)
+	target, err := driveTargetOf(input, true)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -223,7 +260,7 @@ func itemLine(item drives.Item) string {
 }
 
 func (d driveVerbs) read(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := requireDrive(input)
+	target, err := driveTargetOf(input, true)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -244,7 +281,7 @@ func (d driveVerbs) read(ctx context.Context, input contracts.Input) (contracts.
 }
 
 func (d driveVerbs) write(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := requireDrive(input)
+	target, err := driveTargetOf(input, true)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -272,19 +309,27 @@ func (d driveVerbs) log(ctx context.Context, input contracts.Input) (contracts.R
 	if caller := d.caller(ctx); caller.Session != "" {
 		filter.Session = caller.Session
 	}
-	entries, err := d.service.Log(filter, limit)
+	log, err := d.service.Log(filter, limit)
 	if err != nil {
 		return contracts.Result{}, err
 	}
 	if input.JSON {
-		return driveJSON(entries)
+		return driveJSON(log)
 	}
-	if len(entries) == 0 {
-		return contracts.DataResult(d.text(clitext.HostDriveLogEmpty, nil)), nil
+	lines := make([]string, 0, len(log.Entries)+1)
+	for index := range log.Entries {
+		entry := &log.Entries[index]
+		line := journalLine(entry)
+		if entry.Suppressed > 0 {
+			line += "  " + d.text(clitext.HostDriveLogSuppressed, clitext.Params{clitext.ParamCount: entry.Suppressed})
+		}
+		lines = append(lines, line)
 	}
-	lines := make([]string, 0, len(entries))
-	for index := range entries {
-		lines = append(lines, journalLine(&entries[index]))
+	if len(lines) == 0 {
+		lines = append(lines, d.text(clitext.HostDriveLogEmpty, nil))
+	}
+	if log.Unreadable > 0 {
+		lines = append(lines, d.text(clitext.HostDriveLogUnreadable, clitext.Params{clitext.ParamCount: log.Unreadable}))
 	}
 	return contracts.DataResult(strings.Join(lines, "\n")), nil
 }
@@ -308,7 +353,7 @@ func journalLine(entry *drives.Entry) string {
 }
 
 func (d driveVerbs) grant(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := requireDrive(input)
+	target, err := driveTargetOf(input, false)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -330,7 +375,7 @@ func (d driveVerbs) grant(ctx context.Context, input contracts.Input) (contracts
 }
 
 func (d driveVerbs) remove(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := requireDrive(input)
+	target, err := driveTargetOf(input, false)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -344,14 +389,6 @@ func (d driveVerbs) remove(ctx context.Context, input contracts.Input) (contract
 		return contracts.Result{}, err
 	}
 	return contracts.DataResult(d.text(clitext.HostDriveRemoved, clitext.Params{clitext.ParamDrive: target.drive})), nil
-}
-
-func requireDrive(input contracts.Input) (driveTarget, error) {
-	target := driveTargetOf(input)
-	if target.drive == "" {
-		return driveTarget{}, errDriveNameMissing
-	}
-	return target, nil
 }
 
 func driveJSON(value any) (contracts.Result, error) {
@@ -371,19 +408,18 @@ func (e *driveLimitError) Error() string {
 }
 
 func (h *hub) guardDrive(ctx context.Context, session, verb string, input contracts.Input) error {
-	need := drives.AccessRead
-	operation := drives.OpRead
+	target, err := driveTargetOf(input, true)
+	if err != nil {
+		return err
+	}
+	request := drives.Request{Drive: target.drive, Path: target.path, Op: drives.OpRead, Local: input.Get(paramDriveTo)}
 	switch verb {
 	case verbDriveLs:
-		operation = drives.OpList
+		request.Op = drives.OpList
 	case verbDriveWrite:
-		need, operation = drives.AccessWrite, drives.OpWrite
-	}
-	target := driveTargetOf(input)
-	if target.drive == "" {
-		return errDriveNameMissing
+		request.Op, request.Local = drives.OpWrite, input.Get(paramDriveFrom)
 	}
 	caller := driveCallerOf(h.st, authz.SessionPrincipal(session))
-	_, err := driveService(h.partDir).Check(ctx, caller, target.drive, need, operation, target.path)
+	_, _, err = driveService(h.partDir).Admit(ctx, caller, request)
 	return err
 }

@@ -373,7 +373,7 @@ func TestTheFolderRootIsListedWithoutRcloneNorAJournalEntry(t *testing.T) {
 func TestALocalValueThatWouldMisleadTheQuestionIsRefused(t *testing.T) {
 	r := newRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Default: drives.AccessWrite})
 	r.fake.Put(t, "gdrive", "a.md", "x")
-	for _, local := range []string{"out.md\nallow", "‮dm.tuo", "out​.md", "GIT~1/config", "CLAUDE~1/settings.local.json"} {
+	for _, local := range []string{"out.md\nallow", "\u202edm.tuo", "out\u200b.md", "GIT~1/config", "CLAUDE~1/settings.local.json"} {
 		if _, err := r.service.Write(t.Context(), r.agent, "gdrive", "a.md", local); err == nil {
 			t.Errorf("Write from %q succeeded, want a refusal", local)
 		}
@@ -381,7 +381,7 @@ func TestALocalValueThatWouldMisleadTheQuestionIsRefused(t *testing.T) {
 			t.Errorf("ReadTo %q succeeded, want a refusal", local)
 		}
 	}
-	if _, err := r.service.ReadTo(t.Context(), drives.Caller{}, "gdrive", "a.md", filepath.Join(t.TempDir(), "x\ny")); err == nil {
+	if _, err := r.service.ReadTo(t.Context(), drives.Caller{}, "gdrive", "a.md", t.TempDir()+"/x\ny"); err == nil {
 		t.Fatal("the operator's copy to a path holding a line break succeeded")
 	}
 }
@@ -467,7 +467,9 @@ func TestAWaitingRemovalStopsNewReads(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	<-second
+	if err := <-second; err != nil {
+		t.Fatal(err)
+	}
 	runs := r.fake.Runs(t)
 	deleted, statsAfter := -1, 0
 	for index, run := range runs {

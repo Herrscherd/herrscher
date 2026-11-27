@@ -413,9 +413,9 @@ func TestTheDriveListingNeverShowsAKeyDrivesSettings(t *testing.T) {
 }
 
 func TestAQuestionSubjectQuotesWhatCouldDisguiseIt(t *testing.T) {
-	for _, token := range []string{"out.md\nallow", "‮dm.tuo", "a​b"} {
+	for _, token := range []string{"out.md\nallow", "\u202edm.tuo", "a\u200bb"} {
 		subject := verbSubject([]string{"drive", "write", "gdrive", "a.md", "--from", token})
-		if strings.ContainsAny(subject, "\n‮​") {
+		if strings.ContainsAny(subject, "\n\u202e\u200b") {
 			t.Fatalf("subject %q holds the raw character", subject)
 		}
 	}

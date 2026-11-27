@@ -137,7 +137,7 @@ func (j Journal) Append(ctx context.Context, entry Entry) error {
 	if rotateErr := rotateWhenFull(target); rotateErr != nil {
 		return rotateErr
 	}
-	file, err := os.OpenFile(target, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
+	file, err := os.OpenFile(filepath.Clean(target), os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (j Journal) Read(filter Filter, limit int) (Log, error) {
 	if err != nil {
 		return Log{}, err
 	}
-	merged := append(activity, writes...)
+	merged := slices.Concat(activity, writes)
 	slices.SortStableFunc(merged, func(left, right Entry) int { return right.Time.Compare(left.Time) })
 	if limit > 0 && len(merged) > limit {
 		merged = merged[:limit]

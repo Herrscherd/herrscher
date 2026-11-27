@@ -407,6 +407,39 @@ What is not measured:
 `--deep` runs the commands declared in the agent's `mcp.json` on this machine, with
 the permissions of the operator. Run it only on agents whose `mcp.json` you trust.
 
+### Role profiles
+
+An agent home may hold a `mcp-profiles.json` that maps a role to the names of the MCP
+servers a session of that role keeps:
+
+```json
+{"worker": ["filesystem", "github"]}
+```
+
+The file is optional and off by default. Without it, or for a session whose role has no
+entry, or for a session with no role, every server of `mcp.json` is kept, as before. The
+role of a session is the delegation role the coordinator gives it: a session spawned by a
+lead is a `worker`, and a top-level session has no role. A `lead` entry is not applied: a
+lead is only recognised once its workers report, after its session is provisioned, so
+the lead keeps every server.
+
+When a session is provisioned with a role that has an entry, its `.mcp.json` and its
+`.codex/config.toml` both keep only those servers, and the servers of `mcp.json` that are
+left out are not written to either file. Each kept server keeps every field it declares in
+`mcp.json`, `env` and `headers` included. The daemon logs one line, `mcp profile applied`,
+with the session, the role, the kept servers and the dropped ones.
+
+An entry that names a server `mcp.json` does not declare is an error, and the session is
+not provisioned: the message names the agent, the role and the server, in the operator's
+language, and nothing is written. A malformed `mcp-profiles.json` is an error too, for any
+session of the agent that has a role.
+
+`herrscher mcp weight --agent <name> --role <role>` measures the servers a session of that
+role keeps, with the same flags otherwise. The text report ends with the kept and the
+dropped servers of the role, or with the note that no profile matches the role and every
+server is loaded. `--json` reports only the kept servers, and has no note. An unknown server
+in the profile is refused with the same error as at provisioning.
+
 ### Lint exclusions
 
 The MCP weight code adds three path exclusions to `.golangci.yml`, and each one stays for

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +20,8 @@ type fakeBotTokens map[string][]string
 func (f fakeBotTokens) HasToken(gateway, name string) bool {
 	return slices.Contains(f[gateway], name)
 }
+
+func (f fakeBotTokens) InvalidateVoices() {}
 
 func createRin(t *testing.T, h *Handler) {
 	t.Helper()
@@ -112,5 +116,45 @@ func TestAgentShowJSONCarriesReplyChannelsAndTokenState(t *testing.T) {
 	}
 	if got.Reply != "channels" || len(got.Channels) != 1 || got.Channels[0] != "chat:111" || !got.Tokens["chat"] {
 		t.Fatalf("show json = %+v", got)
+	}
+}
+
+func TestSetReplyTakesEffectAtOnceInTheDaemonDirectory(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	store, ok := h.agents.(*agent.Store)
+	if !ok {
+		t.Fatal("the test handler must run on a file store")
+	}
+	dir := agent.NewDirectory(store, nil, nil)
+	h.SetBotTokens(dir)
+	createRin(t, h)
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyOnMention {
+		t.Fatalf("reply before set-reply = %v; want mention", got)
+	}
+	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "never"}}); err != nil {
+		t.Fatalf("set-reply: %v", err)
+	}
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyNever {
+		t.Fatalf("reply after set-reply = %v; want never at once, not after the cache TTL", got)
+	}
+}
+
+func TestSetReplyWritesChannelsBeforeTheRule(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	store, ok := h.agents.(*agent.Store)
+	if !ok {
+		t.Fatal("the test handler must run on a file store")
+	}
+	createRin(t, h)
+	replyPath := filepath.Join(store.Root(), "rin", "reply")
+	if err := os.Mkdir(replyPath, 0o755); err != nil {
+		t.Fatalf("block the reply file: %v", err)
+	}
+	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "chat:111"}}); err == nil {
+		t.Fatal("a rule write that cannot land must fail the command")
+	}
+	channels, err := store.Channels("rin")
+	if err != nil || len(channels) != 1 || channels[0].String() != "chat:111" {
+		t.Fatalf("channels after a failed rule = %v, %v; want the channels written first", channels, err)
 	}
 }

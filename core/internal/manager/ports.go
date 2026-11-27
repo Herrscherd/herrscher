@@ -24,6 +24,7 @@ type agentStore interface {
 
 type botTokens interface {
 	HasToken(gateway, agent string) bool
+	InvalidateVoices()
 }
 
 type channelAdmin interface {

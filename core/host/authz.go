@@ -126,6 +126,7 @@ func notASessionArgs() map[string]bool {
 		"schedule run name":     true,
 		"schedule pause name":   true,
 		"schedule resume name":  true,
+		"drive log session":     true,
 	}
 }
 

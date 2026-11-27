@@ -3,13 +3,15 @@ package manager
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -47,27 +49,27 @@ func TestSessionSwitchNamesTheLostSessionWhenRestartAndRollbackFail(t *testing.T
 		{
 			name:         "english",
 			lang:         i18n.English,
-			wantError:    "backend restart: agent exited; rollback failed, session s1 out of service: ",
-			wantRendered: "unexpected error: backend restart: agent exited; rollback failed, session s1 out of service: ",
+			wantError:    "backend restart: %[1]v; rollback failed, session s1 out of service: %[2]v",
+			wantRendered: "unexpected error: backend restart: %[1]v; rollback failed, session s1 out of service: %[2]v",
 		},
 		{
 			name:         "french",
 			lang:         i18n.French,
-			wantError:    "backend restart: agent exited; rollback failed, session s1 out of service: ",
-			wantRendered: "erreur inattendue : red\u00e9marrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : ",
+			wantError:    "backend restart: %[1]v; rollback failed, session s1 out of service: %[2]v",
+			wantRendered: "erreur inattendue : red\u00e9marrage backend : %[1]v ; le retour arrière a échoué, session s1 hors service : %[2]v",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := switchWithLostRollback(t, tc.lang, restartErr)
-			assertLostSession(t, err, restartErr, tc.lang, tc.wantError, tc.wantRendered)
+			path := filepath.Join(t.TempDir(), "s.json")
+			err := switchWithLostRollback(t, path, tc.lang, restartErr)
+			assertLostSession(t, err, restartErr, path+".tmp", tc.lang, tc.wantError, tc.wantRendered)
 		})
 	}
 }
 
-func switchWithLostRollback(t *testing.T, lang i18n.Language, restartErr error) error {
+func switchWithLostRollback(t *testing.T, path string, lang i18n.Language, restartErr error) error {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "s.json")
 	st := state.NewState(path)
 	if err := st.AddSession(state.Session{Name: "s1", ChannelID: "42", Type: "text", Vendor: "claude", Cmd: "claude"}); err != nil {
 		t.Fatal(err)
@@ -87,15 +89,25 @@ func switchWithLostRollback(t *testing.T, lang i18n.Language, restartErr error) 
 	return err
 }
 
-func assertLostSession(t *testing.T, err, restartErr error, lang i18n.Language, wantError, wantRendered string) {
+func assertLostSession(t *testing.T, err, restartErr error, faultPath string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
 	t.Helper()
+	var pathErr *fs.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("no *fs.PathError in the chain, the rollback cause is lost: %v", err)
+	}
+	if pathErr.Path != faultPath {
+		t.Fatalf("rollback failed on %q, want the jammed state file %q", pathErr.Path, faultPath)
+	}
 	if !errors.Is(err, restartErr) {
 		t.Fatalf("errors.Is(restart cause) = false, the cause is lost: %v", err)
 	}
-	if got := err.Error(); !strings.HasPrefix(got, wantError) || got == wantError {
-		t.Fatalf("Error() = %q, want the English notice naming session s1 and both causes after %q", got, wantError)
+	if !errors.Is(err, pathErr) {
+		t.Fatalf("errors.Is(rollback cause) = false, the cause is lost: %v", err)
 	}
-	if got := renderNotice(t, lang, err); !strings.HasPrefix(got, wantRendered) || got == wantRendered {
-		t.Fatalf("notice = %q, want the %v notice naming session s1 and both causes after %q", got, lang, wantRendered)
+	if got, want := err.Error(), fmt.Sprintf(wantErrorFormat, restartErr, pathErr); got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
+	if got, want := cli.Localize(clitext.NewMessages(), err, lang).Error(), fmt.Sprintf(wantRenderedFormat, restartErr, pathErr); got != want {
+		t.Fatalf("notice = %q, want %q", got, want)
 	}
 }

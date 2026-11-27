@@ -219,6 +219,8 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 		return forgeFacts(check.Facts.Forge, text)
 	case check.Facts.SelfTools != nil:
 		return selfToolsFacts(check.Facts.SelfTools, text)
+	case check.Facts.Drives != nil:
+		return drivesFacts(check.Facts.Drives, text)
 	case check.Group == GroupCore && check.Name == ServiceProxy:
 		return text.key(clitext.HealthProxyFacts, clitext.Params{
 			clitext.ParamListen: check.Facts.Listen,
@@ -244,6 +246,13 @@ func selfToolsFacts(self *SelfTools, text *renderer) string {
 		clitext.ParamCount: self.Tools,
 		clitext.ParamSize:  self.SchemaBytes,
 	})
+}
+
+func drivesFacts(drives *Drives, text *renderer) string {
+	if drives.Rclone == "" {
+		return text.key(clitext.HealthDrivesNoRclone, clitext.Params{clitext.ParamCommand: drives.Command, clitext.ParamCount: drives.Count})
+	}
+	return text.key(clitext.HealthDrivesFacts, clitext.Params{clitext.ParamVersion: drives.Rclone, clitext.ParamCount: drives.Count})
 }
 
 func compactionFacts(facts Facts, text *renderer) string {

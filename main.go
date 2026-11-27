@@ -203,6 +203,8 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 		return runWhoami(ctx, messages, args)
 	case connectVerb:
 		return runConnect(ctx, messages, args)
+	case driveVerb:
+		return runDrive(ctx, layout, messages, hostMessages, args)
 	case mcpVerb:
 		return runMCP(ctx, layout, messages, hostMessages, args)
 	}

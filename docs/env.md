@@ -225,6 +225,12 @@ These variables are read by the GitHub forge when no token was saved by
 | `GITHUB_TOKEN` | unset | Used when `GH_TOKEN` is unset, with the same host rule. | Forge credentials |
 | `GH_HOST` | unset | A GitHub host, besides `github.com`, that `GH_TOKEN` and `GITHUB_TOKEN` apply to, for example `ghe.example.com`. Unset, they apply to `github.com` only. Also listed by `herrscher connect status`. | Forge credentials |
 
+## Drives
+
+| Variable | Default | Meaning | Read by |
+|----------|---------|---------|---------|
+| `HERRSCHER_RCLONE` | `rclone` | The rclone command the drives run, split on spaces. It always gets `--config` on herrscher's own `drives/rclone.conf`, and no `RCLONE_` variable reaches it. See [Drives](drives.md). | Host, `herrscher drive add` |
+
 ## Host: logging and env file
 
 | Variable | Default | Meaning | Read by |

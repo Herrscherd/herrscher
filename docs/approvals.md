@@ -108,6 +108,9 @@ Flags come after the id or before it: `approve allow --session <id>` works too.
 With no rule configured nothing is ever asked, which is exactly how herrscher
 behaved before this existed.
 
+A write to a connected drive is asked with the same four answers, one file at a
+time, whatever the mode of the session: see [Drives](drives.md#each-write-is-asked).
+
 ## Who may change the approvals
 
 `approve allow`, `approve deny`, `approve rule` and `approve mode` go to the

@@ -6162,6 +6162,166 @@
     "other": "clé pointée à retirer"
   },
   {
+    "id": "cli.help.cmd.drive.list",
+    "description": "Help of the command drive list",
+    "other": "lister les drives branchés, leurs dossiers et l'accès de chaque agent"
+  },
+  {
+    "id": "cli.help.cmd.drive.ls",
+    "description": "Help of the command drive ls",
+    "other": "lister un dossier d'un drive"
+  },
+  {
+    "id": "cli.help.cmd.drive.read",
+    "description": "Help of the command drive read",
+    "other": "lire un fichier d'un drive, en texte ou copié dans un fichier avec --to"
+  },
+  {
+    "id": "cli.help.cmd.drive.write",
+    "description": "Help of the command drive write",
+    "other": "écrire un fichier local sur un drive, chaque écriture demandée à l'opérateur"
+  },
+  {
+    "id": "cli.help.cmd.drive.log",
+    "description": "Help of the command drive log",
+    "other": "afficher ce que chaque session a lu et écrit sur les drives"
+  },
+  {
+    "id": "cli.help.cmd.drive.grant",
+    "description": "Help of the command drive grant",
+    "other": "régler l'accès d'un agent à un drive : none, read ou write"
+  },
+  {
+    "id": "cli.help.cmd.drive.remove",
+    "description": "Help of the command drive remove",
+    "other": "débrancher un drive et oublier son jeton ou sa clé"
+  },
+  {
+    "id": "cli.help.param.drive.drive",
+    "description": "Help of the parameter drive of the drive verbs",
+    "other": "le drive, tel que `drive list` le nomme"
+  },
+  {
+    "id": "cli.help.param.drive.path",
+    "description": "Help of the parameter path of the drive verbs",
+    "other": "un chemin dans le drive, comme Neublox/notes.md"
+  },
+  {
+    "id": "cli.help.param.drive.to",
+    "description": "Help of the parameter to of drive read",
+    "other": "copier le fichier là : un chemin dans le worktree de la session, ou un chemin absolu pour l'opérateur"
+  },
+  {
+    "id": "cli.help.param.drive.from",
+    "description": "Help of the parameter from of drive write",
+    "other": "le fichier à envoyer : un chemin dans le worktree de la session, ou un chemin absolu pour l'opérateur"
+  },
+  {
+    "id": "cli.help.param.drive.agent",
+    "description": "Help of the parameter agent of drive grant and drive log",
+    "other": "un nom d'agent, ou * pour tout agent que le drive ne nomme pas"
+  },
+  {
+    "id": "cli.help.param.drive.access",
+    "description": "Help of the parameter access of drive grant",
+    "other": "none, read ou write"
+  },
+  {
+    "id": "cli.help.param.drive.session",
+    "description": "Help of the parameter session of drive log",
+    "other": "seulement les entrées de cette session"
+  },
+  {
+    "id": "cli.help.param.drive.limit",
+    "description": "Help of the parameter limit of drive log",
+    "other": "le nombre maximal d'entrées affichées, 50 par défaut"
+  },
+  {
+    "id": "cli.host.drive.none",
+    "description": "Reply of drive list when no drive is visible",
+    "other": "Aucun drive. L'opérateur en branche un avec `herrscher drive add <nom> --kind <type>`."
+  },
+  {
+    "id": "cli.host.drive.empty_folder",
+    "description": "Reply of drive ls on an empty folder",
+    "other": "{{.Drive}}:{{.Path}} est vide."
+  },
+  {
+    "id": "cli.host.drive.truncated",
+    "description": "Line under a drive listing cut at its limit",
+    "other": "Seules les {{.Limit}} premières entrées sont affichées."
+  },
+  {
+    "id": "cli.host.drive.copied",
+    "description": "Reply of drive read --to",
+    "other": "{{.Bytes}} octets de {{.Drive}}:{{.Path}} copiés dans {{.To}}."
+  },
+  {
+    "id": "cli.host.drive.wrote",
+    "description": "Reply of drive write",
+    "other": "{{.Bytes}} octets écrits dans {{.Drive}}:{{.Path}}."
+  },
+  {
+    "id": "cli.host.drive.granted",
+    "description": "Reply of drive grant",
+    "other": "{{.Agent}} a maintenant l'accès {{.Access}} à {{.Drive}}."
+  },
+  {
+    "id": "cli.host.drive.removed",
+    "description": "Reply of drive remove",
+    "other": "{{.Drive}} est débranché, et son jeton ou sa clé a quitté la configuration rclone de herrscher."
+  },
+  {
+    "id": "cli.host.drive.log_empty",
+    "description": "Reply of drive log with no entry",
+    "other": "Le journal des drives ne contient aucune entrée."
+  },
+  {
+    "id": "cli.drive.usage",
+    "description": "Usage of herrscher drive add",
+    "other": "usage : herrscher drive add <nom> --kind {{.Kind}} [--folders A,B] [--agents none|read|write]\n  s3 : --access-key <id> [--secret-env VAR] [--region R] [--endpoint URL] [--provider P]\n  r2 : --account <id> --access-key <id> [--secret-env VAR]\nLes autres verbes (list, ls, read, write, log, grant, remove) passent par le démon : herrscher drive list."
+  },
+  {
+    "id": "cli.drive.added",
+    "description": "Reply of herrscher drive add",
+    "other": "{{.Drive}} ({{.Kind}}) est branché. Les agents ont l'accès {{.Access}} ; change-le avec `herrscher drive grant {{.Drive}} --agent <nom> --access read`."
+  },
+  {
+    "id": "cli.drive.secret_prompt",
+    "description": "Prompt for the secret access key, typed without echo",
+    "other": "Clé d'accès secrète : "
+  },
+  {
+    "id": "cli.drive.secret_missing",
+    "description": "Refusal when no secret is given",
+    "other": "Aucune clé d'accès secrète : renseigne {{.Name}}, ou lance la commande dans un terminal pour la taper."
+  },
+  {
+    "id": "cli.drive.sign_in_starting",
+    "description": "Line before rclone opens the browser sign in",
+    "other": "rclone ouvre maintenant la connexion à {{.Kind}} dans ton navigateur. Le jeton reste dans la configuration rclone propre à herrscher."
+  },
+  {
+    "id": "cli.drive.account_required",
+    "description": "Refusal of an r2 drive without an account id",
+    "other": "Un drive r2 demande --account, l'identifiant du compte Cloudflare."
+  },
+  {
+    "id": "cli.drive.access_key_missing",
+    "description": "Refusal of a key drive without an access key id",
+    "other": "Un drive s3 ou r2 demande --access-key, l'identifiant de la clé d'accès."
+  },
+  {
+    "id": "cli.health.facts.drives",
+    "description": "Facts of the drives line of health",
+    "other": "{{.Version}}, drives : {{.Count}}"
+  },
+  {
+    "id": "cli.health.facts.drives_no_rclone",
+    "description": "Facts of the drives line of health when rclone does not run",
+    "other": "{{.Command}} ne se lance pas, drives : {{.Count}}. Installe rclone ou renseigne HERRSCHER_RCLONE."
+  },
+  {
     "id": "cli.host.config.set",
     "description": "Reply of config set",
     "other": "{{.Key}} réglé dans {{.Path}}. Le démon le lit à son prochain démarrage : `herrscher service restart`."

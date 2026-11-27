@@ -162,7 +162,7 @@ func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
 		if listsApprovalRules(path, input) {
 			return admission{}, nil
 		}
-		if err := h.guardSessionCall(principal.Session, strings.Join(path, " "), input); err != nil {
+		if err := h.guardSessionCall(ctx, principal.Session, strings.Join(path, " "), input); err != nil {
 			return admission{}, err
 		}
 	}

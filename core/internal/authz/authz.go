@@ -107,6 +107,7 @@ func definitionOf(role Role) (definition, bool) {
 			"session issue list", "session issue show",
 			"health", "usage", "skill list", "config get", "env get", "plugin list", "connect status", "setup check",
 			"session pr status", "session pr checks", "session pr comments", "session get-mode",
+			"drive list", "drive ls", "drive read", "drive log",
 		}}, true
 	case RoleAgent:
 		return definition{
@@ -122,6 +123,7 @@ func definitionOf(role Role) (definition, bool) {
 				"approve ask", "approve list",
 				"health", "usage", "skill list", "schedule list", "host list", "plugin list", "connect status", "setup check", "env get", "env request",
 				"config get", "session issue list", "session issue show",
+				"drive list", "drive ls", "drive read", "drive log",
 			},
 			deny: []string{
 				"approve allow", "approve deny", "approve rule", "approve mode",
@@ -147,7 +149,7 @@ func neverForSessions() []string {
 }
 
 func stewardAsks() []string {
-	return []string{"approve rule", "approve mode", sessionCreate, "config set", "config unset", "env set", "env unset"}
+	return []string{"approve rule", "approve mode", sessionCreate, "config set", "config unset", "env set", "env unset", "drive write", "drive grant", "drive remove"}
 }
 
 func isNeverForSessions(verb string) bool {

@@ -98,6 +98,9 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, sessions.cliMessages, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
+	if err := addVerbs(reg, newDriveVerbs(sessions.cliMessages, options.live.Get, hostState, partDir).commands()...); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := addVerbs(reg, append(append(fileVerbs(sessions.cliMessages, options, notices), options.HostCommands...), memorySearchVerb(sessions.messages, sessions.cliMessages, options.live.Get), whoamiVerb(), commandsVerb(sessions.cliMessages, options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage))...); err != nil {
 		return nil, hostDeps{}, err
 	}

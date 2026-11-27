@@ -19,7 +19,7 @@ import (
 
 func expectedLocalVerbs() []string {
 	return []string{
-		"init", "plugin", "update", "install",
+		"setup", "plugin", "update", "install",
 		"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
 		"-h", "--help", "help",
 		"approve",

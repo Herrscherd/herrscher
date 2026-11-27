@@ -22,6 +22,7 @@ import (
 type hostDeps struct {
 	wt        *worktree.Worktreer
 	agents    *agent.Store
+	voices    *agent.Directory
 	handler   *manager.Handler
 	seedCoord *coordinatorSlot
 	schedSlot *schedulerSlot
@@ -48,7 +49,9 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 		agents.SetUserBudget(n)
 	}
 	models := options.modelDiscovery(sessions.messages)
+	voices := agent.NewDirectory(agents, os.Environ(), operatorLogger(options.Warnings))
 	hdl := newManagerHandler(sessions.messages, sessions.cliMessages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	hdl.SetBotTokens(voices)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
 	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
@@ -100,7 +103,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 		return nil, hostDeps{}, err
 	}
 	localizeCommandErrors(sessions.messages, sessions.cliMessages, reg, hostState, options.live)
-	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot, notices: notices}, nil
+	return reg, hostDeps{wt: worktrees, agents: agents, voices: voices, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot, notices: notices}, nil
 }
 
 func addPluginVerbs(messages *hostMessages, reg *cli.Registry, extra []contracts.Cmd) error {

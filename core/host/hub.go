@@ -20,6 +20,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/forgecreds"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -51,6 +52,8 @@ type hub struct {
 	eventPublisher func(session string, event contracts.Event)
 
 	gate budgetGate
+
+	voices *agent.Directory
 
 	contributedKinds map[string]bool
 
@@ -572,4 +575,11 @@ func workspaceRepos(workspace string) []contracts.RepoRef {
 	return out
 }
 
-var _ contracts.SessionControl = (*hub)(nil)
+var (
+	_ contracts.SessionControl = (*hub)(nil)
+	_ contracts.AgentDirectory = (*hub)(nil)
+)
+
+func (h *hub) AgentVoices(gateway string) []contracts.AgentVoice {
+	return h.voices.AgentVoices(gateway)
+}

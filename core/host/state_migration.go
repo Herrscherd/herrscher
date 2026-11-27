@@ -160,6 +160,9 @@ func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, 
 		if err == nil && sess.Host == "" {
 			plan, err = planLocalBareRelocation(ctx, worktrees, creds, plan.Repo, bare, sessionPRForgeLimit)
 		}
+		if hidden, ok := errors.AsType[*worktree.HiddenRepositoryError](err); ok {
+			return nil, repositoryDiscoveryRefusal(cliMessages, sess.Name, hidden.Dir, err)
+		}
 		if err != nil {
 			return nil, &stateMigrationRefusedError{messages: cliMessages, cause: err}
 		}

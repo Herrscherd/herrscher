@@ -28,14 +28,35 @@ func TestMigrationRefusesAFolderUnderARepositoryGitIsToldNotToSeeAndNamesTheWayO
 	home, notes := notesUnderACeiledDotfilesRepository(t)
 	path := localSessionAt(t, notes)
 	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}})
+	assertHiddenRepositoryRefusal(t, err, filepath.Join(home, ".git"), notes)
+	if reloaded := loadForMigration(t, path); !reloaded.Outdated() {
+		t.Fatal("the refused migration wrote the state")
+	}
+}
+
+func TestMigrationRefusesAGoneBareWorktreeWhoseRepositoryFolderGitIsToldNotToSeeAndNamesTheWayOut(t *testing.T) {
+	home, _ := notesUnderACeiledDotfilesRepository(t)
+	proj := filepath.Join(home, "proj")
+	if err := os.MkdirAll(proj, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := localSessionAt(t, filepath.Join(proj, ".herrscher-sessions", "alpha"))
+	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}})
+	assertHiddenRepositoryRefusal(t, err, filepath.Join(home, ".git"), proj)
+	if reloaded := loadForMigration(t, path); !reloaded.Outdated() {
+		t.Fatal("the refused migration wrote the state")
+	}
+}
+
+func assertHiddenRepositoryRefusal(t *testing.T, err error, entry, folder string) {
+	t.Helper()
 	refusal, ok := errors.AsType[*stateMigrationRefusedError](err)
 	if !ok || refusal.key != clitext.MigrationCheckpointHidden {
 		t.Fatalf("err = %v, want a %s refusal", err, clitext.MigrationCheckpointHidden)
 	}
-	entry := filepath.Join(home, ".git")
 	wants := map[i18n.Language][]string{
-		i18n.English: {entry, notes, "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM=1", "repair or remove it", "move the folder out of its path", "herrscher serve"},
-		i18n.French:  {entry, notes, "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM=1", "répare-le ou retire-le", "sors le dossier de son chemin", "herrscher serve"},
+		i18n.English: {entry, folder, "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM=1", "Set the variable back right after that start", "untracked files included", "repair or remove it", "move the folder out of its path", "herrscher serve"},
+		i18n.French:  {entry, folder, "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM=1", "Remets la variable juste après", "fichiers non suivis compris", "répare-le ou retire-le", "sors le dossier de son chemin", "herrscher serve"},
 	}
 	for lang, want := range wants {
 		text, _ := stateFormatText(clitext.NewMessages(), lang, err)
@@ -44,9 +65,6 @@ func TestMigrationRefusesAFolderUnderARepositoryGitIsToldNotToSeeAndNamesTheWayO
 				t.Errorf("%s refusal %q does not carry %q", lang, text, part)
 			}
 		}
-	}
-	if reloaded := loadForMigration(t, path); !reloaded.Outdated() {
-		t.Fatal("the refused migration wrote the state")
 	}
 }
 

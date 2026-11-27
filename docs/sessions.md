@@ -172,14 +172,20 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
 - git finds no repository for a session's folder, yet a `.git` entry sits on
   its path: a home under dotfiles kept in `~/.git` with `GIT_CEILING_DIRECTORIES`
   set to `~`, a filesystem boundary git does not cross, or an empty or broken
-  `.git`. The refusal names the session, the folder and that entry. Start
-  `serve` once without `GIT_CEILING_DIRECTORIES` (or with
+  `.git`. The folder is the session's own, or, for a gone worktree of the
+  id-less layout, the repository folder above `.herrscher-sessions`; both
+  checks give the same refusal, which names the session, the folder and that
+  entry. Start `serve` once without `GIT_CEILING_DIRECTORIES` (or with
   `GIT_DISCOVERY_ACROSS_FILESYSTEM=1` for a filesystem boundary): the migration
-  then reads that repository and moves only the refs under `refs/herrscher/`
-  filed under the session's name, never a branch or a tag, and later starts may
-  set the variable back. Repair or remove a `.git` that is empty or broken, or
-  move the folder out of the path of a repository it does not belong to, then
-  start `serve` again.
+  then reads that repository and moves only what it files under the session's
+  name, the refs under `refs/herrscher/` and its `session/` branch, never
+  another branch or a tag. Set the variable back right after that start: while
+  it is lifted, every checkpoint of a session in that repository runs
+  `git add -A` over the repository's whole working tree: with dotfiles in
+  `~/.git`, a checkpoint of a session in `~/notes` copies the whole home
+  folder, untracked files such as ssh keys included, into `~/.git`. Repair or remove a `.git` that is empty or broken, or move the
+  folder out of the path of a repository it does not belong to, then start
+  `serve` again.
 
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,

@@ -148,6 +148,9 @@ func (w *Worktreer) outsideAnyRepository(ctx context.Context, plan Relocation) (
 		}
 	}
 	outside, err := OutsideAnyRepository(ctx, probe)
+	if _, hidden := errors.AsType[*HiddenRepositoryError](err); hidden {
+		return false, err
+	}
 	if err != nil {
 		return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(probe), clitext.ParamErr: err}, err)
 	}

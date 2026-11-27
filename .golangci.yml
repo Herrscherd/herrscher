@@ -223,6 +223,9 @@ linters:
       - path: ^core/forgecreds/gh\.go$
         linters: [gosec]
         text: "^G204:"
+      - path: ^core/drives/rclone\.go$
+        linters: [gosec]
+        text: "^G204:"
       - path: ^core/host/session_shell\.go$
         linters: [gosec]
         text: "^G204:"

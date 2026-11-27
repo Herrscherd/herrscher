@@ -44,7 +44,7 @@ func newDriveRig(t *testing.T, drive drives.Drive) driveRig {
 		t.Fatalf("Add: %v", err)
 	}
 	reg := cli.NewRegistry(clitext.NewMessages())
-	approvalTab := newApprovalTable(io.Discard)
+	approvalTab := newApprovalTable(io.Discard).withRules(st)
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	if err := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
@@ -148,6 +148,9 @@ func TestEveryWriteIsAskedAndTheAlwaysRulePassesTheSameWrite(t *testing.T) {
 	}
 	if out, err := rig.dispatch(t, argv...); err != nil {
 		t.Fatalf("the write the always rule covers failed: %q, %v", out, err)
+	}
+	if rules := rig.store.ApprovalRules(); len(rules) != 1 || !strings.Contains(rules[0], "drive write gdrive Neublox/report.md --from out.md") {
+		t.Fatalf("rules = %v, want the exact write", rules)
 	}
 	if got := rig.fake.Get(t, "gdrive", "Neublox/report.md"); got != "second" {
 		t.Fatalf("remote = %q, want second", got)

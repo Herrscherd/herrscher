@@ -58,6 +58,10 @@ name of the rclone remote.
 
 ## Who sees what
 
+The access is a matter of sessions. You, in your terminal, and a human of the
+gateways, within what their [role](approvals.md#a-daemon-that-knows-who-is-calling)
+lets them run, act on every drive.
+
 `drive grant <drive> --agent <name> --access none|read|write` sets the access
 of one agent, and `--agent '*'` the default. `drive list` shows each drive,
 its kind, its folders and the access of each agent. A session sees only the

@@ -5,10 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+const abandonedAfter = 10 * time.Minute
 
 // Write replaces path with data and gives the new file perm.
 func Write(path string, data []byte, perm os.FileMode) error {
@@ -26,7 +30,7 @@ func Write(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// Sweep removes the staging files a Write left beside path when its process died between staging and rename. Call it only before any writer of path starts.
+// Sweep removes the staging files that a Write left beside path and that are at least ten minutes old, which means their writer died between staging and rename. A younger staging file may belong to a live writer, so Sweep keeps it and is safe to call while writers of path run.
 func Sweep(path string) error {
 	if path == "" {
 		return nil
@@ -41,11 +45,29 @@ func Sweep(path string) error {
 	}
 	var errs []error
 	for _, entry := range entries {
-		if !entry.IsDir() && isStagingName(entry.Name(), base) {
+		if entry.IsDir() || !isStagingName(entry.Name(), base) {
+			continue
+		}
+		info, err := entry.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if time.Since(info.ModTime()) >= abandonedAfter {
 			errs = append(errs, remove(filepath.Join(dir, entry.Name())))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// SweepLogged runs Sweep and logs a failure at debug level, for callers that carry on whatever the sweep finds.
+func SweepLogged(path string) {
+	if err := Sweep(path); err != nil {
+		slog.Debug("staging files not swept", "path", path, "err", err)
+	}
 }
 
 func isStagingName(name, base string) bool {

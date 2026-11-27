@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestWriteReplacesContentAndGivesPerm(t *testing.T) {
@@ -53,6 +54,10 @@ func TestSweepRemovesStaleStagingFilesOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
 	if err := Sweep(path); err != nil {
 		t.Fatalf("Sweep: %v", err)
 	}
@@ -61,8 +66,50 @@ func TestSweepRemovesStaleStagingFilesOnly(t *testing.T) {
 	}
 	for _, name := range kept {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("Sweep removed %s, which is not a staging file of state.json: %v", name, err)
+			t.Fatalf("Sweep removed %s, which is not a stale staging file of state.json: %v", name, err)
 		}
+	}
+}
+
+func TestSweepKeepsAFreshStagingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	live := filepath.Join(dir, ".state.json.4242518")
+	if err := os.WriteFile(live, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Sweep(path); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if _, err := os.Stat(live); err != nil {
+		t.Fatalf("Sweep removed a staging file that a live writer may hold: %v", err)
+	}
+}
+
+func TestSweepReportsARemovalFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, where directory modes do not block removal")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	stale := filepath.Join(dir, ".state.json.4242519")
+	if err := os.WriteFile(stale, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := Sweep(path); err == nil {
+		t.Fatal("Sweep of a stale file in a read-only directory returned no error")
 	}
 }
 
@@ -90,6 +137,36 @@ func TestConcurrentWritersOfOneFileDoNotClash(t *testing.T) {
 	for err := range errs {
 		if err != nil {
 			t.Fatalf("concurrent write failed: %v", err)
+		}
+	}
+}
+
+func TestConcurrentSweepNeverFailsAWriter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state")
+	var wg sync.WaitGroup
+	errs := make(chan error, 8*20)
+	for writer := range 8 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for range 20 {
+				errs <- Write(path, []byte(fmt.Sprintf("writer %d\n", writer)), 0o600)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for range 20 {
+				if err := Sweep(path); err != nil {
+					t.Errorf("Sweep: %v", err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("write failed under a concurrent sweep: %v", err)
 		}
 	}
 }

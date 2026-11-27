@@ -2,10 +2,12 @@ package agent
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -193,5 +195,32 @@ func TestConcurrentFailedRuleWritesRestoreTheChannelsTheyFound(t *testing.T) {
 	got, err := s.Channels("rin")
 	if err != nil || !slices.Equal(got, seed) {
 		t.Fatalf("channels after failed rule writes = %v, %v; want the seed %v", got, err, seed)
+	}
+}
+
+func TestDoubleFailureNamesTheAgentAndKeepsBothCauses(t *testing.T) {
+	path := filepath.Join(t.TempDir(), channelsFile)
+	if err := os.MkdirAll(filepath.Join(path, "occupied"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreChannels(path, nil, false); err == nil {
+		t.Fatal("restoreChannels over a non-empty directory = nil; want the remove error")
+	}
+	errWrite := errors.New("write reply")
+	err := channelsLeftBehind("rin", errWrite, path, nil, false)
+	for _, want := range []string{`restore channels of "rin"`, "left as written", "write reply"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("double failure = %q; want it to contain %q", err, want)
+		}
+	}
+	if !errors.Is(err, errWrite) {
+		t.Fatalf("errors.Is lost the write failure: %v", err)
+	}
+	removeErr, ok := errors.AsType[*fs.PathError](err)
+	if !ok || removeErr.Path != path || removeErr.Op != "remove" {
+		t.Fatalf("the remove failure is not in the chain: %v", err)
+	}
+	if !errors.Is(err, removeErr.Err) {
+		t.Fatalf("errors.Is lost the remove cause: %v", err)
 	}
 }

@@ -152,7 +152,7 @@ func (s *Store) SetReplyWithChannels(name string, rule contracts.ReplyRule, chan
 		return err
 	}
 	if err := atomicfile.Write(filepath.Join(home, replyFile), ruleText, fileMode); err != nil {
-		return errors.Join(err, leftAsWritten(name, restoreChannels(channelsPath, previous, existed)))
+		return channelsLeftBehind(name, err, channelsPath, previous, existed)
 	}
 	return nil
 }
@@ -186,6 +186,10 @@ func readOptional(path string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return raw, true, nil
+}
+
+func channelsLeftBehind(name string, writeErr error, path string, previous []byte, existed bool) error {
+	return errors.Join(writeErr, leftAsWritten(name, restoreChannels(path, previous, existed)))
 }
 
 func leftAsWritten(name string, err error) error {

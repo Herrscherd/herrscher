@@ -22,6 +22,7 @@ func addHostCommands(reg *cli.Registry, messages *hostMessages, cliMessages *cli
 		hostCheckVerb(messages, lang, warn, hostState, layout),
 		hostProvisionVerb(messages, cliMessages, lang, warn, hostState, layout),
 		hostRmVerb(hostState),
+		hostDiscoverVerb(cliMessages, lang),
 	)
 }
 

@@ -20,6 +20,7 @@ const (
 	CmdHelpHostList                       = "cli.help.cmd.host.list"
 	CmdHelpHostProvision                  = "cli.help.cmd.host.provision"
 	CmdHelpHostRm                         = "cli.help.cmd.host.rm"
+	CmdHelpHostDiscover                   = "cli.help.cmd.host.discover"
 	CmdHelpMemoryForget                   = "cli.help.cmd.memory.forget"
 	CmdHelpMemoryLocate                   = "cli.help.cmd.memory.locate"
 	CmdHelpMemoryRecord                   = "cli.help.cmd.memory.record"
@@ -269,6 +270,7 @@ func helpKeys() map[Key][]string {
 		CmdHelpHostList:                       nil,
 		CmdHelpHostProvision:                  nil,
 		CmdHelpHostRm:                         nil,
+		CmdHelpHostDiscover:                   nil,
 		CmdHelpMemoryForget:                   nil,
 		CmdHelpMemoryLocate:                   nil,
 		CmdHelpMemoryRecord:                   nil,

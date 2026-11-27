@@ -9,6 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/discovery"
 	"github.com/Herrscherd/herrscher/core/internal/filelock"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -115,6 +116,8 @@ func hostErrorKeys() []hostErrorKey {
 		{errEnvRequestUnheard, "cli.host.fault.env_request_unheard"},
 		{errEnvQuote, "cli.host.fault.env_quote"},
 		{errSelfToolsSilent, "cli.host.fault.self_tools_silent"},
+		{discovery.ErrWindowOutOfRange, "cli.host.fault.announce_window"},
+		{discovery.ErrFingerprintInvalid, "cli.host.fault.fingerprint_invalid"},
 	}
 }
 

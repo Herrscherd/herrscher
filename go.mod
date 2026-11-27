@@ -29,7 +29,10 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20261101151554-27ecf3e4d454
+	github.com/hashicorp/mdns v1.0.7
+	github.com/kevinburke/ssh_config v1.6.0
 	github.com/mattn/go-runewidth v0.0.19
+	github.com/miekg/dns v1.1.72
 	github.com/nats-io/nats-server/v2 v2.10.22
 	github.com/nats-io/nats.go v1.37.0
 	github.com/rivo/uniseg v0.4.7
@@ -95,7 +98,9 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect

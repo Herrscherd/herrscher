@@ -3,6 +3,8 @@ package clitext
 func hostErrKeys() map[Key][]string {
 	return map[Key][]string{
 		"cli.host.fault.conversation_account":          nil,
+		"cli.host.fault.announce_window":               nil,
+		"cli.host.fault.fingerprint_invalid":           nil,
 		HostFaultUnsupportedLang:                       nil,
 		"cli.host.fault.conversation_fork":             nil,
 		"cli.host.fault.conversation_restore":          nil,

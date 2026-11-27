@@ -97,3 +97,47 @@ settings guard it:
   authenticated announcement advertises. Without it, the host dials loopback
   addresses only, so plaintext traffic never leaves the machine.
 
+
+## Discovery
+
+`herrscher host discover` lists the machines a session could run on. It reads
+three sources and proposes what it finds, without adding anything:
+
+- **Local network (`lan`):** a DNS-SD browse for `_herrscher._tcp` lasting two
+  seconds. It only sends multicast questions and changes nothing on the network.
+- **Tailnet (`tailnet`):** the online peers that tailscaled reports on its local
+  socket. Without Tailscale on the machine, this source is empty and silent.
+- **SSH configuration (`ssh`):** the concrete `Host` aliases of `~/.ssh/config`.
+  Patterns with wildcards (`*`, `?`) or negations (`!`) are skipped, and files
+  named by `Include` directives are not followed.
+
+Every candidate is unverified, including a daemon that announces itself. The
+output shows its route, its fingerprint when one is announced, and the
+`herrscher host add` command that would register it, with placeholders for the
+name, the ssh target and the workspace. Nothing is written until that command runs.
+
+### What a daemon announces
+
+An announcement is off by default. It only exists while a pairing window is open,
+and a window lasts at most ten minutes. The announcement is a DNS-SD service
+instance named `herrscher-<fingerprint>` with two TXT fields:
+
+- `proto=1`, the revision of the discovery protocol;
+- `fp=<fingerprint>`, sixteen lowercase hex digits from the daemon's key.
+
+Its SRV target is `herrscher-<fingerprint>.local.`, so the machine's own host name
+is never published. The port and the addresses of the daemon go in the SRV and A
+records, since a client needs them to connect.
+
+The announcement never carries a user name, a session name, a build version, or
+any other TXT field. `TestTheAnnouncementNeverNamesTheMachine` and
+`TestAnAnnouncementPublishesOnlyPresenceAndFingerprint` in `core/discovery` hold
+that rule. The announcer is not yet wired to `device pair`: that follows the
+device work (#323), and it will stay behind a config flag that is off by default.
+
+### What discovery never does
+
+- It never trusts a machine it finds. A daemon on the local network still needs
+  to be paired or added, and its key checked, before a session runs there.
+- It never adds a host, and it never writes the ssh configuration or the tailnet.
+- It never reads the content of a session, a token or a secret from a peer.

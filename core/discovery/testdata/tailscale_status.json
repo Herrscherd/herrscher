@@ -1,0 +1,40 @@
+{
+  "Version": "1.80.0",
+  "BackendState": "Running",
+  "Self": {
+    "HostName": "laptop",
+    "DNSName": "laptop.tailnet.example.ts.net.",
+    "TailscaleIPs": ["100.64.0.1", "fd7a:115c:a1e0::1"],
+    "Online": true
+  },
+  "Peer": {
+    "nodekey:aaa111": {
+      "HostName": "build1",
+      "DNSName": "build1.tailnet.example.ts.net.",
+      "OS": "linux",
+      "TailscaleIPs": ["100.64.0.2", "fd7a:115c:a1e0::2"],
+      "Online": true
+    },
+    "nodekey:bbb222": {
+      "HostName": "old-desk",
+      "DNSName": "old-desk.tailnet.example.ts.net.",
+      "OS": "windows",
+      "TailscaleIPs": ["100.64.0.3"],
+      "Online": false
+    },
+    "nodekey:ccc333": {
+      "HostName": "phone",
+      "DNSName": "",
+      "OS": "android",
+      "TailscaleIPs": ["100.64.0.4"],
+      "Online": true
+    },
+    "nodekey:ddd444": {
+      "HostName": "silent",
+      "DNSName": "",
+      "OS": "linux",
+      "TailscaleIPs": [],
+      "Online": true
+    }
+  }
+}

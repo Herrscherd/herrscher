@@ -16,6 +16,14 @@ type agentStore interface {
 	Get(name string) (agent.Agent, bool)
 	List() ([]agent.Agent, error)
 	SetSoul(name, soul string) error
+	Reply(name string) (contracts.ReplyRule, error)
+	SetReply(name string, rule contracts.ReplyRule) error
+	Channels(name string) ([]agent.Channel, error)
+	SetChannels(name string, channels []agent.Channel) error
+}
+
+type botTokens interface {
+	HasToken(gateway, agent string) bool
 }
 
 type channelAdmin interface {

@@ -16,25 +16,25 @@ func (s Session) CINudge() CINudge {
 	return CINudge{Number: s.CINudgePullRequest, Attempts: s.CINudgeAttempts, Head: s.CINudgeHead}
 }
 
-// SetCINudge records nudge on the named session, and restores the previous record when the
-// state cannot be saved.
-func (s *State) SetCINudge(name string, nudge CINudge) error {
+// CompareAndSetCINudge replaces the CI nudge of the named session by next only when it still
+// holds prev, in one step under the state lock. It restores prev and returns the error when the
+// state cannot be saved, and reports false when the record no longer holds prev.
+func (s *State) CompareAndSetCINudge(name string, prev, next CINudge) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx, ok := s.sessionIndexLocked(name)
 	if !ok {
-		return fmt.Errorf("%w: %q", errNoSession, name)
+		return false, fmt.Errorf("%w: %q", errNoSession, name)
 	}
-	previous := s.Sessions[idx].CINudge()
-	if previous == nudge {
-		return nil
+	if s.Sessions[idx].CINudge() != prev {
+		return false, nil
 	}
-	setSessionCINudge(&s.Sessions[idx], nudge)
+	setSessionCINudge(&s.Sessions[idx], next)
 	if err := s.saveLocked(); err != nil {
-		setSessionCINudge(&s.Sessions[idx], previous)
-		return err
+		setSessionCINudge(&s.Sessions[idx], prev)
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
 func setSessionCINudge(session *Session, nudge CINudge) {

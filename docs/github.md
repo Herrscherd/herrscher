@@ -222,36 +222,49 @@ receive carries no pull request for such a session, so they show nothing until
 ## CI loop of a session
 
 While a session has a pull request, the host follows its checks (the same watch
-that records the state). When the checks of the head commit turn red, the host
-hands the failing check to the agent of the session as a message: the check name,
-its page, its attempt number, and the tail of the log of the failing job. The
-log is capped at 16 KiB, the largest tail the forge port takes for a job log is
-1 MiB. The message is delivered like a scheduled task, so it waits for the current
-turn. The agent fixes the failure and commits; any push goes through the usual
-approval, because the host never pushes for the agent.
+that records the state), and checks the failing ones after each saved state. When
+the checks of the head commit turn red, the host hands the failing check to the
+agent of the session as a message. The message carries the check name, its page,
+the attempt number and the tail of the log of the failing job, capped at 16 KiB
+(the forge port takes at most 1 MiB for a job log).
+
+The loop only reads the forge (the checks and the job log) and records its own
+count on the session. It never pushes, and it never writes to the forge. The fix
+is the agent's own work: the push that follows the commit goes through the agent's
+ordinary tool policy.
 
 The loop stops by itself:
 
-- at most 3 fix attempts per pull request, counted on the session. When the
-  checks are still red after the third, the agent gets one message saying to stop
-  and report to the user, and the host sends nothing more for that commit;
+- at most 3 fix attempts per pull request, counted on the session across its head
+  commits. When the checks are still red after the third, the agent gets one message
+  saying to stop and report to the user, and the host sends nothing more for that
+  head commit;
 - a draft pull request, or a check that waits for a person (`action required`),
   is never sent to the agent: it waits for a human;
 - pending checks, and a head commit with no check yet, consume no attempt and
   send nothing. Checks that the forge has not reported are treated the same way;
-- a new head commit after a nudge gets its own nudge, within the budget. The same
-  head commit is never nudged twice;
-- a message that no live session accepts consumes no attempt.
+- the same head commit is never nudged twice. A new head commit after a nudge gets
+  its own nudge, within the budget;
+- a failure that the first five pages of the checks do not show is announced once
+  for that head commit, as a notice that the failure cannot be located. The loop
+  does not read those pages again for that head commit.
 
-The log is data from the forge, not instructions. It sits between `<ci-log>` and
-`</ci-log>` in the message, and any occurrence of `ci-log` inside it is rewritten
-to `ci_log` so it cannot close the block. When the forge gives no readable log,
-the message says so and carries no block. The token never reaches the message.
+The attempt is reserved and recorded before the message is handed over. A message
+that no live session accepts gives the attempt back. When the state cannot be saved,
+nothing is sent. A crash between the reservation and the hand-over spends the
+attempt and may lose that one message, but it never sends the same message twice.
 
-Known limits: the port does not tell apart a review that requests changes from
-one that does not, so that case is not a human stop, and the loop does not know
-which checks are required. The check listing reads at most five pages. A failing
-check beyond them is not found, and the loop waits.
+The check name, the page and the log are data from the forge, not instructions.
+They sit between `<ci-log>` and `</ci-log>` in the message, with `&`, `<` and `>`
+escaped, so no tag can open or close the block in any writing. When the forge gives
+no readable log, the message says so and carries no log. The token never reaches the
+message.
+
+Known limits: the port does not tell apart a review that requests changes from one
+that does not, so that case is not a human stop. The port does not tell required
+checks from optional ones, so a missing required check can be summarised as passed:
+this is a follow-up in herrscher-contracts and the forge plugin, not delivered here.
+The check listing reads at most five pages.
 
 ## Repositories to clone
 

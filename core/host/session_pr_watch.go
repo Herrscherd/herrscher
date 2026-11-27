@@ -317,17 +317,33 @@ func (w *prWatcher) catchUp(ctx context.Context, group *prGroup, name string) {
 
 func (w *prWatcher) save(group *prGroup) func(context.Context, contracts.PullRequest) error {
 	return func(ctx context.Context, pull contracts.PullRequest) error {
-		group.saveMu.Lock()
-		defer group.saveMu.Unlock()
-		group.last, group.hasLast = pull, true
-		var first error
-		for _, name := range w.members(group) {
-			if err := w.saveMember(ctx, name, group.key.number, pull); err != nil && first == nil {
-				first = err
-			}
-			w.ci.observe(ctx, name, group.forge, pull)
-		}
+		names, first := w.saveMembers(ctx, group, pull)
+		w.observeCI(ctx, group, names, pull)
 		return first
+	}
+}
+
+func (w *prWatcher) saveMembers(ctx context.Context, group *prGroup, pull contracts.PullRequest) ([]string, error) {
+	group.saveMu.Lock()
+	defer group.saveMu.Unlock()
+	group.last, group.hasLast = pull, true
+	names := w.members(group)
+	var first error
+	for _, name := range names {
+		if err := w.saveMember(ctx, name, group.key.number, pull); err != nil && first == nil {
+			first = err
+		}
+	}
+	return names, first
+}
+
+func (w *prWatcher) observeCI(ctx context.Context, group *prGroup, names []string, pull contracts.PullRequest) {
+	for _, name := range names {
+		w.watches.Add(1)
+		go func() {
+			defer w.watches.Done()
+			w.ci.observe(ctx, name, group.forge, pull)
+		}()
 	}
 }
 

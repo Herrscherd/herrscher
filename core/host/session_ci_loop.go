@@ -34,28 +34,31 @@ func (c *ciLoop) observe(ctx context.Context, name string, forge contracts.Forge
 	if !ok {
 		return
 	}
-	number := pull.Ref.Number()
-	nudge := sess.CINudge()
-	if nudge.Number != number {
-		nudge = state.CINudge{Number: number}
+	stored := sess.CINudge()
+	base := stored
+	if base.Number != pull.Ref.Number() {
+		base = state.CINudge{Number: pull.Ref.Number()}
 	}
 	snapshot := ciloop.Snapshot{
 		State:    pull.State,
 		Draft:    pull.Draft,
 		Checks:   pull.Checks,
-		Attempts: ciloop.Attempts(nudge.Attempts),
-		Reported: nudge.Head == pull.HeadSHA.String(),
+		Attempts: ciloop.Attempts(base.Attempts),
+		Reported: base.Head == pull.HeadSHA.String(),
 	}
 	switch ciloop.Decide(snapshot) {
 	case ciloop.ActionFix:
-		c.fix(ctx, name, forge, pull, nudge)
+		c.fix(ctx, name, forge, pull, stored, base)
 	case ciloop.ActionStop:
-		c.stop(name, pull, nudge)
+		c.announce(name, pull, stored, base, clitext.SessionCIStop, clitext.Params{
+			clitext.ParamNumber: pull.Ref.Number(),
+			clitext.ParamMax:    int(ciloop.MaxAttempts),
+		})
 	case ciloop.ActionWait, ciloop.ActionIdle, ciloop.ActionHuman:
 	}
 }
 
-func (c *ciLoop) fix(ctx context.Context, name string, forge contracts.Forge, pull contracts.PullRequest, nudge state.CINudge) {
+func (c *ciLoop) fix(ctx context.Context, name string, forge contracts.Forge, pull contracts.PullRequest, stored, base state.CINudge) {
 	ctx, cancel := context.WithTimeout(ctx, c.forgeLimit)
 	defer cancel()
 	failure, err := c.failure(ctx, forge, pull)
@@ -64,53 +67,66 @@ func (c *ciLoop) fix(ctx context.Context, name string, forge contracts.Forge, pu
 		return
 	}
 	if !failure.found {
+		c.announce(name, pull, stored, base, clitext.SessionCIUnlocated, clitext.Params{
+			clitext.ParamNumber: pull.Ref.Number(),
+		})
 		return
 	}
 	lang := namedSessionLanguage(c.store, name, c.lang())
-	logText, err := c.logText(lang, failure)
+	text, err := c.nudgeText(lang, pull, failure, base.Attempts+1)
 	if err != nil {
 		slog.Error("session ci nudge not rendered", "session", name, "err", err)
 		return
 	}
-	text, err := c.messages.Text(lang, clitext.SessionCINudge, clitext.Params{
+	c.deliver(name, stored, c.reserved(pull, base.Attempts+1), text)
+}
+
+func (c *ciLoop) nudgeText(lang i18n.Language, pull contracts.PullRequest, failure ciFailure, attempt int) (string, error) {
+	logText := failure.log
+	if logText == "" {
+		stand, err := c.messages.Text(lang, clitext.SessionCINoLog, nil)
+		if err != nil {
+			return "", err
+		}
+		logText = stand
+	}
+	return c.messages.Text(lang, clitext.SessionCINudge, clitext.Params{
 		clitext.ParamNumber:  pull.Ref.Number(),
-		clitext.ParamAttempt: nudge.Attempts + 1,
+		clitext.ParamAttempt: attempt,
 		clitext.ParamMax:     int(ciloop.MaxAttempts),
-		clitext.ParamCheck:   escapeLine(failure.check.Name),
-		clitext.ParamURL:     escapeLine(failure.check.URL),
-		clitext.ParamLog:     logText,
+		clitext.ParamLog:     ciloop.Payload(escapeLine(failure.check.Name), escapeLine(failure.check.URL), logText),
 	})
-	if err != nil {
-		slog.Error("session ci nudge not rendered", "session", name, "err", err)
-		return
-	}
-	if !c.seed(name, text) {
-		slog.Warn("session ci nudge not delivered, no live session", "session", name)
-		return
-	}
-	c.record(name, state.CINudge{Number: pull.Ref.Number(), Attempts: nudge.Attempts + 1, Head: pull.HeadSHA.String()})
 }
 
-func (c *ciLoop) stop(name string, pull contracts.PullRequest, nudge state.CINudge) {
+func (c *ciLoop) announce(name string, pull contracts.PullRequest, stored, base state.CINudge, key clitext.Key, params clitext.Params) {
 	lang := namedSessionLanguage(c.store, name, c.lang())
-	text, err := c.messages.Text(lang, clitext.SessionCIStop, clitext.Params{
-		clitext.ParamNumber: pull.Ref.Number(),
-		clitext.ParamMax:    int(ciloop.MaxAttempts),
-	})
+	text, err := c.messages.Text(lang, key, params)
 	if err != nil {
-		slog.Error("session ci stop not rendered", "session", name, "err", err)
+		slog.Error("session ci message not rendered", "session", name, "err", err)
 		return
 	}
-	if !c.seed(name, text) {
-		slog.Warn("session ci stop not delivered, no live session", "session", name)
-		return
-	}
-	c.record(name, state.CINudge{Number: pull.Ref.Number(), Attempts: nudge.Attempts, Head: pull.HeadSHA.String()})
+	c.deliver(name, stored, c.reserved(pull, base.Attempts), text)
 }
 
-func (c *ciLoop) record(name string, nudge state.CINudge) {
-	if err := c.store.SetCINudge(name, nudge); err != nil {
-		slog.Warn("session ci nudge not saved", "session", name, "err", err)
+func (c *ciLoop) reserved(pull contracts.PullRequest, attempts int) state.CINudge {
+	return state.CINudge{Number: pull.Ref.Number(), Attempts: attempts, Head: pull.HeadSHA.String()}
+}
+
+func (c *ciLoop) deliver(name string, stored, reserved state.CINudge, text string) {
+	claimed, err := c.store.CompareAndSetCINudge(name, stored, reserved)
+	if err != nil {
+		slog.Error("session ci message not recorded, nothing sent", "session", name, "err", err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	if c.seed(name, text) {
+		return
+	}
+	slog.Warn("session ci message not delivered, no live session", "session", name)
+	if _, err := c.store.CompareAndSetCINudge(name, reserved, stored); err != nil {
+		slog.Error("session ci attempt not returned", "session", name, "err", err)
 	}
 }
 
@@ -137,7 +153,7 @@ func (c *ciLoop) withLog(ctx context.Context, forge contracts.Forge, check contr
 		slog.Warn("session ci job log not read", "check", check.Name, "err", err)
 		return failure
 	}
-	failure.log = ciloop.SanitizeLog(raw)
+	failure.log = string(raw)
 	return failure
 }
 
@@ -156,11 +172,4 @@ func (c *ciLoop) checks(ctx context.Context, forge contracts.Forge, pull contrac
 		cursor = page.Next
 	}
 	return all, nil
-}
-
-func (c *ciLoop) logText(lang i18n.Language, failure ciFailure) (string, error) {
-	if failure.log == "" {
-		return c.messages.Text(lang, clitext.SessionCINoLog, nil)
-	}
-	return failure.log, nil
 }

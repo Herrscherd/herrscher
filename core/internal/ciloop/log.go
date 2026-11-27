@@ -1,15 +1,13 @@
-// Package ciloop holds the policy and the log handling of the session CI loop.
+// Package ciloop holds the policy and the data handling of the session CI loop.
 package ciloop
 
 import (
-	"regexp"
 	"strings"
 )
 
-var logTagPattern = regexp.MustCompile(`(?i)ci-log`)
-
-// SanitizeLog returns the CI log as valid UTF-8 with every ci-log fence tag neutralised.
-func SanitizeLog(raw []byte) string {
-	valid := strings.ToValidUTF8(string(raw), "�")
-	return logTagPattern.ReplaceAllString(valid, "ci_log")
+// Payload returns the data block of a CI nudge: the check name, its page and the log. Every
+// markup character is escaped, so no fence tag can open or close in any writing.
+func Payload(check, page, log string) string {
+	block := "check: " + check + "\npage: " + page + "\n" + log
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(strings.ToValidUTF8(block, "�"))
 }

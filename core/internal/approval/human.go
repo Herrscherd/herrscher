@@ -1,21 +1,31 @@
 package approval
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var programPositions = []*regexp.Regexp{
+	regexp.MustCompile("(?:^|[;&|(`{])\\s*(?:\\S*/)?herrscher\\b"),
+	regexp.MustCompile("(?:\\b(?:env|sudo|exec|xargs|nohup|time|command|eval)\\b|\\s-[ce]\\b)[^;&|`]*?[\\s\\[,(](?:\\S*/)?herrscher\\b"),
+	regexp.MustCompile("[\\[,(]\\s*(?:\\S*/)?herrscher\\b"),
+}
+
+var interpreterDecoders = []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"}
 
 // RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, which only a person may
-// decide: no rule, no remembered answer and no mode lets them through. The check reads the command text after
-// removing quoting, backslashes and separators, so it is a text barrier. It does not see a script written to a
-// file and run afterwards, a file downloaded and run, or an encoding it does not name.
+// decide: no rule, no remembered answer and no mode lets them through. It is a text barrier: it reads the command
+// after removing quoting and punctuation, and it does not see a script written to a file and run afterwards, a file
+// downloaded and run, or an encoding it does not name.
 func RequiresHuman(req Request) bool {
 	if CanonicalTool(req.Tool) != toolBash {
 		return false
 	}
-	text := normalizeShell(req.Subject)
-	words := strings.Fields(text)
-	if namesHerrscher(words) && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
+	words := strings.Fields(normalizeShell(req.Subject))
+	if programHerrscher(req.Subject) && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
 		return true
 	}
-	if (strings.ContainsAny(req.Subject, "$`") || hasWord(words, "eval")) && spellsHerrscher(text) {
+	if (strings.ContainsAny(req.Subject, "$`") || hasWord(words, "eval")) && assemblesHerrscher(words) {
 		return true
 	}
 	return runsUnreadable(req.Subject, words)
@@ -23,13 +33,18 @@ func RequiresHuman(req Request) bool {
 
 func normalizeShell(command string) string {
 	spaced := strings.NewReplacer(`\n`, " ", `\t`, " ").Replace(command)
-	unquoted := strings.NewReplacer(`\`, "", `"`, "", `'`, "", "`", "").Replace(spaced)
-	return strings.NewReplacer("(", " ", ")", " ", "{", " ", "}", " ", ";", " ", "&", " ", "|", " ", "<", " ", ">", " ", "=", " ").Replace(unquoted)
+	return strings.ToLower(strings.Map(func(char rune) rune {
+		if strings.ContainsRune("[]{}(),;:&|<>=\"'`\\/.", char) {
+			return ' '
+		}
+		return char
+	}, spaced))
 }
 
-func namesHerrscher(words []string) bool {
-	for _, word := range words {
-		if word == "herrscher" || strings.HasSuffix(word, "/herrscher") {
+func programHerrscher(command string) bool {
+	position := strings.NewReplacer(`\n`, " ", `\t`, " ", `\`, "", `"`, "", `'`, "").Replace(command)
+	for _, pattern := range programPositions {
+		if pattern.MatchString(strings.ToLower(position)) {
 			return true
 		}
 	}
@@ -45,39 +60,33 @@ func hasWord(words []string, want string) bool {
 	return false
 }
 
-func spellsHerrscher(text string) bool {
-	letters := strings.Map(func(char rune) rune {
-		if char >= 'a' && char <= 'z' {
-			return char
-		}
-		return -1
-	}, strings.ToLower(text))
+func assemblesHerrscher(words []string) bool {
 	const name = "herrscher"
-	if strings.Contains(letters, name) {
-		return true
-	}
-	for cut := 1; cut < len(name); cut++ {
-		if strings.Contains(letters, name[:cut]) && strings.Contains(letters, name[cut:]) {
-			return true
+	reachable := make([]bool, len(name)+1)
+	reachable[len(name)] = true
+	for at := len(name) - 1; at >= 0; at-- {
+		for _, word := range words {
+			if word == "" || strings.Contains(word, "$") {
+				continue
+			}
+			if strings.HasPrefix(name[at:], word) && reachable[at+len(word)] {
+				reachable[at] = true
+				break
+			}
 		}
 	}
-	return false
+	return reachable[0]
 }
 
 func runsUnreadable(raw string, words []string) bool {
-	runs := false
-	for _, interpreter := range []string{"sh", "bash", "zsh", "dash", "eval"} {
-		if hasWord(words, interpreter) {
-			runs = true
-		}
-	}
+	runs := hasWord(words, "sh") || hasWord(words, "bash") || hasWord(words, "zsh") || hasWord(words, "dash") || hasWord(words, "eval")
 	if strings.Contains(raw, "python -c") || strings.Contains(raw, "perl -e") || strings.Contains(raw, "python3 -c") {
 		runs = true
 	}
 	if !runs {
 		return false
 	}
-	for _, decoder := range []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"} {
+	for _, decoder := range interpreterDecoders {
 		if strings.Contains(raw, decoder) {
 			return true
 		}

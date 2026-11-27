@@ -164,3 +164,15 @@ func TestSetReplyKeepsChannelsWhenTheRuleWriteFails(t *testing.T) {
 		t.Fatalf("channels after a failed rule = %v, %v; want the previous chat:222", channels, err)
 	}
 }
+
+func TestSetReplyOfUnknownAgentKeepsItsNotice(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	_, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"ghost", "never"}})
+	noticed, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok {
+		t.Fatalf("err = %v; want a notice", err)
+	}
+	if code := noticed.Notice().Code; code != contracts.CodeAgentNotFound {
+		t.Fatalf("code = %s; want %s", code.Key(), contracts.CodeAgentNotFound.Key())
+	}
+}

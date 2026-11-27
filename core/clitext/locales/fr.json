@@ -3198,6 +3198,31 @@
     "other": "worktree : {{.Err}}"
   },
   {
+    "id": "cli.help.param.mcp.weight.role",
+    "description": "Texte d'aide de l'option --role de mcp weight",
+    "other": "Rôle dont mesurer le profil MCP"
+  },
+  {
+    "id": "cli.mcp.weight.profile",
+    "description": "Note du rapport mcp weight sur les serveurs gardés par un rôle",
+    "other": "Profil du rôle {{.Role}} : chargés {{.Kept}}, écartés {{.Dropped}}."
+  },
+  {
+    "id": "cli.mcp.weight.profile.none",
+    "description": "Mot désignant une liste de serveurs vide dans la note de profil de mcp weight",
+    "other": "aucun"
+  },
+  {
+    "id": "cli.mcp.weight.no_profile",
+    "description": "Note du rapport mcp weight quand le rôle n'a pas de profil",
+    "other": "Aucun profil pour le rôle {{.Role}} : tous les serveurs sont chargés."
+  },
+  {
+    "id": "cli.host.err.mcp_profile_server",
+    "description": "Réponse d'une commande d'hôte, le profil MCP d'un rôle nomme un serveur que mcp.json ne déclare pas",
+    "other": "le profil MCP du rôle « {{.Role}} » de l'agent « {{.Agent}} » nomme le serveur « {{.Server}} », que son mcp.json ne déclare pas"
+  },
+  {
     "id": "cli.host.err.provision_agent",
     "description": "Reply of a host command, err provision agent",
     "other": "provisionnement de l'agent \"{{.Agent}}\" : {{.Err}}"

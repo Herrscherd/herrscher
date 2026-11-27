@@ -197,6 +197,8 @@ const (
 	ParamRoles      = "Roles"
 	ParamPrincipal  = "Principal"
 	ParamRole       = "Role"
+	ParamServer     = "Server"
+	ParamDropped    = "Dropped"
 	ParamPosition   = "Position"
 	ParamWhat       = "What"
 	ParamAllowed    = "Allowed"

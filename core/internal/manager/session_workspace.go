@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 )
@@ -133,11 +134,39 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	if !req.runtime.explicit && agentSpec.Cmd != "" {
 		req.runtime.cmd = agentSpec.Cmd
 	}
+	agentSpec.Role = sessionRole(req.options.parent)
+	selection, err := agentSpec.SelectMCP(agentSpec.Role)
+	if err != nil {
+		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
+		return h.provisionFailure(agentName, err)
+	}
+	h.logMCPSelection(req.name, selection)
 	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
-		return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+		return h.provisionFailure(agentName, err)
 	}
 	return nil
+}
+
+func sessionRole(parent string) string {
+	if parent == "" {
+		return ""
+	}
+	return agent.RoleWorker
+}
+
+func (h *Handler) provisionFailure(agentName string, err error) error {
+	if profileErr, ok := errors.AsType[*agent.UnknownProfileServerError](err); ok {
+		return h.keyed(clitext.HostErrMCPProfileServer, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamRole: profileErr.Role, clitext.ParamServer: profileErr.Server}, err)
+	}
+	return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+}
+
+func (h *Handler) logMCPSelection(session string, selection agent.MCPSelection) {
+	if !selection.Applied {
+		return
+	}
+	h.log.Info("mcp profile applied", "session", session, "role", selection.Role, "kept", selection.Kept, "dropped", selection.Dropped)
 }
 
 func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, repo, name string, space workspace) {

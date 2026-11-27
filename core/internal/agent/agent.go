@@ -253,17 +253,19 @@ type Agent struct {
 	Host string
 	// Account is the default account profile of this agent's sessions, from <home>/account. Empty = the vendor default.
 	Account string
+	// Role is the delegation role of the session being provisioned, RoleWorker for a session a lead spawned and empty otherwise. It selects the MCP servers the session keeps, see SelectMCP.
+	Role string
 }
 
 // Materialize provisions the agent into a session worktree by writing the files
 // Claude Code and Codex read from its working directory:
 //
-//	<worktree>/.mcp.json             (from <home>/mcp.json)
+//	<worktree>/.mcp.json             (from <home>/mcp.json, cut to the role's servers by <home>/mcp-profiles.json)
 //	<worktree>/.claude/settings.json (from <home>/settings.json)
 //	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md, the layered persona)
 //	<worktree>/AGENTS.md             (from <home>/SOUL.md)
 //	<worktree>/.claude/USER.md       (from <home>/USER.md, when present)
-//	<worktree>/.codex/config.toml    (converted from <home>/mcp.json)
+//	<worktree>/.codex/config.toml    (converted from the same selected servers as .mcp.json)
 //	<worktree>/.grok/hooks/herrscher-approve.json (the approval hook, for Grok Build)
 //
 // When <home>/USER.md exists, it is also referenced from CLAUDE.md via a
@@ -312,6 +314,10 @@ func (a Agent) MaterializeInto(dst, worktreePath string) error {
 // It does not touch git: the local excludes belong with the repository, which
 // in the staged case is not on this machine.
 func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
+	selection, err := a.SelectMCP(a.Role)
+	if err != nil {
+		return err
+	}
 	claudeDir := filepath.Join(dst, ".claude")
 	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
@@ -320,7 +326,7 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err := os.MkdirAll(codexDir, dirMode); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
-	if err := a.copyTemplates(dst, claudeDir, worktreePath, herrscherBin); err != nil {
+	if err := a.copyTemplates(dst, claudeDir, worktreePath, herrscherBin, selection.Document); err != nil {
 		return err
 	}
 	if err := a.writeInstructions(dst, claudeDir, worktreePath); err != nil {
@@ -331,16 +337,19 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 			return err
 		}
 	}
-	return a.writeCodexConfig(codexDir, worktreePath)
+	return a.writeCodexConfig(codexDir, worktreePath, selection.Document)
 }
 
-func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string) error {
+func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string, mcp []byte) error {
+	mcpOut := []byte(strings.ReplaceAll(string(mcp), worktreeToken, jsonStringInner(worktreePath)))
+	if err := os.WriteFile(filepath.Join(dst, ".mcp.json"), mcpOut, fileMode); err != nil {
+		return fmt.Errorf("write %s: %w", filepath.Join(dst, ".mcp.json"), err)
+	}
 	copies := []struct {
 		src, dst string
 		jsonDst  bool
 		settings bool
 	}{
-		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true, false},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true, true},
 	}
 	for _, template := range copies {
@@ -395,11 +404,7 @@ func (a Agent) writeInstructions(dst, claudeDir, worktreePath string) error {
 	return nil
 }
 
-func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
-	mcp, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
-	if err != nil {
-		return fmt.Errorf("read %s: %w", mcpFile, err)
-	}
+func (a Agent) writeCodexConfig(codexDir, worktreePath string, mcp []byte) error {
 	servers, err := parseCodexMCPServers(mcp)
 	if err != nil {
 		return err

@@ -41,6 +41,7 @@ const (
 	SessionPRPagesExceeded     = "cli.session.pr.pages_exceeded"
 	SessionPRFailed            = "cli.session.pr.failed"
 	SessionPRUnknownValue      = "cli.session.pr.unknown_value"
+	SessionPRReviewNudge       = "cli.session.pr.review_nudge"
 
 	SessionPRStateDraft        = "cli.session.pr.state.draft"
 	SessionPRStateUnknown      = "cli.session.pr.state.unknown"
@@ -77,6 +78,7 @@ const (
 	ParamReset      = "Reset"
 	ParamPages      = "Pages"
 	ParamValue      = "Value"
+	ParamData       = "Data"
 )
 
 func sessionPRKeys() map[Key][]string {
@@ -120,6 +122,7 @@ func sessionPRKeys() map[Key][]string {
 		SessionPRPagesExceeded:     {ParamPages},
 		SessionPRFailed:            {ParamErr},
 		SessionPRUnknownValue:      {ParamValue},
+		SessionPRReviewNudge:       {ParamNumber, ParamCount, ParamData},
 
 		SessionPRStateDraft:        nil,
 		SessionPRStateUnknown:      nil,

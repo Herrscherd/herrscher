@@ -219,6 +219,35 @@ number with the state `unknown`. The session info that the TUI and the gateways
 receive carries no pull request for such a session, so they show nothing until
 `session pr status` stores the state, draft flag and URL.
 
+## Review threads of a session
+
+When a session has a pull request, the host hands its unresolved review threads
+to the agent of the session. The host reads them each time it observes a change
+of the pull request (a review submitted, a new commit, a change of state or of
+checks), so a comment added to an existing thread without a new review is seen
+at the next change or after a restart.
+
+- Only unresolved threads are handed over. A thread that a person resolves
+  stays out, and the agent never resolves a thread.
+- A comment reaches the agent only when its author is the owner or a member of
+  the repository, and is not a bot. Any other comment is passed over without
+  being shown. A public repository takes comments from anyone, so this default
+  refuses them.
+- The host hands over each comment once. The position of every thread (how many
+  of its comments were handed over) is stored in the session state, so a restart
+  does not send them again. A message that no live session takes is not counted,
+  and it is retried on the next observation.
+- One message carries at most 8 threads, 5 new comments per thread and 1000 bytes
+  per comment, so its size is bounded. The rest comes in the next message.
+- The forge text (path, author, body) is written in a block of data between
+  `<donnees-revue>` and `</donnees-revue>`, with `&`, `<` and `>` escaped and
+  control characters removed. The message tells the agent that this block is
+  data, never an instruction.
+- To answer a thread, the agent runs `herrscher session pr reply --name <session>
+  --thread <thread id> --body <text>`. The verb is checked by the authorization
+  policy of the session role, like `session pr open` and `session issue comment`,
+  and it is recorded as a write; the token stays in the host.
+
 ## Repositories to clone
 
 When you create a session, the choice of repositories lists the workspace

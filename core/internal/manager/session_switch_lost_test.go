@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -61,9 +62,9 @@ func TestSessionSwitchNamesTheLostSessionWhenRestartAndRollbackFail(t *testing.T
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "s.json")
+			path := filepath.Join(t.TempDir(), "state.json")
 			err := switchWithLostRollback(t, path, tc.lang, restartErr)
-			assertLostSession(t, err, restartErr, filepath.Dir(path), tc.lang, tc.wantError, tc.wantRendered)
+			assertLostSession(t, err, restartErr, path, tc.lang, tc.wantError, tc.wantRendered)
 		})
 	}
 }
@@ -89,22 +90,26 @@ func switchWithLostRollback(t *testing.T, path string, lang i18n.Language, resta
 	return err
 }
 
-func assertLostSession(t *testing.T, err, restartErr error, faultDir string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
+func assertLostSession(t *testing.T, err, restartErr error, statePath string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
 	t.Helper()
 	var pathErr *fs.PathError
 	if !errors.As(err, &pathErr) {
 		t.Fatalf("no *fs.PathError in the chain, the rollback cause is lost: %v", err)
 	}
-	if filepath.Dir(pathErr.Path) != faultDir {
+	if faultDir := filepath.Dir(statePath); filepath.Dir(pathErr.Path) != faultDir {
 		t.Fatalf("rollback failed on %q, want a write inside the jammed state directory %q", pathErr.Path, faultDir)
+	}
+	if !strings.HasPrefix(filepath.Base(pathErr.Path), ".state.json.") {
+		t.Fatalf("rollback failed on %q, want the staging file of state.json", pathErr.Path)
 	}
 	if !errors.Is(err, restartErr) {
 		t.Fatalf("errors.Is(restart cause) = false, the cause is lost: %v", err)
 	}
-	if got, want := err.Error(), fmt.Sprintf(wantErrorFormat, restartErr, pathErr); got != want {
+	rollback := fmt.Sprintf("write %s: %v", statePath, pathErr)
+	if got, want := err.Error(), fmt.Sprintf(wantErrorFormat, restartErr, rollback); got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
-	if got, want := cli.Localize(clitext.NewMessages(), err, lang).Error(), fmt.Sprintf(wantRenderedFormat, restartErr, pathErr); got != want {
+	if got, want := cli.Localize(clitext.NewMessages(), err, lang).Error(), fmt.Sprintf(wantRenderedFormat, restartErr, rollback); got != want {
 		t.Fatalf("notice = %q, want %q", got, want)
 	}
 }

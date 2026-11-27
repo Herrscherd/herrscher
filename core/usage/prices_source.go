@@ -68,6 +68,7 @@ func (s *PriceSource) Refresh(ctx context.Context) error {
 	s.mu.Lock()
 	s.book, s.fetchedAt = book, s.Now()
 	s.mu.Unlock()
+	atomicfile.SweepLogged(s.Path)
 	return writeAtomic(s.Path, raw)
 }
 
@@ -86,7 +87,6 @@ func (s *PriceSource) due() bool {
 }
 
 func (s *PriceSource) loadFile() {
-	atomicfile.SweepLogged(s.Path)
 	raw, err := os.ReadFile(s.Path)
 	if err != nil {
 		return

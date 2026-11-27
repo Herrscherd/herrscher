@@ -49,6 +49,8 @@ const (
 	WorktreeRelocateNameIsInstance    = "cli.worktree.relocate_name_is_instance"
 	WorktreeRelocateRemoteBranch      = "cli.worktree.relocate_remote_branch"
 	WorktreeRelocateRemoteUnreachable = "cli.worktree.relocate_remote_unreachable"
+	WorktreeRelocateLocked            = "cli.worktree.relocate_locked"
+	WorktreeRelocateSubmodules        = "cli.worktree.relocate_submodules"
 )
 
 func worktreeKeys() map[Key][]string {
@@ -91,5 +93,7 @@ func worktreeKeys() map[Key][]string {
 		WorktreeRelocateNameIsInstance:    {ParamName, ParamValue, ParamPath},
 		WorktreeRelocateRemoteBranch:      {ParamName, ParamBranch, ParamTarget},
 		WorktreeRelocateRemoteUnreachable: {ParamName, ParamBranch, ParamTarget, ParamOutput, ParamErr, ParamCommand},
+		WorktreeRelocateLocked:            {ParamName, ParamPath, ParamCommand},
+		WorktreeRelocateSubmodules:        {ParamName, ParamPath, ParamCommand},
 	}
 }

@@ -26,7 +26,11 @@ const (
 	MigrationCheckpointInspect  = "cli.migration.checkpoint_inspect"
 	MigrationCheckpointHidden   = "cli.migration.checkpoint_hidden_repository"
 	MigrationCheckpointMove     = "cli.migration.checkpoint_move"
+	MigrationSharedWorktree     = "cli.migration.shared_worktree"
+	MigrationInterrupted        = "cli.migration.interrupted"
+	MigrationNothingDone        = "cli.migration.nothing_done"
 	InstanceGenerated           = "cli.instance.generated"
+	InstanceStoredInvalid       = "cli.instance.stored_invalid"
 )
 
 func migrationKeys() map[Key][]string {
@@ -55,6 +59,10 @@ func migrationKeys() map[Key][]string {
 		MigrationCheckpointInspect:  {ParamName, ParamPath, ParamErr},
 		MigrationCheckpointHidden:   {ParamName, ParamPath, ParamRepo, ParamErr},
 		MigrationCheckpointMove:     {ParamName, ParamPath, ParamErr},
+		MigrationSharedWorktree:     {ParamName, ParamTarget, ParamPath, ParamFile},
+		MigrationInterrupted:        {ParamErr, ParamDetail, ParamFile},
+		MigrationNothingDone:        {},
 		InstanceGenerated:           {ParamValue},
+		InstanceStoredInvalid:       {ParamPath, ParamValue},
 	}
 }

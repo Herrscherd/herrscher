@@ -290,7 +290,8 @@ func Template(cmd, healthAddr string) string {
   "statusChannel": "",
 
   // Per-daemon instance slug namespacing shared gateway/git resources;
-  // "" = legacy non-namespaced mode.
+  // "" = taken from HERRSCHER_OWNER_ID, else from the state, else generated
+  // at the first start.
   "instance": "",
 
   // Owner id; the per-daemon instance-id fallback (like HERRSCHER_OWNER_ID).

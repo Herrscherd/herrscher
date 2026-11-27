@@ -27,7 +27,10 @@ const (
 	instanceGenerated
 )
 
-func chooseInstanceID(messages *hostMessages, stored, optID, ownerID string) (string, instanceOrigin, error) {
+func chooseInstanceID(messages *hostMessages, statePath, stored, optID, ownerID string) (string, instanceOrigin, error) {
+	if stored != "" && !instanceid.Validate(stored) {
+		return "", instanceStored, &storedInstanceInvalidError{path: statePath, value: stored}
+	}
 	resolved, err := instanceid.Resolve(optID, ownerID)
 	switch {
 	case errors.Is(err, instanceid.ErrUnconfigured):
@@ -50,9 +53,11 @@ type stateAnnouncer struct {
 	lang        i18n.Language
 	log         *slog.Logger
 	out         io.Writer
+	progress    *migrationProgress
 }
 
 func (a stateAnnouncer) announce(key clitext.Key, params clitext.Params) {
+	a.progress.record(key, params)
 	text := renderMigrationText(a.cliMessages, a.lang, key, params)
 	a.log.Info("state migration", "key", string(key), "change", text)
 	logWriteFailure(fmt.Fprintln(warningWriter(a.out), text))
@@ -78,9 +83,9 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	if !store.Outdated() {
 		return nil
 	}
-	instID, origin, err := chooseInstanceID(messages, store.InstanceID, inputs.optID, inputs.ownerID)
+	instID, origin, err := chooseInstanceID(messages, store.Path(), store.InstanceID, inputs.optID, inputs.ownerID)
 	if err != nil {
-		return err
+		return migrationCheckRefusal(announcer.cliMessages, err)
 	}
 	migration := state.FormatMigration{InstanceID: instID, DefaultGateways: inputs.defaultGateways, ConfigWorkspace: inputs.configWorkspace}
 	if checkErr := store.CheckMigration(migration); checkErr != nil {
@@ -88,6 +93,9 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	}
 	worktrees := worktree.NewWorktreer(announcer.cliMessages, instID)
 	sessions := store.SnapshotSessions()
+	if sharedErr := refuseSharedWorktrees(announcer.cliMessages, store.Path(), sessions); sharedErr != nil {
+		return sharedErr
+	}
 	plans, err := planSessionRelocations(ctx, announcer.cliMessages, worktrees, sessions, inputs.forge)
 	if err != nil {
 		return err
@@ -101,21 +109,33 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 		return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationBackupFailed, params: clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamErr: err.Error()}, cause: err}
 	}
 	announcer.announce(clitext.MigrationStarted, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamFrom: store.Format, clitext.ParamTo: state.CurrentFormat, clitext.ParamFile: backup})
-	if rekeyErr := rekeyCheckpoints(ctx, announcer, rekeys); rekeyErr != nil {
-		return rekeyErr
+	if pinErr := pinMigrationIdentity(announcer, store, instID, origin); pinErr != nil {
+		return pinErr
 	}
-	migration.Relocated, err = relocateSessions(ctx, worktrees, announcer, sessions, plans)
+	announcer.progress = &migrationProgress{}
+	if err := carryOutMigration(ctx, worktrees, announcer, store, migration, sessions, plans, rekeys); err != nil {
+		return &stateMigrationInterruptedError{messages: announcer.cliMessages, done: announcer.progress.steps, backup: backup, cause: err}
+	}
+	announcer.announce(clitext.MigrationDone, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamTo: state.CurrentFormat})
+	return nil
+}
+
+func carryOutMigration(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, store *state.State, migration state.FormatMigration, sessions []state.Session, plans map[string]sessionRelocation, rekeys []checkpointRekey) error {
+	if err := rekeyCheckpoints(ctx, announcer, rekeys); err != nil {
+		return err
+	}
+	relocated, err := relocateSessions(ctx, worktrees, announcer, sessions, plans)
 	if err != nil {
 		return err
 	}
+	migration.Relocated = relocated
 	changes, err := store.MigrateFormat(migration)
 	if err != nil {
 		return err
 	}
 	for _, change := range changes {
-		announceFormatChange(announcer, change, origin)
+		announceFormatChange(announcer, change)
 	}
-	announcer.announce(clitext.MigrationDone, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamTo: state.CurrentFormat})
 	return nil
 }
 
@@ -123,17 +143,16 @@ func migrationCheckRefusal(cliMessages *clitext.Messages, err error) error {
 	if unbound, ok := errors.AsType[*state.NoGatewayToBindError](err); ok {
 		return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationNoGateway, params: clitext.Params{clitext.ParamName: strconv.Quote(unbound.Session)}}
 	}
+	if invalid, ok := errors.AsType[*storedInstanceInvalidError](err); ok {
+		return &stateMigrationRefusedError{messages: cliMessages, key: clitext.InstanceStoredInvalid, params: invalid.params(), cause: err}
+	}
 	return err
 }
 
-func announceFormatChange(announcer stateAnnouncer, change state.FormatChange, origin instanceOrigin) {
+func announceFormatChange(announcer stateAnnouncer, change state.FormatChange) {
 	switch change.Kind {
 	case state.ChangeInstanceAssigned:
-		var key clitext.Key = clitext.MigrationInstanceConfigured
-		if origin == instanceGenerated {
-			key = clitext.MigrationInstanceGenerated
-		}
-		announcer.announce(key, clitext.Params{clitext.ParamValue: change.Value})
+		announcer.announce(clitext.MigrationInstanceConfigured, clitext.Params{clitext.ParamValue: change.Value})
 	case state.ChangeWorkspaceFromRepo:
 		announcer.announce(clitext.MigrationWorkspaceFromRepo, clitext.Params{clitext.ParamPath: change.Value})
 	case state.ChangeRepoDropped:
@@ -262,8 +281,14 @@ func (e *stateMigrationRefusedError) reason(cliMessages *clitext.Messages, lang 
 }
 
 func stateFormatText(cliMessages *clitext.Messages, lang i18n.Language, err error) (string, bool) {
+	if interrupted, ok := errors.AsType[*stateMigrationInterruptedError](err); ok {
+		return interrupted.text(cliMessages, lang), true
+	}
 	if refusal, ok := errors.AsType[*stateMigrationRefusedError](err); ok {
 		return refusal.text(cliMessages, lang), true
+	}
+	if invalid, ok := errors.AsType[*storedInstanceInvalidError](err); ok {
+		return renderMigrationText(cliMessages, lang, clitext.InstanceStoredInvalid, invalid.params()), true
 	}
 	if newer, ok := errors.AsType[*state.NewerFormatError](err); ok {
 		return renderMigrationText(cliMessages, lang, clitext.MigrationNewerFormat, clitext.Params{clitext.ParamPath: newer.Path, clitext.ParamHave: newer.Found, clitext.ParamWant: newer.Supported}), true
@@ -291,7 +316,7 @@ func (e *statePendingMigrationError) Error() string {
 }
 
 func resolveInstanceID(messages *hostMessages, announcer stateAnnouncer, hostState *state.State, optID, ownerID string) (string, error) {
-	instID, origin, err := chooseInstanceID(messages, hostState.InstanceID, optID, ownerID)
+	instID, origin, err := chooseInstanceID(messages, hostState.Path(), hostState.InstanceID, optID, ownerID)
 	if err != nil || origin == instanceStored {
 		return instID, err
 	}

@@ -98,13 +98,14 @@ func TestMigrateFormatKeepsTheOldFileNextToTheNewOne(t *testing.T) {
 	}
 }
 
-func TestBackupCopiesTheBytesReadAtLoadEvenAfterALoadTimeRewrite(t *testing.T) {
+func TestBackupCopiesTheBytesReadAtLoadEvenAfterTheFileIsRewritten(t *testing.T) {
 	original := []byte(`{"home":{"id":"h","type":"category"},"sessions":[{"name":"alpha","channelID":"c1","type":"channel","cmd":"claude","gateways":["chat"]}]}`)
 	path := filepath.Join(t.TempDir(), "state.json")
 	must(t, os.WriteFile(path, original, privateFileMode))
 	loaded := loadOutdated(t, path)
+	must(t, loaded.SetInstanceID("alice"))
 	if bytes.Equal(mustRead(t, path), original) {
-		t.Fatal("the fixture was expected to be rewritten at load by the incarnation backfill")
+		t.Fatal("the file was expected to be rewritten with the instance id")
 	}
 	backup, err := loaded.Backup()
 	if err != nil {

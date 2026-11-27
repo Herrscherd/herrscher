@@ -221,7 +221,7 @@ func (s *State) ApplyDefaults(home *HomeRef, workspace, source string) {
 	}
 }
 
-// LoadState reads state from path; a missing file yields an empty state.
+// LoadState reads state from path; a missing file yields an empty state. A file of an older format is never written back here: only its migration rewrites it.
 func LoadState(path string) (*State, error) {
 	fresh := NewState(path)
 	buf, err := os.ReadFile(filepath.Clean(path))
@@ -249,7 +249,7 @@ func LoadState(path string) (*State, error) {
 			seen[fresh.Sessions[idx].ID] = true
 		}
 	}
-	if fresh.ensureSessionIncarnationsLocked() {
+	if fresh.ensureSessionIncarnationsLocked() && fresh.Format >= CurrentFormat {
 		if err := fresh.saveLocked(); err != nil {
 			return nil, fmt.Errorf("persist session incarnation backfill: %w", err)
 		}
@@ -471,7 +471,7 @@ func (s *State) QualifiedName(name string) string {
 	return s.InstanceID + "__" + name
 }
 
-// SetInstanceID records the per-daemon instance id and persists. The id is meant
+// SetInstanceID records the per-daemon instance id and persists, in the format the state was read with. The id is meant
 // to be frozen after first resolution; callers enforce that invariant.
 func (s *State) SetInstanceID(instanceID string) error {
 	s.mu.Lock()

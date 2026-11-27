@@ -87,8 +87,8 @@ type Options struct {
 	ContextLimits  map[string]int
 
 	// InstanceID is the explicit per-daemon namespace (-instance flag /
-	// HERRSCHER_INSTANCE_ID). Empty falls back to HERRSCHER_OWNER_ID, then legacy
-	// mode.
+	// HERRSCHER_INSTANCE_ID). Empty takes the id from HERRSCHER_OWNER_ID, else
+	// from the state, else generates one at the first start.
 	InstanceID string
 
 	// Declarative config.json defaults. Owner is the per-daemon instance-id

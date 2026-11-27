@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -28,9 +29,31 @@ func TestLoadStateBackfillsSessionID(t *testing.T) {
 	}
 }
 
+func TestLoadStateLeavesAnOldFormatFileAsItWas(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	legacy := []byte(`{"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess, _ := loaded.FindSession("alpha"); sess.Incarnation == "" {
+		t.Fatal("session alpha has no incarnation in memory")
+	}
+	onDisk, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(onDisk, legacy) {
+		t.Fatalf("loading a format 0 file rewrote it:\n%s", onDisk)
+	}
+}
+
 func TestLoadStateBackfillsAndPersistsSessionIncarnation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
-	legacy := `{"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`
+	legacy := `{"format":1,"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`
 	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}

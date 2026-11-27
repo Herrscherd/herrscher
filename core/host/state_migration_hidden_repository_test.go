@@ -54,6 +54,9 @@ func assertHiddenRepositoryRefusal(t *testing.T, err error, entry, folder string
 	if !ok || refusal.key != clitext.MigrationCheckpointHidden {
 		t.Fatalf("err = %v, want a %s refusal", err, clitext.MigrationCheckpointHidden)
 	}
+	if refusal.params[clitext.ParamPath] != folder {
+		t.Fatalf("refusal names the folder %v, want %s", refusal.params[clitext.ParamPath], folder)
+	}
 	wants := map[i18n.Language][]string{
 		i18n.English: {entry, folder, "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM=1", "Set the variable back right after that start", "untracked files included", "repair or remove it", "move the folder out of its path", "herrscher serve"},
 		i18n.French:  {entry, folder, "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM=1", "Remets la variable juste après", "fichiers non suivis compris", "répare-le ou retire-le", "sors le dossier de son chemin", "herrscher serve"},

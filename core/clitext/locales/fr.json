@@ -5962,6 +5962,16 @@
     "other": "session {{.Name}} : la branche {{.Branch}} porte une pull request, et le remote {{.Target}} n'a pas pu dire s'il la garde encore : {{.Err}} {{.Output}} ; relance herrscher serve quand le remote répond, ou, si la pull request est fusionnée ou fermée, déplace la session toi-même, sans réseau : {{.Command}}, puis relance herrscher serve"
   },
   {
+    "id": "cli.worktree.relocate_locked",
+    "description": "Refus de migration : git garde verrouillé le worktree à déplacer",
+    "other": "session {{.Name}} : git garde son worktree {{.Path}} verrouillé (git worktree lock), et git worktree move refuse un worktree verrouillé ; rien n'a bougé. Si aucun autre outil n'a encore besoin de ce verrou, lève-le avec {{.Command}}, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_submodules",
+    "description": "Refus de migration : le worktree à déplacer contient des sous-modules",
+    "other": "session {{.Name}} : son worktree {{.Path}} contient des sous-modules, et git worktree move refuse de déplacer un tel worktree ; rien n'a bougé. Déplace-le toi-même : {{.Command}}. Le deinit refuse tant qu'un sous-module a des changements non commités (commite-les ou mets-les de côté dans le sous-module d'abord), et la dernière commande extrait de nouveau chaque sous-module au commit que le worktree enregistre. Relance ensuite herrscher serve : il trouve le worktree à sa nouvelle place et continue"
+  },
+  {
     "id": "cli.migration.started",
     "description": "Annonce du début d'une migration de l'état",
     "other": "herrscher : migration de l'état {{.Path}} du format {{.From}} au format {{.To}} ; l'ancien fichier est gardé dans {{.File}}"
@@ -6084,9 +6094,29 @@
     "other": "session {{.Name}} : impossible de déplacer les refs de checkpoint de {{.Path}} : {{.Err}} ; elles bougent en une seule transaction git, donc aucune n'a bougé, et le prochain herrscher serve réessaie"
   },
   {
+    "id": "cli.migration.shared_worktree",
+    "description": "Refus de migration : deux sessions enregistrent le même dossier",
+    "other": "les sessions {{.Name}} et {{.Target}} enregistrent toutes deux le dossier {{.Path}} (une ancienne version a donné à une nouvelle session le dossier d'une session renommée depuis ce nom), et un dossier ne peut pas aller à deux endroits ; rien n'a bougé. Aucune des deux ne peut être fermée avant la migration, et en fermer une supprimerait le dossier où l'autre travaille encore. Garde-en une : herrscher arrêté, copie {{.File}} de côté, retire l'entrée de l'autre session de sa liste sessions, puis relance herrscher serve. Le dossier, sa branche et son travail restent à la session gardée ; le salon de l'autre reste tel quel"
+  },
+  {
+    "id": "cli.migration.interrupted",
+    "description": "Migration de l'état arrêtée après avoir changé quelque chose",
+    "other": "migration de l'état arrêtée en cours de route : {{.Err}}. Déjà fait, et gardé : {{.Detail}}. L'état garde son ancien format, avec son id d'instance écrit dedans, et la copie du fichier prise avant tout changement est {{.File}}. Une fois la cause corrigée, relance herrscher serve : il trouve ce qui a déjà bougé à sa nouvelle place et reprend à partir de là"
+  },
+  {
+    "id": "cli.migration.nothing_done",
+    "description": "Partie du texte de migration arrêtée : rien n'a encore bougé",
+    "other": "aucune ref déplacée, aucun dossier déplacé, aucune branche renommée"
+  },
+  {
     "id": "cli.instance.generated",
     "description": "Id d'instance généré pour un état neuf",
     "other": "herrscher : ni HERRSCHER_INSTANCE_ID ni HERRSCHER_OWNER_ID, id d'instance {{.Value}} généré et écrit dans l'état"
+  },
+  {
+    "id": "cli.instance.stored_invalid",
+    "description": "Refus de démarrer sur un état dont l'id d'instance est mal formé",
+    "other": "l'état {{.Path}} enregistre l'id d'instance {{.Value}}, qui n'est pas un id valide (lettres minuscules, chiffres et tirets, 16 caractères au plus, sans tiret en tête), donc les chemins de worktree et noms de branche bâtis dessus pourraient sortir de leurs dossiers ; remets l'id avec lequel ce daemon tournait (le dossier sous .herrscher-sessions/ qui contient ses worktrees le nomme), puis relance herrscher"
   },
   {
     "id": "cli.setup.module.telegram",

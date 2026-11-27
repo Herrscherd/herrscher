@@ -56,13 +56,21 @@ writes a copy of the old file, byte for byte as it was read, next to it as
 renamed). A copy left by an earlier migration is never overwritten: the next one
 is `state.json.before-format-1.2.bak`, then `.3.bak`, and the start of the
 migration names the exact file. If that copy cannot be written, the migration
-refuses before it touches a worktree or a branch. Then it moves what it has to,
-and writes the new file atomically. Each change is announced on the output of
+refuses before it touches a worktree or a branch. Right after the copy, and
+before any ref, folder or branch moves, it writes the instance id it chose and
+the incarnation of each session into the old file, which keeps format 0: a
+migration stopped after that point starts again with the same id and the same
+keys, so it finds what it already moved. Then it moves what it has to, and
+writes the new file atomically. Each change is announced on the output of
 `serve` and in the daemon log, in the operator language:
 
 - **Instance id.** A state without an instance id gets one. It comes from
   `HERRSCHER_INSTANCE_ID`, else from `HERRSCHER_OWNER_ID`, else it is generated
-  once (`h` and eight random characters) and written into the state. A daemon
+  once (`h` and eight random characters) and written into the state, before
+  anything moves. An id already stored must be a valid id (lowercase letters,
+  digits and dashes, at most 16 characters, no leading dash): a state edited
+  by hand to hold `../x` is refused, since paths built from it would leave
+  `.herrscher-sessions`. A daemon
   never runs without an id any more: the id-less layout, its bare branch names
   and its bare socket names are gone.
 - **Sessions of the id-less layout.** A session whose worktree is
@@ -183,9 +191,28 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   it is lifted, every checkpoint of a session in that repository runs
   `git add -A` over the repository's whole working tree: with dotfiles in
   `~/.git`, a checkpoint of a session in `~/notes` copies the whole home
-  folder, untracked files such as ssh keys included, into `~/.git`. Repair or remove a `.git` that is empty or broken, or move the
-  folder out of the path of a repository it does not belong to, then start
-  `serve` again.
+  folder, untracked files such as ssh keys included, into `~/.git`. Repair or
+  remove a `.git` that is empty or broken, or move the folder out of the path
+  of a repository it does not belong to, then start `serve` again.
+- two sessions record the same folder of the id-less layout, which an older
+  build left behind when a session was renamed and a new session took the old
+  name. One folder cannot move to two places. Neither session can be closed
+  before the migration (commands refuse a format 0 file), and closing one would
+  remove the folder the other still works in, so the refusal names both and the
+  state file: with herrscher stopped, copy the file aside, delete the entry of
+  the session that should not keep the folder, and start `serve` again. The
+  folder, its branch and its work stay with the session kept, and the channel
+  of the other is left as it is;
+- the worktree to move is locked (`git worktree lock`): git refuses to move it.
+  The refusal prints `git -C <repo> worktree unlock <folder>`; run it if no
+  other tool still needs the lock, then start `serve` again;
+- the worktree to move holds submodules: `git worktree move` refuses such a
+  worktree. The refusal prints the commands that move it by hand and that the
+  next `serve` then finds in place: `git -C <folder> submodule deinit --all`
+  (refused while a submodule holds uncommitted changes), `mkdir -p`, `mv`,
+  `git -C <repo> worktree repair <new folder>`, `git branch -m`, and
+  `git -C <new folder> submodule update --init`, which checks each submodule
+  out again at the commit the worktree records.
 
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,
@@ -195,16 +222,23 @@ run, the session fails to start on the host and the daemon keeps retrying.
 
 A move that fails halfway is put back, and the next start picks the migration up
 where it stopped: a directory or branch already at its new place counts as done.
-Run twice, the migration changes nothing the second time.
+Run twice, the migration changes nothing the second time. A migration that stops
+once it has moved something says so: the refusal gives the cause, lists every
+ref move, folder move and branch rename already done and kept, names the copy of
+the old file, and says that the next `serve`, once the cause is fixed, carries
+on from there.
 
 A file of a newer format than the build is refused at load, by `serve` and by
 every command, with the file and both formats named. Commands run outside the
 daemon refuse a format 0 file and ask to restart the daemon, since only the
-daemon has the gateways and the lock the migration needs. That is also what an
-upgrade with the old daemon still running looks like: the new client finds no
-daemon on the socket of the new instance id, falls back to running the command
-itself, and meets the old file. `herrscher serve` cannot start while the old
-daemon holds the lock, so stop the old daemon first, then run `herrscher serve`.
+daemon has the gateways and the lock the migration needs. No command, and no
+load of the file, ever writes a format 0 file back: only the migration does, so
+a command run while `serve` migrates cannot overwrite what the migration wrote.
+That is also what an upgrade with the old daemon still running looks like: the
+new client finds no daemon on the socket of the new instance id, falls back to
+running the command itself, and meets the old file. `herrscher serve` cannot
+start while the old daemon holds the lock, so stop the old daemon first, then
+run `herrscher serve`.
 
 
 ## Memory

@@ -5962,6 +5962,16 @@
     "other": "session {{.Name}}: branch {{.Branch}} carries a pull request, and remote {{.Target}} could not be asked whether it still holds it: {{.Err}} {{.Output}}; run herrscher serve again once the remote answers, or, if the pull request is merged or closed, move the session yourself, which needs no network: {{.Command}}, then run herrscher serve again"
   },
   {
+    "id": "cli.worktree.relocate_locked",
+    "description": "State migration refusal: git keeps the worktree to move locked",
+    "other": "session {{.Name}}: git keeps its worktree {{.Path}} locked (git worktree lock), and git worktree move refuses a locked worktree; nothing was moved. If no other tool still needs that lock, lift it with {{.Command}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_submodules",
+    "description": "State migration refusal: the worktree to move holds submodules",
+    "other": "session {{.Name}}: its worktree {{.Path}} holds submodules, and git worktree move refuses to move a worktree that does; nothing was moved. Move it yourself: {{.Command}}. The deinit refuses while a submodule holds uncommitted changes (commit or stash them in the submodule first), and the last command checks each submodule out again at the commit the worktree records. Then run herrscher serve again: it finds the worktree at its new place and goes on"
+  },
+  {
     "id": "cli.migration.started",
     "description": "Notice that a state migration starts",
     "other": "herrscher: migrating state {{.Path}} from format {{.From}} to format {{.To}}; the old file is kept in {{.File}}"
@@ -6084,9 +6094,29 @@
     "other": "session {{.Name}}: cannot move the checkpoint refs of {{.Path}}: {{.Err}}; they move in one git transaction, so none moved, and the next start of herrscher serve tries again"
   },
   {
+    "id": "cli.migration.shared_worktree",
+    "description": "State migration refusal: two sessions record the same folder",
+    "other": "sessions {{.Name}} and {{.Target}} both record the folder {{.Path}} (an older build gave a new session the folder of a session renamed away from that name), and one folder cannot move to two places; nothing was moved. Neither session can be closed before the migration, and closing one would remove the folder the other still works in. Keep one: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then run herrscher serve again. The folder, its branch and its work stay with the session you keep; the channel of the other one is left as it is"
+  },
+  {
+    "id": "cli.migration.interrupted",
+    "description": "State migration stopped after it changed something",
+    "other": "state migration stopped partway: {{.Err}}. Already done, and kept: {{.Detail}}. The state keeps its old format, with its instance id written in, and the copy of the file taken before any change is {{.File}}. Once the cause is fixed, run herrscher serve again: it finds what already moved at its new place and carries on from there"
+  },
+  {
+    "id": "cli.migration.nothing_done",
+    "description": "Part of the stopped migration text: nothing was moved yet",
+    "other": "no ref moved, no folder moved, no branch renamed"
+  },
+  {
     "id": "cli.instance.generated",
     "description": "Instance id generated for a fresh state",
     "other": "herrscher: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"
+  },
+  {
+    "id": "cli.instance.stored_invalid",
+    "description": "Refusal to start on a state whose instance id is malformed",
+    "other": "state {{.Path}} records the instance id {{.Value}}, which is not a valid id (lowercase letters, digits and dashes, 16 characters at most, not starting with a dash), so worktree paths and branch names built from it could leave their folders; put back the id this daemon ran with (the folder under .herrscher-sessions/ that holds its worktrees names it), then run herrscher again"
   },
   {
     "id": "cli.setup.module.telegram",

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -226,6 +227,9 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 
 	announcer := stateAnnouncer{cliMessages: cliMessages, lang: options.operatorLanguage(), log: obs.Stderr(false), out: options.Warnings}
 	instID, err := resolveInstanceID(messages, announcer, hostState, options.InstanceID, options.Owner)
+	if _, invalid := errors.AsType[*storedInstanceInvalidError](err); invalid {
+		return nil, localizeStateFormatError(cliMessages, options.operatorLanguage(), err)
+	}
 	if err != nil {
 		return nil, localizeHostError(messages, cliMessages, options.operatorLanguage(), err)
 	}

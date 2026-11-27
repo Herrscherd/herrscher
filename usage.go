@@ -55,7 +55,7 @@ func usage(messages *clitext.Messages, lang i18n.Language) error {
 		group(
 			clitext.UsageGroupSessions,
 			row("session <create|close|list|who>", clitext.UsageSessionVerbs),
-			row("agent   <create|list>", clitext.UsageAgentVerbs),
+			row("agent   <create|list|show|set-soul|set-reply>", clitext.UsageAgentVerbs),
 			row("host    <add|list|check|provision|rm>", clitext.UsageHostVerbs),
 			row("approve <list|allow|deny|rule|mode>", clitext.UsageApproveVerbs),
 			row("memory  <locate|forget|record>", clitext.UsageMemoryVerbs),

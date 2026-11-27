@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -79,6 +81,14 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contra
 	return contracts.DataResult(out.String()), nil
 }
 
+type agentView struct {
+	agent    agent.Agent
+	soul     string
+	reply    contracts.ReplyRule
+	channels []agent.Channel
+	tokens   map[string]bool
+}
+
 func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
@@ -92,23 +102,144 @@ func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contra
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return contracts.Result{}, h.labelled("read soul", clitext.HostErrReadSoul, err)
 	}
-	if input.JSON {
-		tags := candidate.Tags
-		if tags == nil {
-			tags = []string{}
-		}
-		buf, err := json.Marshal(struct {
-			Name    string   `json:"name"`
-			Tags    []string `json:"tags"`
-			Backend string   `json:"backend"`
-			Soul    string   `json:"soul"`
-		}{candidate.Name, tags, candidate.Backend, string(soul)})
-		if err != nil {
-			return contracts.Result{}, err
-		}
-		return contracts.DataResult(string(buf)), nil
+	reply, err := h.agents.Reply(candidate.Name)
+	if err != nil {
+		return contracts.Result{}, h.labelled("read reply", clitext.HostErrReadVoice, err)
 	}
-	return contracts.DataResult(fmt.Sprintf("%s (%#q)\n\n%s", candidate.Name, candidate.Home, string(soul))), nil
+	channels, err := h.agents.Channels(candidate.Name)
+	if err != nil {
+		return contracts.Result{}, h.labelled("read channels", clitext.HostErrReadVoice, err)
+	}
+	view := agentView{agent: candidate, soul: string(soul), reply: reply, channels: channels, tokens: h.tokenPresence(candidate.Name)}
+	if input.JSON {
+		return h.agentShowJSON(view)
+	}
+	return contracts.DataResult(h.agentShowText(view)), nil
+}
+
+func (h *Handler) agentShowJSON(view agentView) (contracts.Result, error) {
+	tags := view.agent.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	channelRefs := make([]string, 0, len(view.channels))
+	for _, channel := range view.channels {
+		channelRefs = append(channelRefs, channel.String())
+	}
+	buf, err := json.Marshal(struct {
+		Name     string          `json:"name"`
+		Tags     []string        `json:"tags"`
+		Backend  string          `json:"backend"`
+		Soul     string          `json:"soul"`
+		Reply    string          `json:"reply"`
+		Channels []string        `json:"channels"`
+		Tokens   map[string]bool `json:"tokens"`
+	}{view.agent.Name, tags, view.agent.Backend, view.soul, view.reply.String(), channelRefs, view.tokens})
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	return contracts.DataResult(string(buf)), nil
+}
+
+func (h *Handler) agentShowText(view agentView) string {
+	var out strings.Builder
+	fmt.Fprintf(&out, "%s (%#q)\n", view.agent.Name, view.agent.Home)
+	out.WriteString(h.text(clitext.HostAgentShowReply, clitext.Params{clitext.ParamRule: view.reply.String()}) + "\n")
+	out.WriteString(h.channelsLine(view.channels) + "\n")
+	for _, kind := range sortedKinds(view.tokens) {
+		out.WriteString(h.tokenLine(kind, view.tokens[kind]) + "\n")
+	}
+	out.WriteString("\n" + view.soul)
+	return out.String()
+}
+
+func (h *Handler) tokenLine(kind string, set bool) string {
+	state := h.text(clitext.HostAgentBotNotSet, nil)
+	if set {
+		state = h.text(clitext.HostAgentBotSet, nil)
+	}
+	return h.text(clitext.HostAgentShowBot, clitext.Params{clitext.ParamKind: kind, clitext.ParamState: state})
+}
+
+func (h *Handler) tokenPresence(name string) map[string]bool {
+	tokens := make(map[string]bool, len(h.gatewayAdmins))
+	for kind := range h.gatewayAdmins {
+		tokens[kind] = h.botTokens != nil && h.botTokens.HasToken(kind, name)
+	}
+	return tokens
+}
+
+func sortedKinds(tokens map[string]bool) []string {
+	return slices.Sorted(maps.Keys(tokens))
+}
+
+func (h *Handler) channelsLine(channels []agent.Channel) string {
+	if len(channels) == 0 {
+		return h.text(clitext.HostAgentShowNoChannels, nil)
+	}
+	refs := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		refs = append(refs, channel.String())
+	}
+	return h.text(clitext.HostAgentShowChannels, clitext.Params{clitext.ParamChannels: strings.Join(refs, ", ")})
+}
+
+func (h *Handler) agentSetReplyRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
+	operands := slices.Clone(input.Rest)
+	name, ok := input.Lookup(nameParam)
+	if !ok {
+		if len(operands) == 0 {
+			return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
+		}
+		name, operands = operands[0], operands[1:]
+	}
+	ruleText, ok := input.Lookup("rule")
+	if !ok && len(operands) > 0 {
+		ruleText, operands = operands[0], operands[1:]
+	}
+	rule, err := contracts.ParseReplyRule(ruleText)
+	if err != nil {
+		return contracts.Result{}, h.localized(contracts.ErrUnknownReplyRule, clitext.HostErrUnknownReplyRule)
+	}
+	channels, err := h.parseChannels(operands)
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	agentName := slugify(name)
+	defer h.invalidateVoices()
+	if len(operands) > 0 {
+		if err := h.agents.SetReplyWithChannels(agentName, rule, channels); err != nil {
+			return contracts.Result{}, h.setReplyError(err)
+		}
+	} else if err := h.agents.SetReply(agentName, rule); err != nil {
+		return contracts.Result{}, h.setReplyError(err)
+	}
+	return contracts.DataResult(h.text(clitext.HostAgentReplySet, clitext.Params{clitext.ParamName: agentName, clitext.ParamRule: rule.String()})), nil
+}
+
+func (h *Handler) setReplyError(err error) error {
+	if _, typed := errors.AsType[contracts.NoticeError](err); typed {
+		return err
+	}
+	return h.labelled("set reply", clitext.HostErrSetVoice, err)
+}
+
+func (h *Handler) invalidateVoices() {
+	if h.botTokens != nil {
+		h.botTokens.InvalidateVoices()
+	}
+}
+
+func (h *Handler) parseChannels(texts []string) ([]agent.Channel, error) {
+	channels := make([]agent.Channel, 0, len(texts))
+	for _, text := range texts {
+		channel, err := agent.ParseChannel(text)
+		if err != nil {
+			return nil, localize(h.messages, h.currentLanguage(), agent.ErrBadChannel.Error(), clitext.HostErrBadChannel, clitext.Params{clitext.ParamChannel: text}, agent.ErrBadChannel)
+		}
+		channels = append(channels, channel)
+	}
+	return channels, nil
 }
 
 func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (contracts.Result, error) {

@@ -195,6 +195,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	runningHub.instanceID = instID
 	runningHub.runtime = options.Runtime
 	runningHub.gate = deps.handler.BudgetGate()
+	runningHub.voices = deps.voices
 	coord := wireCoordination(runningHub, deps, store, sessions)
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})

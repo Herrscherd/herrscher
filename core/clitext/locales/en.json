@@ -6464,11 +6464,11 @@
   {
     "id": "cli.proxy.usage",
     "description": "Usage line of herrscher proxy",
-    "other": "usage: herrscher proxy <command|events|approval>"
+    "other": "usage: herrscher proxy <command|events>"
   },
   {
     "id": "cli.host.fault.proxy_unknown_channel",
-    "description": "Error: a proxy channel name is not command, events or approval",
-    "other": "unknown proxy channel: use command, events or approval"
+    "description": "Error: a proxy channel name is not command or events",
+    "other": "unknown proxy channel: use command or events"
   }
 ]

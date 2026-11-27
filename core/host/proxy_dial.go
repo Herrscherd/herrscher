@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,23 +15,29 @@ import (
 const (
 	proxyCloseGrace = 200 * time.Millisecond
 	proxyWaitDelay  = time.Second
+	proxyLoginBin   = "herrscher"
 )
 
-// ProxyConn is a daemon socket reached through `ssh <target> herrscher proxy <channel>`:
+// ProxyConn is a daemon socket reached through `ssh <target> <bin> proxy <channel>`:
 // Write reaches the daemon through the remote proxy and Read returns what it answers.
 type ProxyConn struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
-	stderr *bytes.Buffer
+	stderr *syncBuffer
 	cancel context.CancelFunc
 	killed *atomic.Bool
 }
 
 // DialProxy starts the ssh process that carries channel from the daemon of target.
-func DialProxy(ctx context.Context, target string, channel ProxyChannel) (*ProxyConn, error) {
+// bin is the herrscher binary on target, the one host add recorded; an empty bin
+// falls back to herrscher on the login PATH.
+func DialProxy(ctx context.Context, target, bin string, channel ProxyChannel) (*ProxyConn, error) {
+	if bin == "" {
+		bin = proxyLoginBin
+	}
 	procCtx, cancel := context.WithCancel(ctx)
-	cmd := runner.SSH{Target: target}.Command(procCtx, "", "herrscher", proxyVerb, channel.String())
+	cmd := runner.SSH{Target: target}.Command(procCtx, "", bin, proxyVerb, channel.String())
 	killed := &atomic.Bool{}
 	cmd.Cancel = func() error {
 		killed.Store(true)
@@ -47,7 +54,7 @@ func DialProxy(ctx context.Context, target string, channel ProxyChannel) (*Proxy
 		cancel()
 		return nil, err
 	}
-	stderr := &bytes.Buffer{}
+	stderr := &syncBuffer{}
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		cancel()
@@ -72,6 +79,7 @@ func (c *ProxyConn) CloseWrite() error {
 }
 
 // Stderr is what the remote proxy wrote to its standard error, such as the reason it could not reach the daemon.
+// It may be read while the ssh process still runs.
 func (c *ProxyConn) Stderr() string {
 	return c.stderr.String()
 }
@@ -99,4 +107,21 @@ func (c *ProxyConn) Close() error {
 		return err
 	}
 	return nil
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(data)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

@@ -80,15 +80,13 @@ Its approvals go through the asker that the turn attaches (`core/bridge/approval
 
 ## Route ssh
 
-`herrscher proxy <command|events|approval>` relays one local socket of the daemon
-over its standard input and output. A client that wants to drive a daemon on
-another machine runs it through ssh, one channel per socket, so no port opens on
-either side:
+`herrscher proxy <command|events>` relays one local socket of the daemon over its
+standard input and output. A client that wants to drive a daemon on another machine
+runs it through ssh, one channel per socket, so no port opens on either side:
 
 ```bash
 ssh build1 herrscher proxy command    # one request line in, one answer out
 ssh build1 herrscher proxy events     # NDJSON stream of events
-ssh build1 herrscher proxy approval   # the approval socket
 ```
 
 The command socket takes the same line as on this machine: a JSON object with
@@ -111,17 +109,15 @@ Ending a channel:
   not answer on this machine and exits with status 1. The client learns the
   daemon is absent from that exit status, not from a socket that hangs.
 
-The `herrscher` command must be on the PATH of the ssh login. A binary placed by
-`host add` lives in `~/.herrscher/bin`, which a login shell does not always
-read. Go code that opens the route calls `host.DialProxy`, which starts
-`ssh <target> herrscher proxy <channel>` and returns a connection whose reads come
-from the daemon and whose writes go to it.
+Go code that opens the route calls `host.DialProxy(ctx, target, bin, channel)`. It
+starts `ssh <target> <bin> proxy <channel>`, where `bin` is the binary that
+`host add` recorded in `~/.herrscher/bin`, so the login PATH does not matter. An
+empty `bin` falls back to `herrscher` on the login PATH. The returned connection
+reads what the daemon answers and writes to it.
 
-The approval channel names the daemon's approval socket, `herrscher-approval-<instance>`
-in the per-user directory. The daemon does not serve that socket yet, so until the
-approval channel of the backend lands, `herrscher proxy approval` reports that the
-daemon does not answer. Approvals made from the operator CLI (`herrscher approve`)
-work over the command socket meanwhile.
+The approval channel comes with its server and is not part of this route yet.
+Meanwhile `herrscher approve` goes through the command socket, which
+`herrscher proxy command` relays.
 
 
 ## Plugins on another machine

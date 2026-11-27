@@ -6,9 +6,13 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 const proxyTestTimeout = 5 * time.Second
@@ -35,13 +39,13 @@ func serveProxyDaemon(t *testing.T, path string, handle func(net.Conn)) {
 }
 
 func TestParseProxyChannelAcceptsTheThreeSocketsOnly(t *testing.T) {
-	for name, want := range map[string]ProxyChannel{"command": ProxyCommand, "events": ProxyEvents, "approval": ProxyApproval} {
+	for name, want := range map[string]ProxyChannel{"command": ProxyCommand, "events": ProxyEvents} {
 		got, err := ParseProxyChannel(name)
 		if err != nil || got != want || got.String() != name {
 			t.Fatalf("ParseProxyChannel(%q) = %v, %v; want %v", name, got, err, want)
 		}
 	}
-	for _, name := range []string{"", "Command", "session", "command "} {
+	for _, name := range []string{"", "Command", "session", "approval", "command "} {
 		if _, err := ParseProxyChannel(name); !errors.Is(err, errUnknownProxyChannel) {
 			t.Fatalf("ParseProxyChannel(%q) error = %v, want errUnknownProxyChannel", name, err)
 		}
@@ -127,33 +131,11 @@ func expectLines(t *testing.T, lines *bufio.Reader, want ...string) {
 	}
 }
 
-func TestProxyApprovalReachesTheApprovalSocket(t *testing.T) {
-	layout := testRuntime(t)
-	serveProxyDaemon(t, ApprovalSocketPathIn(layout, ""), func(conn net.Conn) {
-		line, err := bufio.NewReader(conn).ReadBytes('\n')
-		if err != nil {
-			return
-		}
-		_, writeErr := conn.Write(line)
-		logCleanup(writeErr)
-	})
-	request := `{"ID":"req-1","Tool":"Bash","Subject":"ls"}` + "\n"
-	var answer strings.Builder
-	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
-	defer cancel()
-	if err := RunProxy(ctx, layout, "", "", ProxyApproval, strings.NewReader(request), &answer); err != nil {
-		t.Fatal(err)
-	}
-	if answer.String() != request {
-		t.Fatalf("answer = %q, want the request echoed back", answer.String())
-	}
-}
-
 func TestProxyReportsADaemonThatIsNotRunning(t *testing.T) {
 	layout := testRuntime(t)
 	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
 	defer cancel()
-	for _, channel := range []ProxyChannel{ProxyCommand, ProxyEvents, ProxyApproval} {
+	for _, channel := range []ProxyChannel{ProxyCommand, ProxyEvents} {
 		err := RunProxy(ctx, layout, "", "", channel, strings.NewReader(""), io.Discard)
 		if !errors.Is(err, errProxyDaemonAbsent) {
 			t.Fatalf("%s: RunProxy error = %v, want errProxyDaemonAbsent", channel, err)
@@ -192,5 +174,55 @@ func TestProxyStopsWhenItsContextEnds(t *testing.T) {
 		}
 	case <-time.After(proxyTestTimeout):
 		t.Fatal("RunProxy did not return after its context ended")
+	}
+}
+
+type observedStdin struct {
+	reader  *io.PipeReader
+	pending atomic.Int32
+}
+
+func (s *observedStdin) Read(p []byte) (int, error) {
+	s.pending.Add(1)
+	defer s.pending.Add(-1)
+	return s.reader.Read(p)
+}
+
+func (s *observedStdin) Close() error {
+	return s.reader.Close()
+}
+
+func TestProxyEndsItsRequestCopyBeforeItReturns(t *testing.T) {
+	layout := testRuntime(t)
+	serveProxyDaemon(t, EventsSocketPathIn(layout, ""), func(conn net.Conn) {
+		_, writeErr := io.WriteString(conn, `{"session":"a","seq":1}`+"\n")
+		logCleanup(writeErr)
+	})
+	pipeReader, pipeWriter := io.Pipe()
+	t.Cleanup(func() { logCleanup(pipeWriter.Close()) })
+	stdin := &observedStdin{reader: pipeReader}
+	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
+	defer cancel()
+	if err := RunProxy(ctx, layout, "", "", ProxyEvents, stdin, io.Discard); err != nil {
+		t.Fatalf("RunProxy error = %v, want nil when the daemon closes", err)
+	}
+	if n := stdin.pending.Load(); n != 0 {
+		t.Fatalf("%d reads of stdin still pending after RunProxy returned", n)
+	}
+}
+
+func TestProxyReportsAnUnsafeRuntimeDirAsItsOwnError(t *testing.T) {
+	layout := testRuntime(t)
+	if err := os.Chmod(layout.Dir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
+	defer cancel()
+	err := RunProxy(ctx, layout, "", "", ProxyCommand, strings.NewReader(""), io.Discard)
+	if _, ok := errors.AsType[*runtimedir.UnsafeError](err); !ok {
+		t.Fatalf("RunProxy error = %v, want the unsafe runtime directory", err)
+	}
+	if errors.Is(err, errProxyDaemonAbsent) {
+		t.Fatal("an unsafe runtime directory must not read as a daemon that is not running")
 	}
 }

@@ -6464,11 +6464,11 @@
   {
     "id": "cli.proxy.usage",
     "description": "Ligne d'usage de herrscher proxy",
-    "other": "usage : herrscher proxy <command|events|approval>"
+    "other": "usage : herrscher proxy <command|events>"
   },
   {
     "id": "cli.host.fault.proxy_unknown_channel",
-    "description": "Erreur : le nom de canal de proxy n'est ni command, ni events, ni approval",
-    "other": "canal de proxy inconnu : utilisez command, events ou approval"
+    "description": "Erreur : le nom de canal de proxy n'est ni command ni events",
+    "other": "canal de proxy inconnu : utilisez command ou events"
   }
 ]

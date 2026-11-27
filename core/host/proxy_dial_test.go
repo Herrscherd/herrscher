@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
@@ -20,6 +21,9 @@ const (
 	proxyStandInEnv    = "HERRSCHER_TEST_SSH_STAND_IN"
 	proxyStandInRoot   = "HERRSCHER_TEST_SSH_ROOT"
 	proxyStandInStatus = "HERRSCHER_TEST_SSH_STATUS"
+	proxyStandInBin    = "HERRSCHER_TEST_SSH_BIN"
+	proxyTestTarget    = "build1"
+	proxyTestBin       = "/home/build/.herrscher/bin/herrscher"
 )
 
 func TestMain(m *testing.M) {
@@ -38,8 +42,12 @@ func runSSHStandIn() int {
 	if err != nil {
 		return 3
 	}
-	remote := strings.Fields(os.Args[len(os.Args)-1])
-	if len(remote) != 4 || remote[0] != "exec" || strings.Trim(remote[1], "'") != "herrscher" || strings.Trim(remote[2], "'") != "proxy" {
+	args := os.Args
+	if len(args) < 3 || args[len(args)-3] != "--" || args[len(args)-2] != proxyTestTarget {
+		return 6
+	}
+	remote := strings.Fields(args[len(args)-1])
+	if len(remote) != 4 || remote[0] != "exec" || strings.Trim(remote[1], "'") != os.Getenv(proxyStandInBin) || strings.Trim(remote[2], "'") != "proxy" {
 		return 4
 	}
 	channel, err := ParseProxyChannel(strings.Trim(remote[3], "'"))
@@ -54,7 +62,7 @@ func runSSHStandIn() int {
 	return 0
 }
 
-func installSSHStandIn(t *testing.T, layout runtimedir.Layout) {
+func installSSHStandIn(t *testing.T, layout runtimedir.Layout, bin string) {
 	t.Helper()
 	binary, err := os.Executable()
 	if err != nil {
@@ -70,11 +78,12 @@ func installSSHStandIn(t *testing.T, layout runtimedir.Layout) {
 	t.Setenv(proxyStandInEnv, "1")
 	t.Setenv(proxyStandInRoot, layout.Dir())
 	t.Setenv(proxyStandInStatus, status)
+	t.Setenv(proxyStandInBin, bin)
 }
 
 func TestDialProxyCarriesACommandOverSSH(t *testing.T) {
 	layout := testRuntime(t)
-	installSSHStandIn(t, layout)
+	installSSHStandIn(t, layout, proxyTestBin)
 	serveProxyDaemon(t, CommandSocketPathIn(layout, ""), func(conn net.Conn) {
 		line, err := bufio.NewReader(conn).ReadBytes('\n')
 		if err != nil {
@@ -85,7 +94,7 @@ func TestDialProxyCarriesACommandOverSSH(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
 	defer cancel()
-	conn, err := DialProxy(ctx, "build1", ProxyCommand)
+	conn, err := DialProxy(ctx, proxyTestTarget, proxyTestBin, ProxyCommand)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +118,7 @@ func TestDialProxyCarriesACommandOverSSH(t *testing.T) {
 
 func TestDialProxyStreamsEventsAndStopsOnClose(t *testing.T) {
 	layout := testRuntime(t)
-	installSSHStandIn(t, layout)
+	installSSHStandIn(t, layout, proxyTestBin)
 	serveProxyDaemon(t, EventsSocketPathIn(layout, ""), func(conn net.Conn) {
 		reader := bufio.NewReader(conn)
 		if _, err := reader.ReadBytes('\n'); err != nil {
@@ -122,7 +131,7 @@ func TestDialProxyStreamsEventsAndStopsOnClose(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
 	defer cancel()
-	conn, err := DialProxy(ctx, "build1", ProxyEvents)
+	conn, err := DialProxy(ctx, proxyTestTarget, proxyTestBin, ProxyEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,45 +150,12 @@ func TestDialProxyStreamsEventsAndStopsOnClose(t *testing.T) {
 	}
 }
 
-func TestDialProxyCarriesApprovalOverSSH(t *testing.T) {
-	layout := testRuntime(t)
-	installSSHStandIn(t, layout)
-	serveProxyDaemon(t, ApprovalSocketPathIn(layout, ""), func(conn net.Conn) {
-		line, err := bufio.NewReader(conn).ReadBytes('\n')
-		if err != nil {
-			return
-		}
-		_, writeErr := conn.Write(line)
-		logCleanup(writeErr)
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
-	defer cancel()
-	conn, err := DialProxy(ctx, "build1", ProxyApproval)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := `{"ID":"req-9","Tool":"Bash","Subject":"make"}` + "\n"
-	if _, writeErr := io.WriteString(conn, request); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-	answer, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		t.Fatal(err)
-	}
-	if answer != request {
-		t.Fatalf("answer = %q, want the request echoed back", answer)
-	}
-	if closeErr := conn.Close(); closeErr != nil {
-		t.Fatal(closeErr)
-	}
-}
-
 func TestDialProxyReportsADaemonThatIsNotRunning(t *testing.T) {
 	layout := testRuntime(t)
-	installSSHStandIn(t, layout)
+	installSSHStandIn(t, layout, proxyTestBin)
 	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
 	defer cancel()
-	conn, err := DialProxy(ctx, "build1", ProxyEvents)
+	conn, err := DialProxy(ctx, proxyTestTarget, proxyTestBin, ProxyEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,8 +172,47 @@ func TestDialProxyReportsADaemonThatIsNotRunning(t *testing.T) {
 }
 
 func TestDialProxyRefusesATargetSSHWouldReadAsAnOption(t *testing.T) {
-	_, err := DialProxy(context.Background(), "-oProxyCommand=x", ProxyEvents)
+	_, err := DialProxy(context.Background(), "-oProxyCommand=x", proxyTestBin, ProxyEvents)
 	if !errors.Is(err, runner.ErrTargetDash) {
 		t.Fatalf("DialProxy error = %v, want runner.ErrTargetDash", err)
 	}
+}
+
+func TestDialProxyFallsBackToTheLoginPathWithoutARecordedBinary(t *testing.T) {
+	layout := testRuntime(t)
+	installSSHStandIn(t, layout, proxyLoginBin)
+	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
+	defer cancel()
+	conn, err := DialProxy(ctx, proxyTestTarget, "", ProxyEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, readErr := io.ReadAll(conn); readErr != nil {
+		t.Fatal(readErr)
+	}
+	if closeErr := conn.Close(); closeErr == nil {
+		t.Fatal("Close after a missing daemon = nil, want the remote exit status")
+	}
+	if !strings.Contains(conn.Stderr(), errProxyDaemonAbsent.Error()) {
+		t.Fatalf("stderr = %q, want the daemon-absent reason from the login-path herrscher", conn.Stderr())
+	}
+}
+
+func TestDialProxyStderrCanBeReadWhileTheProcessRuns(t *testing.T) {
+	layout := testRuntime(t)
+	installSSHStandIn(t, layout, proxyTestBin)
+	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
+	defer cancel()
+	conn, err := DialProxy(ctx, proxyTestTarget, proxyTestBin, ProxyEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(proxyTestTimeout)
+	for !strings.Contains(conn.Stderr(), errProxyDaemonAbsent.Error()) {
+		if time.Now().After(deadline) {
+			t.Fatalf("stderr never showed the daemon-absent reason, got %q", conn.Stderr())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	logCleanup(conn.Close())
 }

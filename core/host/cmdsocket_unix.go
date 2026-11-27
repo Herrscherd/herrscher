@@ -58,15 +58,6 @@ func EventsSocketPathIn(layout RuntimeLayout, instanceID string) string {
 	return layout.Socket(name)
 }
 
-// ApprovalSocketPathIn is the approval socket of the daemon serving layout.
-func ApprovalSocketPathIn(layout RuntimeLayout, instanceID string) string {
-	name := "herrscher-approval"
-	if instanceID != "" {
-		name += "-" + instanceID
-	}
-	return layout.Socket(name)
-}
-
 func listenCommandSocket(ctx context.Context, messages *hostMessages, layout RuntimeLayout, path string) (net.Listener, error) {
 	if err := ensureRuntimeDir(messages, layout, path); err != nil {
 		return nil, err
@@ -108,4 +99,16 @@ func dialCommandSocket(ctx context.Context, messages *hostMessages, layout Runti
 	}
 	var d net.Dialer
 	return d.DialContext(ctx, "unix", path)
+}
+
+func dialProxySocket(ctx context.Context, layout RuntimeLayout, path string) (net.Conn, error) {
+	if err := ensureRuntimeDir(newHostMessages(), layout, path); err != nil {
+		return nil, err
+	}
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", path)
+	if err != nil {
+		return nil, proxyDialError(ctx)
+	}
+	return conn, nil
 }

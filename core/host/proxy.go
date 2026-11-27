@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 )
 
 const proxyVerb = "proxy"
@@ -17,24 +18,20 @@ const (
 	ProxyCommand ProxyChannel = iota + 1
 	// ProxyEvents is the events socket, a stream of NDJSON lines.
 	ProxyEvents
-	// ProxyApproval is the approval socket.
-	ProxyApproval
 )
 
 var (
-	errUnknownProxyChannel = errors.New("unknown proxy channel: use command, events or approval")
+	errUnknownProxyChannel = errors.New("unknown proxy channel: use command or events")
 	errProxyDaemonAbsent   = errors.New("the herrscher daemon does not answer on this machine: start it with herrscher serve")
 )
 
-// ParseProxyChannel reads the channel name of herrscher proxy: command, events or approval.
+// ParseProxyChannel reads the channel name of herrscher proxy: command or events.
 func ParseProxyChannel(name string) (ProxyChannel, error) {
 	switch name {
 	case ProxyCommand.String():
 		return ProxyCommand, nil
 	case ProxyEvents.String():
 		return ProxyEvents, nil
-	case ProxyApproval.String():
-		return ProxyApproval, nil
 	}
 	return 0, errUnknownProxyChannel
 }
@@ -46,8 +43,6 @@ func (c ProxyChannel) String() string {
 		return "command"
 	case ProxyEvents:
 		return "events"
-	case ProxyApproval:
-		return "approval"
 	}
 	return ""
 }
@@ -55,18 +50,16 @@ func (c ProxyChannel) String() string {
 // RunProxy relays stdin and stdout to the daemon socket of channel on this machine.
 // The daemon is the one serving statePath, found with the same instance rule as the
 // operator CLI. Closing stdin ends the request side; the call returns once the daemon
-// closes its side, and fails with a daemon-absent error when nothing listens.
+// closes its side, after closing stdin itself when it implements io.Closer so that a
+// read blocked on it ends. It fails with a daemon-absent error when nothing listens.
 func RunProxy(ctx context.Context, layout RuntimeLayout, statePath, optID string, channel ProxyChannel, stdin io.Reader, stdout io.Writer) error {
 	path, err := proxySocketPath(layout, ServedInstanceID(statePath, optID), channel)
 	if err != nil {
 		return err
 	}
-	conn, err := dialCommandSocket(ctx, newHostMessages(), layout, path)
+	conn, err := dialProxySocket(ctx, layout, path)
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		return errProxyDaemonAbsent
+		return err
 	}
 	return relayProxy(ctx, conn, stdin, stdout)
 }
@@ -77,8 +70,6 @@ func proxySocketPath(layout RuntimeLayout, instanceID string, channel ProxyChann
 		return CommandSocketPathIn(layout, instanceID), nil
 	case ProxyEvents:
 		return EventsSocketPathIn(layout, instanceID), nil
-	case ProxyApproval:
-		return ApprovalSocketPathIn(layout, instanceID), nil
 	}
 	return "", errUnknownProxyChannel
 }
@@ -86,15 +77,41 @@ func proxySocketPath(layout RuntimeLayout, instanceID string, channel ProxyChann
 func relayProxy(ctx context.Context, conn net.Conn, stdin io.Reader, stdout io.Writer) error {
 	stop := closeOnDone(ctx, conn)
 	defer stop()
-	defer closeRead(conn)
-	go func() {
-		_, err := io.Copy(conn, stdin)
-		logCleanup(err)
-		logCleanup(closeWriteSide(conn))
-	}()
+	requestsDone := make(chan struct{})
+	go relayRequests(conn, stdin, requestsDone)
 	_, err := io.Copy(stdout, conn)
+	endRequests(stdin, conn)
+	<-requestsDone
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
+	}
+	return err
+}
+
+func relayRequests(conn net.Conn, stdin io.Reader, done chan<- struct{}) {
+	defer close(done)
+	_, err := io.Copy(conn, stdin)
+	logCleanup(ignoreVoluntaryClose(err))
+	logCleanup(ignoreVoluntaryClose(closeWriteSide(conn)))
+}
+
+func endRequests(stdin io.Reader, conn net.Conn) {
+	if closer, ok := stdin.(io.Closer); ok {
+		logCleanup(closer.Close())
+	}
+	closeRead(conn)
+}
+
+func proxyDialError(ctx context.Context) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return errProxyDaemonAbsent
+}
+
+func ignoreVoluntaryClose(err error) error {
+	if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
+		return nil
 	}
 	return err
 }

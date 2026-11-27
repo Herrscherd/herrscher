@@ -75,7 +75,9 @@ func writeSkillFile(dir, body string) error {
 	if err := os.MkdirAll(dir, dirShared); err != nil {
 		return err
 	}
-	return atomicfile.Write(filepath.Join(dir, "SKILL.md"), []byte(body), fileSecret)
+	skillPath := filepath.Join(dir, "SKILL.md")
+	atomicfile.SweepLogged(skillPath)
+	return atomicfile.Write(skillPath, []byte(body), fileSecret)
 }
 
 func removeLegacyProjection(cwd string) {

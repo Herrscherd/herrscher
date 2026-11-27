@@ -86,6 +86,7 @@ func (s *PriceSource) due() bool {
 }
 
 func (s *PriceSource) loadFile() {
+	atomicfile.SweepLogged(s.Path)
 	raw, err := os.ReadFile(s.Path)
 	if err != nil {
 		return

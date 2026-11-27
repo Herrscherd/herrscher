@@ -19,6 +19,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
@@ -266,39 +267,8 @@ func (s *Store) save(file storeFile) error {
 }
 
 func (s *Store) writeAtomic(data []byte) error {
-	staging, err := os.CreateTemp(s.dir, "."+storeFileName+".*")
-	if err != nil {
-		return fmt.Errorf("stage forge connections: %w", err)
-	}
-	if stageErr := writeStaged(staging, data); stageErr != nil {
-		discardStaged(staging)
-		return stageErr
-	}
-	if renameErr := s.rename(staging.Name(), s.Path()); renameErr != nil {
-		discardStaged(staging)
-		return fmt.Errorf("replace forge connections: %w", renameErr)
-	}
-	return nil
-}
-
-func writeStaged(staging *os.File, data []byte) error {
-	if err := staging.Chmod(storeFileMode); err != nil {
-		return fmt.Errorf("protect forge connections: %w", err)
-	}
-	if _, err := staging.Write(data); err != nil {
-		return fmt.Errorf("write forge connections: %w", err)
-	}
-	if err := staging.Close(); err != nil {
+	if err := atomicfile.WriteWith(s.Path(), data, storeFileMode, s.rename); err != nil {
 		return fmt.Errorf("write forge connections: %w", err)
 	}
 	return nil
-}
-
-func discardStaged(staging *os.File) {
-	if err := staging.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
-		slog.Warn("close staged forge connections", "err", err)
-	}
-	if err := os.Remove(staging.Name()); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		slog.Warn("remove staged forge connections", "err", err)
-	}
 }

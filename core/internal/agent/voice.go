@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 const (
@@ -85,11 +86,11 @@ func (s *Store) SetReply(name string, rule contracts.ReplyRule) error {
 	if err != nil {
 		return err
 	}
-	text, err := rule.MarshalText()
+	text, err := ruleFileText(rule)
 	if err != nil {
 		return err
 	}
-	return writeAtomic(filepath.Join(home, replyFile), append(text, '\n'))
+	return atomicfile.Write(filepath.Join(home, replyFile), text, fileMode)
 }
 
 // Channels reads the channels of an agent, in the order of the file. A missing
@@ -128,15 +129,31 @@ func (s *Store) SetChannels(name string, channels []Channel) error {
 	if err != nil {
 		return err
 	}
+	text, err := channelsFileText(channels)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(filepath.Join(home, channelsFile), text, fileMode)
+}
+
+func ruleFileText(rule contracts.ReplyRule) ([]byte, error) {
+	text, err := rule.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	return append(text, '\n'), nil
+}
+
+func channelsFileText(channels []Channel) ([]byte, error) {
 	var out strings.Builder
 	for _, channel := range normalizeChannels(channels) {
 		if !channel.valid() {
-			return ErrBadChannel
+			return nil, ErrBadChannel
 		}
 		out.WriteString(channel.String())
 		out.WriteByte('\n')
 	}
-	return writeAtomic(filepath.Join(home, channelsFile), []byte(out.String()))
+	return []byte(out.String()), nil
 }
 
 func normalizeChannels(channels []Channel) []Channel {
@@ -154,39 +171,4 @@ func (s *Store) home(name string) (string, error) {
 		return "", &NotFoundError{Name: name}
 	}
 	return home, nil
-}
-
-func writeAtomic(path string, data []byte) error {
-	staging, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	if err := stageVoiceFile(staging, data); err != nil {
-		discardStaged(staging)
-		return err
-	}
-	if err := os.Rename(staging.Name(), path); err != nil {
-		discardStaged(staging)
-		return err
-	}
-	return nil
-}
-
-func stageVoiceFile(staging *os.File, data []byte) error {
-	if err := staging.Chmod(fileMode); err != nil {
-		return err
-	}
-	if _, err := staging.Write(data); err != nil {
-		return err
-	}
-	return staging.Close()
-}
-
-func discardStaged(staging *os.File) {
-	if err := staging.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
-		slog.Warn("close staged agent file", "err", err)
-	}
-	if err := os.Remove(staging.Name()); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		slog.Warn("remove staged agent file", "err", err)
-	}
 }

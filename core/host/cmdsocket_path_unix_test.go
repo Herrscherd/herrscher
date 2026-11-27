@@ -24,6 +24,12 @@ func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
 	}
 }
 
+func TestEventsSocketPathOfNoInstanceIsEmpty(t *testing.T) {
+	if got := EventsSocketPath(""); got != "" {
+		t.Fatalf("EventsSocketPath(\"\") = %q, want no socket", got)
+	}
+}
+
 func TestPublicSocketPathsShareOneDirectory(t *testing.T) {
 	command := CommandSocketPath("instance-1")
 	events := EventsSocketPath("instance-1")

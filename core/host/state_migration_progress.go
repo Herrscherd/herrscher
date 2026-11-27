@@ -28,7 +28,7 @@ func (p *migrationProgress) record(key clitext.Key, params clitext.Params) {
 }
 
 func pinMigrationIdentity(announcer stateAnnouncer, store *state.State, instID string, origin instanceOrigin) error {
-	if err := store.SetInstanceID(instID); err != nil {
+	if err := store.PinMigration(instID); err != nil {
 		return &stateMigrationRefusedError{messages: announcer.cliMessages, cause: err}
 	}
 	switch origin {
@@ -91,23 +91,22 @@ func (e *storedInstanceInvalidError) params() clitext.Params {
 }
 
 func refuseSharedWorktrees(cliMessages *clitext.Messages, statePath string, sessions []state.Session) error {
-	holders := make(map[string]string)
-	for idx := range sessions {
-		sess := sessions[idx]
-		if !worktree.InBareLayout(sess.Worktree, sess.Scratch) {
-			continue
-		}
-		folder := filepath.Clean(sess.Worktree)
-		place := sess.Host + "\x00" + folder
-		if first, taken := holders[place]; taken {
+	for later := range sessions {
+		for earlier := range later {
+			if !placementOf(sessions[earlier]).Same(placementOf(sessions[later])) {
+				continue
+			}
 			return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationSharedWorktree, params: clitext.Params{
-				clitext.ParamName:   first,
-				clitext.ParamTarget: sess.Name,
-				clitext.ParamPath:   folder,
+				clitext.ParamName:   sessions[earlier].Name,
+				clitext.ParamTarget: sessions[later].Name,
+				clitext.ParamPath:   filepath.Clean(sessions[later].Worktree),
 				clitext.ParamFile:   statePath,
 			}}
 		}
-		holders[place] = sess.Name
 	}
 	return nil
+}
+
+func placementOf(sess state.Session) worktree.Placement {
+	return worktree.Placement{Host: sess.Host, Path: sess.Worktree}
 }

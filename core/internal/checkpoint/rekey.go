@@ -2,47 +2,34 @@ package checkpoint
 
 import (
 	"bytes"
+	"cmp"
 	"context"
-	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 )
 
 const refFieldCount = 2
 
-// ErrRekeyConflict is the cause of a rekey refused because a ref it would write
-// already holds another commit.
-var ErrRekeyConflict = errors.New("checkpoint ref already holds another commit")
-
-// RekeyConflictError names the ref a rekey would write, the commit it already
-// holds, and the commit the rekey would have put there.
-type RekeyConflictError struct {
-	Ref  string
-	Have string
-	Want string
-}
-
-func (e *RekeyConflictError) Error() string {
-	return fmt.Sprintf("%s: %s holds %s, want %s", ErrRekeyConflict, e.Ref, e.Have, e.Want)
-}
-
-func (e *RekeyConflictError) Unwrap() error { return ErrRekeyConflict }
-
 // RefMove is one ref a rekey renames, with the commit it points to.
 type RefMove struct {
-	From   string
-	To     string
-	Commit string
-	undo   bool
-	landed bool
+	From       string
+	To         string
+	Commit     string
+	replaced   string
+	undo       bool
+	landed     bool
+	renumbered bool
 }
 
 // Rekey moves the checkpoints and the undo point filed under one key to
 // another, in the repository of Dir. Plan it with [PlanRekey] and run it with
 // [Store.ApplyRekey].
 type Rekey struct {
-	Dir   string
-	Moves []RefMove
+	Dir    string
+	Moves  []RefMove
+	target string
 }
 
 // RefsOf returns the ref prefix the checkpoints filed under key live in.
@@ -60,13 +47,18 @@ func (r Rekey) Empty() bool {
 	return len(r.Moves) == 0
 }
 
-// RekeyTally counts what a rekey does: the checkpoints it renames, whether it
-// renames the undo point, and the refs already at their new name whose old
-// name it only deletes.
+// RekeyTally counts what a rekey does: the checkpoints it renames under their
+// own index, those it files after the last index the new key already holds,
+// whether it renames the undo point and whether that replaces the undo point
+// of the new key, and the refs already at their new name whose old name it
+// only deletes.
 type RekeyTally struct {
-	Checkpoints int
-	Undo        bool
-	Finished    int
+	Checkpoints  int
+	Renumbered   int
+	FirstIndex   int
+	Undo         bool
+	UndoReplaced bool
+	Finished     int
 }
 
 // Tally counts the refs of the rekey by what applying it does to them.
@@ -77,7 +69,12 @@ func (r Rekey) Tally() RekeyTally {
 		case move.landed:
 			tally.Finished++
 		case move.undo:
-			tally.Undo = true
+			tally.Undo, tally.UndoReplaced = true, move.replaced != ""
+		case move.renumbered:
+			tally.Renumbered++
+			if index, ok := refIndex(move.To, r.target); ok && (tally.FirstIndex == 0 || index < tally.FirstIndex) {
+				tally.FirstIndex = index
+			}
 		default:
 			tally.Checkpoints++
 		}
@@ -86,11 +83,16 @@ func (r Rekey) Tally() RekeyTally {
 }
 
 // PlanRekey lists the refs filed under from in the repository of dir and the
-// names they take under target. A ref already at its new name with the same commit
-// counts as moved, so a plan made after an interrupted rekey finishes it. It
-// returns a [*RekeyConflictError] when a new name already holds another commit,
-// and an empty plan when from cannot name a ref, since nothing can be filed
-// under it.
+// names they take under target. A ref already at its new name with the same
+// commit counts as moved, so a plan made after an interrupted rekey finishes
+// it. When a checkpoint index of from is already taken under target by
+// another commit, as after an older build ran on a migrated state and filed
+// new checkpoints under the session name again, every checkpoint still to move
+// is filed after the last index target holds, in its order, so none is lost.
+// An undo point of from replaces the one of target, as a later rewind would.
+// It returns an empty plan when from cannot name a ref, since nothing can be
+// filed under it. A ref under from that names no index and whose new name
+// holds another commit is no checkpoint the store lists, and stays in place.
 func PlanRekey(ctx context.Context, dir, from, target string) (Rekey, error) {
 	if !usableKey(from) {
 		return Rekey{Dir: dir}, nil
@@ -106,18 +108,60 @@ func PlanRekey(ctx context.Context, dir, from, target string) (Rekey, error) {
 	if err != nil {
 		return Rekey{}, err
 	}
-	plan := Rekey{Dir: dir}
+	plan := Rekey{Dir: dir, target: target}
+	clash := false
 	for _, source := range sources {
 		move := RefMove{From: source.name, To: rekeyedName(source.name, from, target), Commit: source.commit, undo: source.name == undoRef(from)}
-		if held, ok := targets[move.To]; ok {
-			if held != move.Commit {
-				return Rekey{}, &RekeyConflictError{Ref: move.To, Have: held, Want: move.Commit}
-			}
+		held, taken := targets[move.To]
+		_, numbered := refIndex(move.From, from)
+		switch {
+		case !taken:
+		case held == move.Commit:
 			move.landed = true
+		case move.undo:
+			move.replaced = held
+		case numbered:
+			clash = true
+		default:
+			continue
 		}
 		plan.Moves = append(plan.Moves, move)
 	}
+	if clash {
+		plan.renumber(from, targets)
+	}
 	return plan, nil
+}
+
+func (r *Rekey) renumber(from string, targets map[string]string) {
+	next := 1
+	for name := range targets {
+		if index, ok := refIndex(name, r.target); ok && index >= next {
+			next = index + 1
+		}
+	}
+	slices.SortStableFunc(r.Moves, func(a, b RefMove) int {
+		aIndex, _ := refIndex(a.From, from)
+		bIndex, _ := refIndex(b.From, from)
+		return cmp.Compare(aIndex, bIndex)
+	})
+	for idx := range r.Moves {
+		move := &r.Moves[idx]
+		if _, numbered := refIndex(move.From, from); !numbered || move.landed {
+			continue
+		}
+		move.To, move.renumbered = checkpointRef(r.target, next), true
+		next++
+	}
+}
+
+func refIndex(ref, key string) (int, bool) {
+	rest, ok := strings.CutPrefix(ref, checkpointPrefix(key))
+	if !ok {
+		return 0, false
+	}
+	index, err := strconv.Atoi(rest)
+	return index, err == nil
 }
 
 // ApplyRekey renames every ref of plan in one git transaction: either all of
@@ -128,7 +172,11 @@ func (s *Store) ApplyRekey(ctx context.Context, plan Rekey) error {
 	}
 	var script bytes.Buffer
 	for _, move := range plan.Moves {
-		if !move.landed {
+		switch {
+		case move.landed:
+		case move.replaced != "":
+			fmt.Fprintf(&script, "update %s %s %s\n", move.To, move.Commit, move.replaced)
+		default:
 			fmt.Fprintf(&script, "create %s %s\n", move.To, move.Commit)
 		}
 		fmt.Fprintf(&script, "delete %s %s\n", move.From, move.Commit)

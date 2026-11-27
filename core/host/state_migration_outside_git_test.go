@@ -9,6 +9,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
 func gitEntryAbove(dir string) (string, bool) {
@@ -92,7 +93,7 @@ func TestMigrationRefusesCheckpointRefsGitCannotReadAndSaysHowToRepairThem(t *te
 	}
 	for _, lang := range []i18n.Language{i18n.English, i18n.French} {
 		text, _ := stateFormatText(clitext.NewMessages(), lang, err)
-		for _, want := range []string{"git -C " + broken + " for-each-ref refs/herrscher/", "git worktree repair " + broken, "herrscher serve"} {
+		for _, want := range []string{"git -C " + shellquote.Quote(broken) + " for-each-ref refs/herrscher/", "worktree repair " + shellquote.Quote(broken), "herrscher serve"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("refusal %q does not carry %q", text, want)
 			}

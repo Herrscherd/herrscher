@@ -36,8 +36,6 @@ func (e *NewerFormatError) Error() string {
 type FormatChangeKind string
 
 const (
-	// ChangeInstanceAssigned reports the instance id written into the state.
-	ChangeInstanceAssigned FormatChangeKind = "instance_assigned"
 	// ChangeWorkspaceFromRepo reports the old repo field copied into the workspace.
 	ChangeWorkspaceFromRepo FormatChangeKind = "workspace_from_repo"
 	// ChangeRepoDropped reports the old repo field dropped because a workspace already applies.
@@ -117,19 +115,39 @@ func (s *State) CheckMigration(migration FormatMigration) error {
 	return s.checkMigrationLocked(migration)
 }
 
-// Backup copies the file this outdated state was read from next to it, under a name no earlier copy holds, and returns that name.
+// Backup copies the file this outdated state was read from next to it, under a name no earlier copy holds, and returns
+// that name. A state a stopped migration pinned already names its copy: while that copy is there it is returned and no
+// other is written, since the file now holds what the migration changed.
 func (s *State) Backup() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.backupLocked()
 }
 
-// MigrateFormat brings an outdated state to CurrentFormat, keeps a copy of the old file next to it, writes the new one atomically and lists every change.
+// PinMigration writes the instance id of a starting format migration into the state, in the format it was read with,
+// together with the copy [State.Backup] took, so a migration stopped partway starts again with the same id and names
+// that same copy.
+func (s *State) PinMigration(instanceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if instanceID == "" {
+		return errNoInstanceID
+	}
+	s.InstanceID = instanceID
+	s.MigrationBackup = s.backupPath
+	return s.saveLocked()
+}
+
+// MigrateFormat brings an outdated state whose instance id is pinned to CurrentFormat, keeps a copy of the old file
+// next to it, writes the new one atomically and lists every change.
 func (s *State) MigrateFormat(migration FormatMigration) ([]FormatChange, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.Format >= CurrentFormat {
 		return nil, nil
+	}
+	if s.InstanceID == "" {
+		return nil, errNoInstanceID
 	}
 	if err := s.checkMigrationLocked(migration); err != nil {
 		return nil, err
@@ -137,10 +155,10 @@ func (s *State) MigrateFormat(migration FormatMigration) ([]FormatChange, error)
 	if _, err := s.backupLocked(); err != nil {
 		return nil, err
 	}
-	changes := s.migrateInstanceLocked(migration.InstanceID)
-	changes = append(changes, s.migrateWorkspaceLocked(migration.ConfigWorkspace)...)
+	changes := s.migrateWorkspaceLocked(migration.ConfigWorkspace)
 	changes = append(changes, s.migrateSessionsLocked(migration)...)
 	s.Format = CurrentFormat
+	s.MigrationBackup = ""
 	if err := s.saveLocked(); err != nil {
 		return nil, err
 	}
@@ -162,11 +180,21 @@ func (s *State) checkMigrationLocked(migration FormatMigration) error {
 	return nil
 }
 
-var errNoInstanceID = errors.New("a format migration needs an instance id")
+var errNoInstanceID = errors.New("a format migration needs a pinned instance id")
 
 func (s *State) backupLocked() (string, error) {
 	if s.backupPath != "" || s.original == nil {
 		return s.backupPath, nil
+	}
+	if s.MigrationBackup != "" {
+		kept, err := pathTaken(s.MigrationBackup)
+		if err != nil {
+			return "", err
+		}
+		if kept {
+			s.backupPath = s.MigrationBackup
+			return s.backupPath, nil
+		}
 	}
 	target, err := s.freeBackupPathLocked()
 	if err != nil {
@@ -219,14 +247,6 @@ func removeIfPresent(path string) error {
 		return err
 	}
 	return nil
-}
-
-func (s *State) migrateInstanceLocked(instanceID string) []FormatChange {
-	if s.InstanceID != "" {
-		return nil
-	}
-	s.InstanceID = instanceID
-	return []FormatChange{{Kind: ChangeInstanceAssigned, Value: instanceID}}
 }
 
 func (s *State) migrateWorkspaceLocked(configWorkspace string) []FormatChange {

@@ -103,7 +103,13 @@ writes the new file atomically. Each change is announced on the output of
   so a migration stopped after the move finishes it, and a second run moves
   nothing, and the announce says how many checkpoints moved, whether the undo
   point moved, and how many refs were already in place and only lost their old
-  name. Refs a session filed under a name it had before a rename are left
+  name. When a checkpoint index under the session name is already taken under
+  the incarnation by another commit (an older build ran on the migrated state
+  and filed new checkpoints under the name again, see
+  [Rollback](#rollback)), every checkpoint still to move is filed after the
+  last index the incarnation holds, in its order, so none is lost, and an undo
+  point under the name replaces the one of the incarnation, as a later rewind
+  would; the announce gives the count and the first new index. Refs a session filed under a name it had before a rename are left
   where they are, as are those of closed sessions.
   Checkpoint refs belong to the repository, not to the worktree folder, so the
   refs of a session whose folder is gone move too, read from the repository the
@@ -140,15 +146,25 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
 
 - the target directory of a move already exists, or the target branch already
   exists;
+- a branch `session/<id>` exists (an older session named like the instance id
+  left it behind), or a branch below `session/<id>/<name>/`: git cannot create
+  `session/<id>/<name>` while it does, since one branch name cannot also be a
+  folder of branch names. The refusal names it and prints
+  `git -C <repo> branch -m <branch> kept/<branch>`; run it, or choose another
+  id with `HERRSCHER_INSTANCE_ID`, then start `serve` again. The check runs
+  with the others, before the copy and before the id is written, so another id
+  is still free to choose;
 - the branch to rename tracks a remote branch, since renaming it would cut it off
   from its pull request (merge or close the pull request, run
-  `git branch --unset-upstream session/<name>`, then start `serve` again);
+  `git -C <repo> branch --unset-upstream session/<name>`, then start `serve`
+  again);
 - the branch to rename was pushed without tracking, so a remote-tracking ref
   `<remote>/session/<name>` exists, or the session records a pull request and
   `origin` still holds the branch: the pull request would stop receiving pushes.
-  Once it is merged or closed, delete the branch on the remote (`git push
-  <remote> --delete session/<name>`, or `git branch -dr <remote>/session/<name>`
-  when it is already gone there) and start `serve` again;
+  Once it is merged or closed, delete the branch on the remote (`git -C <repo>
+  push <remote> --delete session/<name>`, or `git -C <repo> branch -dr
+  <remote>/session/<name>` when it is already gone there) and start `serve`
+  again;
 - the session records a pull request and `origin` cannot be asked whether it
   still holds the branch, including when the forge token of the connection
   cannot be refreshed. Only `origin`, the remote pull requests push to, is
@@ -166,17 +182,13 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   `HERRSCHER_INSTANCE_ID` to another id);
 - a session has a channel and no binding, and this `serve` builds no channel
   gateway to bind it to;
-- a checkpoint ref a session's checkpoints would move to already holds another
-  commit. The refusal names the ref and both commits; look at it with
-  `git log -1 <ref>`, delete it with `git update-ref -d <ref>` if it is not
-  wanted, and start `serve` again.
 - git cannot read the checkpoint refs of a session's folder for another reason
   than the folder being in no repository: a worktree whose repository moved, a
   folder git calls of dubious ownership, a folder it may not read. The refusal
   names the session, the folder and git's error; make
   `git -C <folder> for-each-ref refs/herrscher/` work (fix the rights, add the
-  folder to `safe.directory`, or run `git worktree repair <folder>` from its
-  repository), and start `serve` again.
+  folder to `safe.directory`, or run `git -C <repo> worktree repair <folder>`),
+  and start `serve` again.
 - git finds no repository for a session's folder, yet a `.git` entry sits on
   its path: a home under dotfiles kept in `~/.git` with `GIT_CEILING_DIRECTORIES`
   set to `~`, a filesystem boundary git does not cross, or an empty or broken
@@ -194,9 +206,10 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   folder, untracked files such as ssh keys included, into `~/.git`. Repair or
   remove a `.git` that is empty or broken, or move the folder out of the path
   of a repository it does not belong to, then start `serve` again.
-- two sessions record the same folder of the id-less layout, which an older
-  build left behind when a session was renamed and a new session took the old
-  name. One folder cannot move to two places. Neither session can be closed
+- two sessions of the same host record the same folder, of either layout,
+  which an older build left behind when a session was renamed and a new
+  session took the old name (folders compare as the same file on disk when
+  both exist, and without case on macOS and Windows). One folder cannot move to two places. Neither session can be closed
   before the migration (commands refuse a format 0 file), and closing one would
   remove the folder the other still works in, so the refusal names both and the
   state file: with herrscher stopped, copy the file aside, delete the entry of
@@ -208,11 +221,13 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   other tool still needs the lock, then start `serve` again;
 - the worktree to move holds submodules: `git worktree move` refuses such a
   worktree. The refusal prints the commands that move it by hand and that the
-  next `serve` then finds in place: `git -C <folder> submodule deinit --all`
-  (refused while a submodule holds uncommitted changes), `mkdir -p`, `mv`,
-  `git -C <repo> worktree repair <new folder>`, `git branch -m`, and
-  `git -C <new folder> submodule update --init`, which checks each submodule
-  out again at the commit the worktree records.
+  next `serve` then finds in place: `mkdir -p`, `mv`,
+  `git -C <repo> worktree repair <new folder>`, `git -C <repo> branch -m`, and
+  `git -C <new folder> submodule absorbgitdirs`, which points the `.git` file
+  and `core.worktree` of each submodule, nested ones included, back at its git
+  folder after the move. Nothing is deinitialized: files the submodules ignore
+  (a `.env`, a build folder) stay, and the submodule settings of the
+  repository, which every worktree shares, are left as they are.
 
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,
@@ -239,6 +254,36 @@ new client finds no daemon on the socket of the new instance id, falls back to
 running the command itself, and meets the old file. `herrscher serve` cannot
 start while the old daemon holds the lock, so stop the old daemon first, then
 run `herrscher serve`.
+
+Closing a session whose folder is also the recorded folder of another session
+of the same host is refused, forced or not, since removing it would delete the
+folder the other one works in. The refusal names both sessions and the state
+file: with herrscher stopped, copy the file aside, delete the entry of the
+session that should not keep the folder, and start `serve` again.
+
+### Rollback
+
+Going back to a build older than the migration is not supported, and the copy
+of the old file must never be put back once the migration has run.
+
+- The copy (`state.json.before-format-1.bak`) describes the old layout: it
+  points sessions at folders that no longer exist, at branches that were
+  renamed, and at checkpoint refs that now live under the incarnations. A
+  build that loads it starts sessions in missing folders, and a later
+  migration of it would find its targets taken.
+- An older build that loads the migrated file runs in its per-instance mode,
+  since the file holds an id. It drops the `format` field when it saves, so the
+  file reads as format 0 again, and it files new checkpoints under the session
+  name. The next start of this build migrates the file once more: nothing
+  moves, and those checkpoints are filed after the last index of each
+  incarnation, so none is lost.
+- An older build started on a file whose migration stopped partway (format 0,
+  with the id already written) also runs in its per-instance mode, while some
+  sessions still record folders of the id-less layout: it starts them in
+  those folders, closing one misses the folder it would remove, and a pull
+  request opened from it targets a branch that may already be renamed. Finish
+  a stopped migration with this build: fix the cause and run `herrscher serve`
+  again.
 
 
 ## Memory

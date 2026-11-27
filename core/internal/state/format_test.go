@@ -38,7 +38,7 @@ func formatFixtures() []formatFixture {
 					"notes": {Worktree: "/srv/work/.herrscher-scratch/h7k2m9q4x/notes", Dir: "/srv/work/.herrscher-scratch/h7k2m9q4x/notes"},
 				},
 			},
-			changes: []FormatChange{{Kind: ChangeInstanceAssigned, Value: "h7k2m9q4x"}},
+			changes: nil,
 		},
 	}
 }
@@ -68,11 +68,59 @@ func loadOutdated(t *testing.T, path string) *State {
 	return loaded
 }
 
+func loadPinned(t *testing.T, path, instanceID string) *State {
+	t.Helper()
+	loaded := loadOutdated(t, path)
+	loaded.InstanceID = instanceID
+	return loaded
+}
+
+func TestMigrateFormatRefusesAStateWhoseInstanceIDIsNotPinned(t *testing.T) {
+	path, original := copyFixture(t, "format0-bare")
+	if _, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "h7k2m9q4x", DefaultGateways: []string{"chat"}}); !errors.Is(err, errNoInstanceID) {
+		t.Fatalf("MigrateFormat = %v, want %v", err, errNoInstanceID)
+	}
+	if got := mustRead(t, path); !bytes.Equal(got, original) {
+		t.Fatalf("a refused migration rewrote the file:\n%s", got)
+	}
+}
+
+func TestAMigrationStartedAgainNamesTheFirstCopyAndWritesNoOther(t *testing.T) {
+	path, original := copyFixture(t, "format0-bare")
+	first := loadOutdated(t, path)
+	backup, err := first.Backup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(t, first.PinMigration("h7k2m9q4x"))
+
+	again := loadOutdated(t, path)
+	if again.InstanceID != "h7k2m9q4x" {
+		t.Fatalf("pinned state reloads with instance id %q", again.InstanceID)
+	}
+	resumed, err := again.Backup()
+	if err != nil || resumed != backup {
+		t.Fatalf("Backup after a stop = %q, %v, want the first copy %q", resumed, err, backup)
+	}
+	if copies, _ := filepath.Glob(path + ".before-format-*"); len(copies) != 1 {
+		t.Fatalf("copies after a stop = %v, want only %s", copies, backup)
+	}
+	if got := mustRead(t, backup); !bytes.Equal(got, original) {
+		t.Fatalf("the copy named after a stop holds:\n%s\nwant the file before any change:\n%s", got, original)
+	}
+	if _, err := again.MigrateFormat(FormatMigration{InstanceID: "h7k2m9q4x", DefaultGateways: []string{"chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(mustRead(t, path), []byte("migration_backup")) {
+		t.Fatalf("the finished migration keeps naming its copy:\n%s", mustRead(t, path))
+	}
+}
+
 func TestMigrateFormatBringsEachOldShapeToTheExpectedFile(t *testing.T) {
 	for _, fixture := range formatFixtures() {
 		t.Run(fixture.name, func(t *testing.T) {
 			path, _ := copyFixture(t, fixture.name)
-			changes, err := loadOutdated(t, path).MigrateFormat(fixture.migration)
+			changes, err := loadPinned(t, path, fixture.migration.InstanceID).MigrateFormat(fixture.migration)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +138,7 @@ func TestMigrateFormatBringsEachOldShapeToTheExpectedFile(t *testing.T) {
 
 func TestMigrateFormatKeepsTheOldFileNextToTheNewOne(t *testing.T) {
 	path, original := copyFixture(t, "format0-repo")
-	if _, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "alice"}); err != nil {
+	if _, err := loadPinned(t, path, "alice").MigrateFormat(FormatMigration{InstanceID: "alice"}); err != nil {
 		t.Fatal(err)
 	}
 	if backup := mustRead(t, path+".before-format-1.bak"); !bytes.Equal(backup, original) {
@@ -137,7 +185,7 @@ func TestBackupNeverOverwritesAnEarlierCopy(t *testing.T) {
 
 func TestABackupThatCannotBeWrittenLeavesNoCopyAndNoMigration(t *testing.T) {
 	path, original := copyFixture(t, "format0-repo")
-	migrated := loadOutdated(t, path)
+	migrated := loadPinned(t, path, "alice")
 	errNoLinks := errors.New("operation not permitted")
 	migrated.write = func(name string, data []byte, perm os.FileMode) error {
 		if strings.HasSuffix(name, ".bak.tmp") {
@@ -161,7 +209,7 @@ func TestMigrateFormatASecondTimeChangesNothing(t *testing.T) {
 	for _, fixture := range formatFixtures() {
 		t.Run(fixture.name, func(t *testing.T) {
 			path, _ := copyFixture(t, fixture.name)
-			if _, err := loadOutdated(t, path).MigrateFormat(fixture.migration); err != nil {
+			if _, err := loadPinned(t, path, fixture.migration.InstanceID).MigrateFormat(fixture.migration); err != nil {
 				t.Fatal(err)
 			}
 			first := mustRead(t, path)
@@ -191,7 +239,7 @@ func TestLoadStateRefusesANewerFormat(t *testing.T) {
 
 func TestMigrateFormatRefusesAChannelSessionWithNoGatewayToBind(t *testing.T) {
 	path, original := copyFixture(t, "format0-unbound")
-	_, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "alice"})
+	_, err := loadPinned(t, path, "alice").MigrateFormat(FormatMigration{InstanceID: "alice"})
 	if unbound, ok := errors.AsType[*NoGatewayToBindError](err); !ok || unbound.Session != "triage" {
 		t.Fatalf("MigrateFormat = %v, want a NoGatewayToBindError naming triage", err)
 	}
@@ -202,7 +250,7 @@ func TestMigrateFormatRefusesAChannelSessionWithNoGatewayToBind(t *testing.T) {
 
 func TestMigrateFormatDropsTheRepoWhenTheConfigSetsAWorkspace(t *testing.T) {
 	path, _ := copyFixture(t, "format0-repo")
-	migrated := loadOutdated(t, path)
+	migrated := loadPinned(t, path, "alice")
 	changes, err := migrated.MigrateFormat(FormatMigration{InstanceID: "alice", ConfigWorkspace: "/home/u/dev"})
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +264,7 @@ func TestMigrateFormatDropsTheRepoWhenTheConfigSetsAWorkspace(t *testing.T) {
 func TestAnOldFileSavedBeforeItsMigrationKeepsItsRepo(t *testing.T) {
 	path, _ := copyFixture(t, "format0-repo")
 	must(t, loadOutdated(t, path).SetOperatorLang("fr"))
-	changes, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "alice"})
+	changes, err := loadPinned(t, path, "alice").MigrateFormat(FormatMigration{InstanceID: "alice"})
 	want := []FormatChange{{Kind: ChangeWorkspaceFromRepo, Value: "/srv/work/herrscher"}}
 	if err != nil || !slices.Equal(changes, want) {
 		t.Fatalf("migration after a save = %+v, %v, want the repo still there to become the workspace", changes, err)
@@ -225,7 +273,7 @@ func TestAnOldFileSavedBeforeItsMigrationKeepsItsRepo(t *testing.T) {
 
 func TestAMigrationThatCannotWriteLeavesTheOldFileInPlace(t *testing.T) {
 	path, original := copyFixture(t, "format0-repo")
-	migrated := loadOutdated(t, path)
+	migrated := loadPinned(t, path, "alice")
 	errDiskFull := errors.New("disk full")
 	migrated.write = func(name string, data []byte, perm os.FileMode) error {
 		if strings.HasSuffix(name, ".tmp") {

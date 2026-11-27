@@ -124,7 +124,7 @@ func carryOutMigration(ctx context.Context, worktrees *worktree.Worktreer, annou
 	if err := rekeyCheckpoints(ctx, announcer, rekeys); err != nil {
 		return err
 	}
-	relocated, err := relocateSessions(ctx, worktrees, announcer, sessions, plans)
+	relocated, statePointers, err := relocateSessions(ctx, worktrees, announcer, sessions, plans)
 	if err != nil {
 		return err
 	}
@@ -135,6 +135,9 @@ func carryOutMigration(ctx context.Context, worktrees *worktree.Worktreer, annou
 	}
 	for _, change := range changes {
 		announceFormatChange(announcer, change)
+	}
+	for _, pointer := range statePointers {
+		announcer.announce(pointer.key, pointer.params)
 	}
 	return nil
 }
@@ -151,8 +154,6 @@ func migrationCheckRefusal(cliMessages *clitext.Messages, err error) error {
 
 func announceFormatChange(announcer stateAnnouncer, change state.FormatChange) {
 	switch change.Kind {
-	case state.ChangeInstanceAssigned:
-		announcer.announce(clitext.MigrationInstanceConfigured, clitext.Params{clitext.ParamValue: change.Value})
 	case state.ChangeWorkspaceFromRepo:
 		announcer.announce(clitext.MigrationWorkspaceFromRepo, clitext.Params{clitext.ParamPath: change.Value})
 	case state.ChangeRepoDropped:
@@ -190,8 +191,9 @@ func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, 
 	return plans, nil
 }
 
-func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, sessions []state.Session, plans map[string]sessionRelocation) (map[string]state.Relocation, error) {
+func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, sessions []state.Session, plans map[string]sessionRelocation) (map[string]state.Relocation, []migrationStep, error) {
 	relocated := make(map[string]state.Relocation, len(plans))
+	var statePointers []migrationStep
 	for idx := range sessions {
 		sess := sessions[idx]
 		planned, ok := plans[sess.Name]
@@ -200,9 +202,9 @@ func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announ
 		}
 		plan := planned.plan
 		if planned.remote {
-			announceRemoteRelocation(announcer, sess, plan)
+			statePointers = append(statePointers, remoteRelocation(sess, plan))
 		} else if err := relocateLocal(ctx, worktrees, announcer, sess, plan); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !planned.remote && !plan.DirAtTarget() {
 			continue
@@ -210,10 +212,10 @@ func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announ
 		moved := state.Relocation{Worktree: plan.ToPath, Dir: retargetDir(sess.Dir, plan.FromPath, plan.ToPath)}
 		relocated[sess.Name] = moved
 		if sess.ResumeToken != "" && (planned.remote || plan.MovesDir()) {
-			announcer.announce(clitext.MigrationConversationReset, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamPath: moved.Dir})
+			statePointers = append(statePointers, migrationStep{key: clitext.MigrationConversationReset, params: clitext.Params{clitext.ParamName: sess.Name, clitext.ParamPath: moved.Dir}})
 		}
 	}
-	return relocated, nil
+	return relocated, statePointers, nil
 }
 
 func relocateLocal(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, sess state.Session, plan worktree.Relocation) error {
@@ -229,17 +231,16 @@ func relocateLocal(ctx context.Context, worktrees *worktree.Worktreer, announcer
 	return nil
 }
 
-func announceRemoteRelocation(announcer stateAnnouncer, sess state.Session, plan worktree.Relocation) {
+func remoteRelocation(sess state.Session, plan worktree.Relocation) migrationStep {
 	quote := shellquote.Quote
 	params := clitext.Params{clitext.ParamName: sess.Name, clitext.ParamHost: sess.Host, clitext.ParamFrom: quote(plan.FromPath), clitext.ParamTo: quote(plan.ToPath), clitext.ParamWhere: quote(filepath.Dir(plan.ToPath))}
 	if plan.Scratch {
-		announcer.announce(clitext.MigrationRemoteScratch, params)
-		return
+		return migrationStep{key: clitext.MigrationRemoteScratch, params: params}
 	}
 	params[clitext.ParamRepo] = quote(plan.Repo)
 	params[clitext.ParamBranch] = quote(plan.FromBranch)
 	params[clitext.ParamTarget] = quote(plan.ToBranch)
-	announcer.announce(clitext.MigrationRemoteWorktree, params)
+	return migrationStep{key: clitext.MigrationRemoteWorktree, params: params}
 }
 
 func retargetDir(dir, oldRoot, newRoot string) string {

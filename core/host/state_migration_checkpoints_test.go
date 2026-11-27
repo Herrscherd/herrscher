@@ -1,15 +1,13 @@
 package host
 
 import (
-	"errors"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts/i18n"
-	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -109,34 +107,58 @@ func TestMigrationAnnouncesARefAlreadyAtItsNewNameAsFinishedNotMoved(t *testing.
 	}
 }
 
-func TestMigrationRefusesACheckpointRefThatAlreadyHoldsAnotherCommit(t *testing.T) {
-	repo, from, path := checkpointedBareSession(t)
-	other := gitOutput(t, repo, "commit-tree", "HEAD^{tree}", "-m", "autre")
-	gitOutput(t, repo, "update-ref", "refs/herrscher/checkpoints/"+migratedIncarnation+"/1", other)
+func downgradeToFormat0(t *testing.T, path string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file map[string]any
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	delete(file, "format")
+	rewritten, err := json.Marshal(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, rewritten, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}})
-	refusal, ok := errors.AsType[*stateMigrationRefusedError](err)
-	if !ok || refusal.key != clitext.MigrationCheckpointConflict || !errors.Is(err, checkpoint.ErrRekeyConflict) {
-		t.Fatalf("err = %v, want a %s refusal", err, clitext.MigrationCheckpointConflict)
+func TestMigrationAfterAnOlderBuildRanFilesItsNewCheckpointsAfterTheMigratedOnes(t *testing.T) {
+	repo, _, path := checkpointedBareSession(t)
+	inputs := migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}
+	if err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), inputs); err != nil {
+		t.Fatal(err)
 	}
-	text, _ := stateFormatText(clitext.NewMessages(), i18n.English, err)
-	for _, want := range []string{`"alpha"`, "refs/herrscher/checkpoints/" + migratedIncarnation + "/1", other, "update-ref -d"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("refusal %q does not carry %q", text, want)
+	downgradeToFormat0(t, path)
+	taken := gitOutput(t, repo, "commit-tree", "HEAD^{tree}", "-m", "pris par l'ancien build")
+	gitOutput(t, repo, "update-ref", "refs/herrscher/checkpoints/alpha/1", taken)
+	gitOutput(t, repo, "update-ref", "refs/herrscher/undo/alpha", taken)
+
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), inputs); err != nil {
+		t.Fatalf("migration after an older build ran: %v", err)
+	}
+	prefix := "refs/herrscher/checkpoints/" + migratedIncarnation + "/"
+	if got := gitOutput(t, repo, "rev-parse", prefix+"3"); got != taken {
+		t.Fatalf("%s3 = %s, want the checkpoint the older build took, %s", prefix, got, taken)
+	}
+	if kept := refsMatching(t, repo, prefix); len(kept) != 3 {
+		t.Fatalf("the incarnation holds %v, want its two checkpoints and the new one", kept)
+	}
+	if left := refsMatching(t, repo, "refs/herrscher/checkpoints/alpha/"); len(left) != 0 {
+		t.Fatalf("refs left under the session name: %v", left)
+	}
+	for _, want := range []string{
+		"session alpha, 1 checkpoint ref filed from refs/herrscher/checkpoints/alpha/ under " + prefix + " from index 3",
+		"session alpha, the undo point " + "refs/herrscher/undo/alpha replaces refs/herrscher/undo/" + migratedIncarnation,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("serve output does not announce %q:\n%s", want, out)
 		}
-	}
-	if left := refsMatching(t, repo, "refs/herrscher/checkpoints/alpha/"); len(left) != 2 {
-		t.Fatalf("the refused migration moved checkpoint refs: %v left", left)
-	}
-	if _, statErr := os.Stat(from); statErr != nil {
-		t.Fatalf("the refused migration moved the worktree: %v", statErr)
-	}
-	backups, globErr := filepath.Glob(path + ".before-format-1*")
-	if globErr != nil {
-		t.Fatal(globErr)
-	}
-	if len(backups) != 0 {
-		t.Fatalf("the refused migration wrote a copy %v before refusing", backups)
 	}
 }
 

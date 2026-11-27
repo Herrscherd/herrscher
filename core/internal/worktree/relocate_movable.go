@@ -108,7 +108,6 @@ func submodulesHeld(ctx context.Context, path string) (bool, error) {
 func manualSubmoduleRelocation(plan Relocation) string {
 	quote := shellquote.Quote
 	steps := []string{
-		"git -C " + quote(plan.FromPath) + " submodule deinit --all",
 		"mkdir -p " + quote(filepath.Dir(plan.ToPath)),
 		"mv " + quote(plan.FromPath) + " " + quote(plan.ToPath),
 		"git -C " + quote(plan.Repo) + " worktree repair " + quote(plan.ToPath),
@@ -116,6 +115,6 @@ func manualSubmoduleRelocation(plan Relocation) string {
 	if plan.moveBranch {
 		steps = append(steps, "git -C "+quote(plan.Repo)+" branch -m "+quote(plan.FromBranch)+" "+quote(plan.ToBranch))
 	}
-	steps = append(steps, "git -C "+quote(plan.ToPath)+" submodule update --init")
+	steps = append(steps, "git -C "+quote(plan.ToPath)+" submodule absorbgitdirs")
 	return strings.Join(steps, " && ")
 }

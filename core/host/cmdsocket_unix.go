@@ -36,8 +36,10 @@ func SessionCommandSocketPathIn(layout RuntimeLayout, instanceID, session string
 // <run user>/<uid>/herrscher when systemd has made a private one for the uid,
 // and /tmp/herrscher-<uid> otherwise. The socket is herrscher-events-<instanceID>,
 // or a hashed name in that directory when the full path passes the unix limit.
+// instanceID is the one [ServedInstanceID] reads; an empty one names no daemon,
+// so the path is empty.
 func EventsSocketPath(instanceID string) string {
-	return EventsSocketPathIn(ProductionRuntime(), instanceID)
+	return servedSocket(ProductionRuntime(), instanceID, EventsSocketPathIn)
 }
 
 // EventsSocketPathIn is the events socket of the daemon serving layout.

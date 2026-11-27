@@ -1,7 +1,6 @@
 package checkpoint
 
 import (
-	"errors"
 	"strings"
 	"testing"
 )
@@ -81,23 +80,44 @@ func TestRekeyFinishesARefAlreadyAtItsNewName(t *testing.T) {
 	}
 }
 
-func TestRekeyRefusesATargetHoldingAnotherCommitAndMovesNothing(t *testing.T) {
+func TestRekeyFilesCheckpointsTakenAgainUnderTheNameAfterTheLastIndexOfTheNewKey(t *testing.T) {
 	var store Store
 	dir := initRepo(t)
-	before := takeTwoAndRewind(t, &store, dir, "alpha")
-	run(t, dir, "update-ref", checkpointRef(rekeyTarget, 2), before[0].Commit)
+	migrated := takeTwoAndRewind(t, &store, dir, "alpha")
+	rekeyAlpha(t, &store, dir)
+	write(t, dir, "older-build.txt", "taken by an older build\n")
+	again := takeTwoAndRewind(t, &store, dir, "alpha")
+	laterUndo := refAt(t, dir, undoRef("alpha"))
 
-	_, err := PlanRekey(t.Context(), dir, "alpha", rekeyTarget)
-	conflict, ok := errors.AsType[*RekeyConflictError](err)
-	if !ok || !errors.Is(err, ErrRekeyConflict) {
-		t.Fatalf("err = %v, want a %v", err, ErrRekeyConflict)
+	plan := rekeyAlpha(t, &store, dir)
+	if tally := plan.Tally(); tally.Renumbered != 2 || tally.FirstIndex != 3 || !tally.UndoReplaced {
+		t.Fatalf("tally = %+v, want two checkpoints filed from index 3 and the undo point replaced", tally)
 	}
-	if conflict.Ref != checkpointRef(rekeyTarget, 2) || conflict.Have != before[0].Commit || conflict.Want != before[1].Commit {
-		t.Fatalf("conflict = %+v, want ref 2 holding checkpoint 1 instead of checkpoint 2", conflict)
+	if left := checkpointsUnder(t, &store, dir, "alpha"); len(left) != 0 {
+		t.Fatalf("the old key keeps %+v", left)
 	}
-	if left := checkpointsUnder(t, &store, dir, "alpha"); len(left) != 2 {
-		t.Fatalf("the refused rekey moved refs: old key keeps %+v", left)
+	after := checkpointsUnder(t, &store, dir, rekeyTarget)
+	want := []string{migrated[0].Commit, migrated[1].Commit, again[0].Commit, again[1].Commit}
+	if len(after) != len(want) {
+		t.Fatalf("checkpoints under the new key = %+v, want %d", after, len(want))
 	}
+	for idx, entry := range after {
+		if entry.Index != idx+1 || entry.Commit != want[idx] {
+			t.Fatalf("checkpoint %d = %+v, want index %d at %s", idx, entry, idx+1, want[idx])
+		}
+	}
+	if undo := refAt(t, dir, undoRef(rekeyTarget)); laterUndo == "" || undo != laterUndo {
+		t.Fatalf("undo point of the new key = %q, want %q, the one of the later rewind", undo, laterUndo)
+	}
+}
+
+func refAt(t *testing.T, dir, ref string) string {
+	t.Helper()
+	commit, err := resolveRef(t.Context(), dir, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return commit
 }
 
 func TestRekeyLeavesAKeyThatOnlySharesThePrefixAlone(t *testing.T) {

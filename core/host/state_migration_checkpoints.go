@@ -9,6 +9,7 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -38,13 +39,8 @@ func planCheckpointRekeys(ctx context.Context, cliMessages *clitext.Messages, se
 			continue
 		}
 		plan, err := checkpoint.PlanRekey(ctx, dir, sess.Name, sess.Incarnation)
-		if conflict, ok := errors.AsType[*checkpoint.RekeyConflictError](err); ok {
-			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointConflict, params: clitext.Params{
-				clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamRef: conflict.Ref, clitext.ParamHave: conflict.Have, clitext.ParamWant: conflict.Want, clitext.ParamPath: dir,
-			}, cause: err}
-		}
 		if err != nil {
-			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess.Name, dir, err), cause: err}
+			return nil, checkpointInspectRefusal(cliMessages, sess.Name, dir, err)
 		}
 		if !plan.Empty() {
 			rekeys = append(rekeys, checkpointRekey{session: sess.Name, key: sess.Incarnation, plan: plan})
@@ -74,7 +70,23 @@ func announceRekey(announcer stateAnnouncer, rekey checkpointRekey) {
 			clitext.ParamTo:    checkpoint.RefsOf(rekey.key),
 		})
 	}
-	if tally.Undo {
+	if tally.Renumbered > 0 {
+		announcer.announce(clitext.MigrationCheckpointsRenumbered, clitext.Params{
+			clitext.ParamName:  rekey.session,
+			clitext.ParamCount: tally.Renumbered,
+			clitext.ParamFrom:  checkpoint.RefsOf(rekey.session),
+			clitext.ParamTo:    checkpoint.RefsOf(rekey.key),
+			clitext.ParamStart: tally.FirstIndex,
+		})
+	}
+	switch {
+	case tally.UndoReplaced:
+		announcer.announce(clitext.MigrationUndoReplaced, clitext.Params{
+			clitext.ParamName: rekey.session,
+			clitext.ParamFrom: checkpoint.UndoRefOf(rekey.session),
+			clitext.ParamTo:   checkpoint.UndoRefOf(rekey.key),
+		})
+	case tally.Undo:
 		announcer.announce(clitext.MigrationUndoRekeyed, clitext.Params{
 			clitext.ParamName: rekey.session,
 			clitext.ParamFrom: checkpoint.UndoRefOf(rekey.session),
@@ -92,11 +104,24 @@ func announceRekey(announcer stateAnnouncer, rekey checkpointRekey) {
 func repositoryDiscoveryRefusal(cliMessages *clitext.Messages, name, dir string, err error) error {
 	hidden, ok := errors.AsType[*worktree.HiddenRepositoryError](err)
 	if !ok {
-		return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(name, dir, err), cause: err}
+		return checkpointInspectRefusal(cliMessages, name, dir, err)
 	}
 	params := checkpointFailureParams(name, dir, hidden.Err)
 	params[clitext.ParamRepo] = hidden.Entry
 	return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointHidden, params: params, cause: err}
+}
+
+func checkpointInspectRefusal(cliMessages *clitext.Messages, name, dir string, err error) error {
+	quote := shellquote.Quote
+	repo, inLayout := worktree.LayoutRepository(dir)
+	if !inLayout {
+		repo = dir
+	}
+	params := checkpointFailureParams(name, dir, err)
+	params[clitext.ParamCommand] = "git -C " + quote(dir) + " for-each-ref refs/herrscher/"
+	params[clitext.ParamTrust] = "git config --global --add safe.directory " + quote(dir)
+	params[clitext.ParamRecovery] = "git -C " + quote(repo) + " worktree repair " + quote(dir)
+	return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: params, cause: err}
 }
 
 func checkpointFailureParams(name, dir string, err error) clitext.Params {

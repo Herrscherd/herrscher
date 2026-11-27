@@ -151,6 +151,9 @@ type State struct {
 	Workspace    string                                                 `json:"workspace,omitempty"`
 	Source       string                                                 `json:"source,omitempty"`
 	OperatorLang string                                                 `json:"operator_lang,omitempty"`
+	// MigrationBackup names the copy a format migration took of the file before any change, kept until that migration
+	// finishes.
+	MigrationBackup string `json:"migration_backup,omitempty"`
 	// Approvals is the daemon-wide rule set, stored rendered ("ask Bash(git
 	// push*)") rather than structured: it is what the operator typed, it reads
 	// back out of the file, and parsing is already the check that runs before a

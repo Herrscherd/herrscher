@@ -11,9 +11,13 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
-const relocatedDirMode = 0o750
+const (
+	relocatedDirMode = 0o750
+	keptBranchPrefix = "kept/"
+)
 
 type dirPlan int
 
@@ -185,18 +189,58 @@ func (w *Worktreer) planBranchRename(ctx context.Context, plan Relocation, sess 
 	if toExists {
 		return false, NewFailure(w.messages, clitext.WorktreeRelocateBranchExists, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamBranch: strconv.Quote(plan.ToBranch), clitext.ParamFrom: strconv.Quote(plan.FromBranch)}, nil)
 	}
+	if blockErr := w.refuseBlockingBranch(ctx, plan); blockErr != nil {
+		return false, blockErr
+	}
 	upstream, err := exec.CommandContext(ctx, "git", "-C", plan.Repo, "config", "--get", "branch."+plan.FromBranch+".merge").Output()
 	if err == nil && strings.TrimSpace(string(upstream)) != "" {
-		return false, NewFailure(w.messages, clitext.WorktreeRelocateUpstream, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamBranch: strconv.Quote(plan.FromBranch)}, nil)
+		return false, NewFailure(w.messages, clitext.WorktreeRelocateUpstream, clitext.Params{
+			clitext.ParamName:    strconv.Quote(plan.Name),
+			clitext.ParamBranch:  strconv.Quote(plan.FromBranch),
+			clitext.ParamCommand: "git -C " + shellquote.Quote(plan.Repo) + " branch --unset-upstream " + shellquote.Quote(plan.FromBranch),
+		}, nil)
 	}
 	remote, err := w.pushedAs(ctx, plan, sess)
 	if err != nil {
 		return false, err
 	}
 	if remote != "" {
-		return false, NewFailure(w.messages, clitext.WorktreeRelocateRemoteBranch, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamBranch: plan.FromBranch, clitext.ParamTarget: remote}, nil)
+		return false, w.pushedBranchRefusal(plan, remote)
 	}
 	return true, nil
+}
+
+func (w *Worktreer) pushedBranchRefusal(plan Relocation, remote string) error {
+	git := "git -C " + shellquote.Quote(plan.Repo)
+	return NewFailure(w.messages, clitext.WorktreeRelocateRemoteBranch, clitext.Params{
+		clitext.ParamName:     strconv.Quote(plan.Name),
+		clitext.ParamBranch:   plan.FromBranch,
+		clitext.ParamTarget:   remote,
+		clitext.ParamCommand:  git + " push " + shellquote.Quote(remote) + " --delete " + shellquote.Quote(plan.FromBranch),
+		clitext.ParamRecovery: git + " branch -dr " + shellquote.Quote(remote+"/"+plan.FromBranch),
+	}, nil)
+}
+
+func (w *Worktreer) refuseBlockingBranch(ctx context.Context, plan Relocation) error {
+	instanceBranch := "refs/heads/" + branchPrefix + w.instanceID
+	out, err := exec.CommandContext(ctx, "git", "-C", plan.Repo, "for-each-ref", "--format=%(refname)", instanceBranch).Output()
+	if err != nil {
+		return NewFailure(w.messages, clitext.WorktreeBranchUnverified, clitext.Params{clitext.ParamBranch: strconv.Quote(plan.ToBranch), clitext.ParamPath: strconv.Quote(plan.Repo), clitext.ParamErr: err}, err)
+	}
+	for ref := range strings.Lines(string(out)) {
+		ref = strings.TrimSpace(ref)
+		if ref != instanceBranch && !strings.HasPrefix(ref, "refs/heads/"+plan.ToBranch+"/") {
+			continue
+		}
+		blocking := strings.TrimPrefix(ref, "refs/heads/")
+		return NewFailure(w.messages, clitext.WorktreeRelocateBranchBlocked, clitext.Params{
+			clitext.ParamName:    strconv.Quote(plan.Name),
+			clitext.ParamBranch:  strconv.Quote(blocking),
+			clitext.ParamTarget:  strconv.Quote(plan.ToBranch),
+			clitext.ParamCommand: "git -C " + shellquote.Quote(plan.Repo) + " branch -m " + shellquote.Quote(blocking) + " " + shellquote.Quote(keptBranchPrefix+blocking),
+		}, nil)
+	}
+	return nil
 }
 
 // Relocate carries out a planned relocation: the directory first, then the branch, putting the directory back when the branch cannot follow.

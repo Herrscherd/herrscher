@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -20,6 +21,9 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	sess, exists := h.st.FindSession(name)
 	if !exists {
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
+	}
+	if sharedErr := h.refuseSharedFolder(sess); sharedErr != nil {
+		return contracts.Result{}, sharedErr
 	}
 	wtRoot, repoRoot, err := h.worktreesOn(sess.Host)
 	if err != nil {
@@ -45,6 +49,16 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		return contracts.DataResult(h.text(clitext.SessionClosed, clitext.Params{clitext.ParamName: name}) + note), nil
 	}
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
+}
+
+func (h *Handler) refuseSharedFolder(sess state.Session) error {
+	holder, shared := h.folderHolder(sess.Name, worktree.Placement{Host: sess.Host, Path: sess.Worktree})
+	if !shared {
+		return nil
+	}
+	english := fmt.Sprintf("close session %q: %v: %s is also the folder of session %q", sess.Name, ErrWorkspaceShared, sess.Worktree, holder.Name)
+	params := clitext.Params{clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamOwner: strconv.Quote(holder.Name), clitext.ParamPath: strconv.Quote(sess.Worktree), clitext.ParamFile: h.st.Path()}
+	return localize(h.messages, h.currentLanguage(), english, clitext.HostErrWorkspaceShared, params, ErrWorkspaceShared)
 }
 
 func (h *Handler) removeWorkspace(ctx context.Context, worktrees Worktrees, repo string, sess state.Session, force bool) error {

@@ -108,6 +108,37 @@ restart a cadence without losing its history, and `schedule run` fires one by
 hand without moving it. That last one is how you read a task's first reply before
 letting it run unattended.
 
+## Agents with their own voice
+
+An agent can speak under its own name on each chat platform, with a bot of its
+own, and it decides when it answers. Two optional files in its folder
+(`~/.config/herrscher/agents/<name>/`) say so:
+
+- `reply` holds one rule: `mention` (the default, when the file is missing),
+  `channels` or `never`.
+- `channels` lists the conversations where a `channels` agent answers every
+  message, one `gateway:conversation` per line, for example
+  `discord:123456789012345678` or `telegram:-1001234567890`.
+
+```bash
+herrscher agent set-reply rin channels discord:123456789012345678
+herrscher agent show rin
+```
+
+`set-reply` with no channel keeps the list already there. `agent show` prints the
+rule, the channels, and for each gateway whether a bot token is set, never the
+token itself. A file holding a rule that is not one of the three is an error:
+the directory logs it and the agent answers nowhere, so a bad file cannot make an
+agent talk everywhere.
+
+The bot token of an agent on a gateway is a daemon secret, not a file of the
+agent's folder. Its name is the gateway kind and the agent name in capitals, with
+dashes turned into underscores, followed by `_BOT_TOKEN_`: `DISCORD_BOT_TOKEN_RIN`,
+`TELEGRAM_BOT_TOKEN_MY_AGENT`. Store it with `herrscher env set`, which keeps it
+secret because its name contains `TOKEN`. Two agents whose names map to the same
+key (`my-agent` and `my_agent`) get no token at all, and the daemon says so once.
+The daemon reads these tokens when it starts, so restart it after setting one.
+
 
 ## Files a backend sends back
 

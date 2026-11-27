@@ -34,6 +34,14 @@ The variables below are the ones the host and the bundled plugins read.
 | `HERRSCHER_SELF_TOOLS_EXPOSE` | `core` | `all` gives every daemon verb a tool of its own in `herrscher mcp`; `core` gives the everyday reads a tool and reaches the rest through `herrscher_run`. Wins over `selfTools.expose`. | `herrscher mcp`, Host |
 | `HERRSCHER_SELF_TOOLS_BYTES` | set by the daemon | The weight of the self tools declarations, handed to each bridge so it reports it in the turn's context sizes. | Bridge |
 
+Each agent can have its own bot on a gateway. Its token is the variable
+`<KIND>_BOT_TOKEN_<NAME>`, the gateway kind and the agent name in capitals with
+dashes turned into underscores (`DISCORD_BOT_TOKEN_RIN`,
+`TELEGRAM_BOT_TOKEN_MY_AGENT`). Set it with `herrscher env set`, which keeps it
+secret because its name contains `TOKEN`. The daemon reads these at startup, so a
+new token takes effect after a restart. Agents whose names clash on one key
+(`my-agent` and `my_agent`) get none. The token never goes in the agent's folder.
+
 ## Backends
 
 Every agent backend plugin declares the same shape, with only the prefix and a couple

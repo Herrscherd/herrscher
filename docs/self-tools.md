@@ -19,6 +19,9 @@ line of its own. The list is read again at each `tools/list`.
   `family` narrows the list (`session`, `schedule`, `config`, ...).
 - `herrscher_run` runs one verb: `command` is its path, `args` its named
   parameters, `rest` its positional arguments, `json` asks for machine output.
+  An agent's reply rule and channels are set the same way, with the name,
+  the rule and the channels as `rest`:
+  `{"command": "agent set-reply", "rest": ["rin", "channels", "discord:123"]}`.
 - The everyday reads have a tool of their own: `whoami`, `health`,
   `session_list`, `session_info`, `session_who`, `session_log`,
   `session_history`, `agent_list`, `models_list`, `skill_list`,

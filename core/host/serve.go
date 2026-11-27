@@ -246,18 +246,12 @@ func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) 
 }
 
 func loadHubState(opts Options) (*state.State, error) {
-	if err := atomicfile.Sweep(opts.StatePath); err != nil {
-		return nil, err
-	}
+	logCleanup(atomicfile.Sweep(opts.StatePath))
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
 		return nil, err
 	}
-	partDir := filepath.Dir(opts.StatePath)
-	sessions := store.SnapshotSessions()
-	for idx := range sessions {
-		logCleanup(atomicfile.Sweep(state.TranscriptPath(partDir, sessions[idx].Name)))
-	}
+	sweepTranscriptStaging(filepath.Dir(opts.StatePath), store.SnapshotSessions())
 	var home *state.HomeRef
 	if opts.Home != nil {
 		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}

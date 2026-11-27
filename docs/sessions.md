@@ -125,11 +125,14 @@ herrscher agent set-reply rin channels discord:123456789012345678
 herrscher agent show rin
 ```
 
-`set-reply` with no channel keeps the list already there. `agent show` prints the
-rule, the channels, and for each gateway whether a bot token is set, never the
-token itself. A file holding a rule that is not one of the three is an error:
-the directory logs it and the agent answers nowhere, so a bad file cannot make an
-agent talk everywhere.
+`set-reply` with no channel keeps the list already there. A shell
+`herrscher agent set-reply` runs in its own process, so the daemon reads the
+new rule from disk within 5 seconds, and the gateways keep the old one until
+then. A command run from an attached session reaches the daemon and takes
+effect at once. `agent show` prints the rule, the channels, and for each gateway
+whether a bot token is set, never the token itself. A file holding a rule that
+is not one of the three is an error: the directory logs it and the agent answers
+nowhere, so a bad file cannot make an agent talk everywhere.
 
 The bot token of an agent on a gateway is a daemon secret, not a file of the
 agent's folder. Its name is the gateway kind and the agent name in capitals, with

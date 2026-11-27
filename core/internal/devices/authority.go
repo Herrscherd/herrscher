@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -42,6 +43,20 @@ type Authority struct {
 	caKey     *ecdsa.PrivateKey
 	server    *x509.Certificate
 	serverKey *ecdsa.PrivateKey
+}
+
+// AuthorityGate serialises the creation and loading of the authority across the goroutines of one process, so
+// two approvals that race on a missing authority cannot each write a key and a certificate that do not match.
+// It is separate from the state lock, so the disk work does not hold the registry.
+type AuthorityGate struct {
+	mu sync.Mutex
+}
+
+// LoadOrCreate is LoadOrCreateAuthority under the gate.
+func (g *AuthorityGate) LoadOrCreate(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return LoadOrCreateAuthority(stateDir, now, rnd, enrolled)
 }
 
 // VerifiedClient is a client certificate the authority has checked.

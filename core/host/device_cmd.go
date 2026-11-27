@@ -56,10 +56,11 @@ func addAccessCommands(reg *cli.Registry, cliMessages *clitext.Messages, lang la
 }
 
 func addDeviceCommands(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, store *state.State) error {
+	gate := &devices.AuthorityGate{}
 	return addVerbs(
 		reg,
 		devicePairVerb(cliMessages, lang, store),
-		deviceApproveVerb(cliMessages, lang, store),
+		deviceApproveVerb(cliMessages, lang, store, gate),
 		deviceDenyVerb(cliMessages, lang, store),
 		deviceListVerb(cliMessages, lang, store),
 		deviceRevokeVerb(cliMessages, lang, store),
@@ -95,17 +96,17 @@ func pairDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.
 	return replyText(cliMessages, lang).Text(clitext.HostDevicePaired, clitext.Params{clitext.ParamCode: code.String(), clitext.ParamRole: role}), nil
 }
 
-func deviceApproveVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
+func deviceApproveVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State, gate *devices.AuthorityGate) contracts.Cmd {
 	return contracts.New("device", "approve").
 		Help(clitext.CmdHelpDeviceApprove).
 		ValueParam("code", clitext.CmdParamDeviceApproveCode, false).
 		ValueParam("fingerprint", clitext.CmdParamDeviceApproveFingerprint, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(approveDevice(cliMessages, lang(), store, input))
+			return cli.Data(approveDevice(cliMessages, lang(), store, gate, input))
 		})
 }
 
-func approveDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, input contracts.Input) (string, error) {
+func approveDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, gate *devices.AuthorityGate, input contracts.Input) (string, error) {
 	code, err := codeOperand(input)
 	if err != nil {
 		return "", err
@@ -118,7 +119,7 @@ func approveDevice(cliMessages *clitext.Messages, lang i18n.Language, store *sta
 	if err != nil {
 		return "", err
 	}
-	return signDevice(cliMessages, lang, store, code, fingerprint)
+	return signDevice(cliMessages, lang, store, gate, code, fingerprint)
 }
 
 func previewDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, code devices.PairingCode) (string, error) {
@@ -143,8 +144,8 @@ func previewDevice(cliMessages *clitext.Messages, lang i18n.Language, store *sta
 	}), nil
 }
 
-func signDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, code devices.PairingCode, fingerprint devices.Fingerprint) (string, error) {
-	authority, err := devices.LoadOrCreateAuthority(store.PrivateDir(), time.Now(), rand.Reader, len(store.DeviceRegistry().Devices) > 0)
+func signDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, gate *devices.AuthorityGate, code devices.PairingCode, fingerprint devices.Fingerprint) (string, error) {
+	authority, err := gate.LoadOrCreate(store.PrivateDir(), time.Now(), rand.Reader, len(store.DeviceRegistry().Devices) > 0)
 	if err != nil {
 		return "", err
 	}

@@ -237,6 +237,38 @@ func assertMode(t *testing.T, path string, want os.FileMode) {
 	}
 }
 
+func TestConcurrentLoadsOfAnAbsentAuthorityAgreeOnOneAuthority(t *testing.T) {
+	stateDir := t.TempDir()
+	var gate devices.AuthorityGate
+	const callers = 8
+	results := make(chan *devices.Authority, callers)
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			authority, err := gate.LoadOrCreate(stateDir, epochInstant(), rand.Reader, false)
+			results <- authority
+			errs <- err
+		}()
+	}
+	var authorities []*devices.Authority
+	for range callers {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		authorities = append(authorities, <-results)
+	}
+	csr, _ := requestFor(t, elliptic.P256())
+	cert, err := authorities[0].SignClient(csr, mustDeviceID(t), epochInstant(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for idx, authority := range authorities {
+		if _, err := authority.VerifyClient(cert, epochInstant()); err != nil {
+			t.Fatalf("caller %d holds a different authority: %v", idx, err)
+		}
+	}
+}
+
 func TestAnAbsentAuthorityIsNotRebuiltOnceDevicesArePaired(t *testing.T) {
 	stateDir := t.TempDir()
 	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityMissing) {

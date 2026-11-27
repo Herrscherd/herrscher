@@ -256,14 +256,14 @@ func isSessionHandoffCommand(args []string) bool {
 }
 
 func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (contracts.Result, error) {
-	return h.create(ctx, spec, "")
+	return h.create(ctx, spec, "", "")
 }
 
-func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (contracts.Result, error) {
-	return h.create(ctx, spec, vendor)
+func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor, model string) (contracts.Result, error) {
+	return h.create(ctx, spec, vendor, model)
 }
 
-func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (contracts.Result, error) {
+func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor, model string) (contracts.Result, error) {
 	args := map[string]string{paramName: spec.Name}
 	setStr := func(key, value string) {
 		if value != "" {
@@ -276,6 +276,7 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	setStr("cmd", spec.Cmd)
 	setStr("backend", spec.Backend)
 	setStr("vendor", vendor)
+	setStr("model", model)
 	setStr(paramAgent, spec.Agent)
 	setStr("memory_project", spec.MemoryProject)
 	setStr("memory_agent", spec.MemoryAgent)

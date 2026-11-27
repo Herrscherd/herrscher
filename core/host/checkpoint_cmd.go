@@ -227,7 +227,7 @@ func forkVerb() contracts.Cmd {
 }
 
 type forkHost interface {
-	CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (contracts.Result, error)
+	CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor, model string) (contracts.Result, error)
 	Close(ctx context.Context, name string, force bool) (contracts.Result, error)
 	RestartWithResume(name, token string) error
 }
@@ -268,7 +268,7 @@ func forkCheckpoint(ctx context.Context, messages *hostMessages, host forkHost, 
 		Agent:        source.Agent,
 		Base:         head,
 		TerminalOnly: true,
-	}, source.Vendor); err != nil {
+	}, source.Vendor, ""); err != nil {
 		return "", wrapHost(messages, err, "fork.failed", map[string]any{nameParam: source.Name})
 	}
 	fork, ok := sessionStore.FindSession(forkName)

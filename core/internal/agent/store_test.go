@@ -318,6 +318,46 @@ func TestListReadsTags(t *testing.T) {
 	}
 }
 
+func TestGetReadsWorkerModelsAndSkipsMalformedLines(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	if _, err := s.Create(CreateSpec{Name: "lead", Soul: "x"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	content := "research = claude-haiku-5-5\nsummary=gpt-mini\nPrune=bad-upper\n=orphan\nno-equal-sign\nprune-2=\nbad_underscore=x\n2fast=x\n"
+	if err := os.WriteFile(filepath.Join(root, "lead", "worker-models"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write worker-models: %v", err)
+	}
+	a, ok := s.Get("lead")
+	if !ok {
+		t.Fatal("Get lead = !ok")
+	}
+	want := map[string]string{"research": "claude-haiku-5-5", "summary": "gpt-mini"}
+	if len(a.WorkerModels) != len(want) {
+		t.Fatalf("WorkerModels = %v, want %v", a.WorkerModels, want)
+	}
+	for role, model := range want {
+		if a.WorkerModels[role] != model {
+			t.Fatalf("WorkerModels[%q] = %q, want %q", role, a.WorkerModels[role], model)
+		}
+	}
+}
+
+func TestWorkerModelsAbsentYieldsNil(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	if _, err := s.Create(CreateSpec{Name: "bare", Soul: "x"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 || list[0].WorkerModels != nil {
+		t.Fatalf("WorkerModels = %v, want nil", list[0].WorkerModels)
+	}
+}
+
 func TestListReadsModelAndAccount(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)

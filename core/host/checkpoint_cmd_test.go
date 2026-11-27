@@ -187,7 +187,7 @@ func (f *fakeForkHost) RestartWithResume(name, token string) error {
 	return nil
 }
 
-func (f *fakeForkHost) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, _ string) (contracts.Result, error) {
+func (f *fakeForkHost) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, _, _ string) (contracts.Result, error) {
 	dir := filepath.Join(f.t.TempDir(), spec.Name)
 	gitIn(ctx, f.t, f.repo, "worktree", "add", "-q", dir, "-b", spec.Name, spec.Base)
 	if err := f.st.AddSession(state.Session{Name: spec.Name, ChannelID: "chan-" + spec.Name, Worktree: dir}); err != nil {

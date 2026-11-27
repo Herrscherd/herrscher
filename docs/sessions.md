@@ -64,6 +64,36 @@ An agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge or
 hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex,
 Cursor, Grok and Antigravity.
 
+## Worker roles on a small model
+
+Mechanical work (searching, summarising, pruning) does not need the model that
+leads the conversation. An agent can name a model per worker role in a
+`worker-models` file in its home, one `role=model` per line:
+
+```
+research=claude-haiku-5-5
+summary=claude-haiku-5-5
+```
+
+A role is a lowercase name made of letters, digits and `-`, starting with a
+letter. A line that does not fit that shape or has no model is skipped
+without an error. The file is absent by default, and then
+nothing changes: delegations run on the agent's usual model.
+
+With roles configured, the delegation block lists them next to the agent
+(`roles: research=claude-haiku-5-5, summary=claude-haiku-5-5`) and names the
+trailer form that selects one: the role follows the agent name after the
+`delegate:` keyword, as in `⟢ delegate: scripter/research`, and the mission keeps
+its usual separator. The
+worker then starts with the role's model as its explicit `--model`, on the
+agent's backend, and does not inherit the lead's command. The model is checked
+like any `--model`: a model of another vendor than the agent's backend is
+refused, and so is a role the agent does not declare. Both refusals happen
+before any session is created and are reported in the session's language.
+
+Routing with `⟢ route:` and `⟢ fanout:` does not carry roles yet; use
+`⟢ delegate:` with the role name.
+
 ## Choosing a session's vendor
 
 Without `--model`, a session's vendor is the first of these that is set:

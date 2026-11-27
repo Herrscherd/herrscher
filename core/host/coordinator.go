@@ -21,7 +21,7 @@ const (
 )
 
 type sessionCreator interface {
-	CreateCoordinated(context.Context, contracts.CreateSession, string) (contracts.Result, error)
+	CreateCoordinated(context.Context, contracts.CreateSession, string, string) (contracts.Result, error)
 }
 type agentLookup interface {
 	Get(name string) (agent.Agent, bool)
@@ -134,7 +134,14 @@ func childCount(sessions []state.Session, parent string) int {
 	return count
 }
 
-func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent, vendor, cmd string) (string, error) {
+type spawnPlan struct {
+	parent string
+	vendor string
+	cmd    string
+	model  string
+}
+
+func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task string, plan spawnPlan) (string, error) {
 	if from.Worktree == "" {
 		return "", wrapHost(c.messages, &noIsolatedWorktreeError{Session: from.Name}, "coordination.wrap", nil)
 	}
@@ -165,11 +172,11 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 	if _, err := c.creator.CreateCoordinated(ctx, contracts.CreateSession{
 		Name:    bName,
 		Project: from.Project,
-		Cmd:     cmd,
+		Cmd:     plan.cmd,
 		Agent:   toAgent,
 		Base:    c.wt.Branch(from.Name),
-		Parent:  parent,
-	}, vendor); err != nil {
+		Parent:  plan.parent,
+	}, plan.vendor, plan.model); err != nil {
 		return "", wrapHost(c.messages, err, "coordination.create", map[string]any{nameParam: bName})
 	}
 	if !c.seedWithRetry(ctx, bName, task) {
@@ -188,26 +195,46 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 	if !ok {
 		return "", wrapHost(c.messages, &NotFoundError{Kind: kindSession, Name: req.FromSession}, "handoff.wrap", nil)
 	}
-	return c.spawn(ctx, from, req.ToAgent, req.Task, "", "", "")
+	return c.spawn(ctx, from, req.ToAgent, req.Task, spawnPlan{})
 }
 
 func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateRequest) (string, error) {
-	target, ok := c.agents.Get(req.ToAgent)
+	name, role, byRole := strings.Cut(req.ToAgent, "/")
+	target, ok := c.agents.Get(name)
 	if !ok {
-		return "", wrapHost(c.messages, &UnknownError{Kind: kindAgent, Name: req.ToAgent}, "delegate.wrap", nil)
+		return "", wrapHost(c.messages, &UnknownError{Kind: kindAgent, Name: name}, "delegate.wrap", nil)
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
 		return "", wrapHost(c.messages, &NotFoundError{Kind: kindLead, Name: req.FromSession}, "delegate.wrap", nil)
 	}
-	vendor, cmd := "", ""
+	if byRole {
+		return c.delegateAsRole(ctx, from, name, role, req.Task, target)
+	}
+	plan := spawnPlan{parent: req.FromSession}
 	if target.Backend == "" {
-		vendor = from.Vendor
+		plan.vendor = from.Vendor
 		if target.Cmd == "" {
-			cmd = from.Cmd
+			plan.cmd = from.Cmd
 		}
 	}
-	return c.spawn(ctx, from, req.ToAgent, req.Task, req.FromSession, vendor, cmd)
+	return c.spawn(ctx, from, name, req.Task, plan)
+}
+
+func (c *coordinator) delegateAsRole(ctx context.Context, from state.Session, name, role, task string, target agent.Agent) (string, error) {
+	model, ok := target.WorkerModels[role]
+	if !ok {
+		return "", wrapHost(c.messages, &unknownWorkerRoleError{Agent: name, Role: role}, "delegate.wrap", nil)
+	}
+	vendor := target.Backend
+	if vendor == "" {
+		vendor = from.Vendor
+	}
+	worker, err := c.spawn(ctx, from, name, task, spawnPlan{parent: from.Name, vendor: vendor, model: model})
+	if err != nil {
+		return "", wrapHost(c.messages, err, "delegate.role", map[string]any{nameParam: name, roleParam: role, modelParam: model})
+	}
+	return worker, nil
 }
 
 func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (string, error) {
@@ -343,7 +370,7 @@ func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) (
 	var spawned []string
 	var spawnErr error
 	for _, task := range req.Tasks {
-		name, err := c.spawn(ctx, lead, req.ToAgent, task, req.FromSession, "", "")
+		name, err := c.spawn(ctx, lead, req.ToAgent, task, spawnPlan{parent: req.FromSession})
 		if err != nil {
 			spawnErr = err
 			break
@@ -374,7 +401,7 @@ func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (st
 	if !ok {
 		return "", "", errRouteNoAgent
 	}
-	session, err := c.spawn(ctx, from, chosen, req.Task, req.FromSession, "", "")
+	session, err := c.spawn(ctx, from, chosen, req.Task, spawnPlan{parent: req.FromSession})
 	if err != nil {
 		return "", "", err
 	}

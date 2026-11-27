@@ -210,6 +210,26 @@
     "other": "delegate: {{.Detail}}"
   },
   {
+    "id": "delegate.role",
+    "description": "A delegation to a worker role fails, Name is the agent, Role the role, Model the role's model, Detail the cause",
+    "other": "delegate as {{.Name}}/{{.Role}} (model {{.Model}}): {{.Detail}}"
+  },
+  {
+    "id": "delegate.unknown_role",
+    "description": "A delegation names a worker role the agent does not configure, Agent is the agent, Role the role",
+    "other": "role {{.Role}} is not configured for agent {{.Agent}}"
+  },
+  {
+    "id": "model.unknown",
+    "description": "A model the catalog does not offer under the route policy, Model is the model, Policy the route policy",
+    "other": "unknown model \"{{.Model}}\" (not offered under route policy \"{{.Policy}}\")"
+  },
+  {
+    "id": "model.backend_mismatch",
+    "description": "A model that belongs to another backend than the one requested, Model is the model, Owner the backend that offers it, Requested the backend asked for",
+    "other": "model \"{{.Model}}\" belongs to backend \"{{.Owner}}\", but backend \"{{.Requested}}\" was requested; pick a model offered by \"{{.Requested}}\" or switch the vendor"
+  },
+  {
     "id": "report.wrap",
     "description": "A report from a sub-session fails, Detail carries the cause",
     "other": "report: {{.Detail}}"

@@ -210,6 +210,26 @@
     "other": "délégation : {{.Detail}}"
   },
   {
+    "id": "delegate.role",
+    "description": "Une délégation vers un rôle de worker échoue, Name est l'agent, Role le rôle, Model le modèle du rôle, Detail la cause",
+    "other": "délégation en {{.Name}}/{{.Role}} (modèle {{.Model}}) : {{.Detail}}"
+  },
+  {
+    "id": "delegate.unknown_role",
+    "description": "Une délégation nomme un rôle de worker que l'agent ne configure pas, Agent est l'agent, Role le rôle",
+    "other": "le rôle {{.Role}} n'est pas configuré pour l'agent {{.Agent}}"
+  },
+  {
+    "id": "model.unknown",
+    "description": "Un modèle que le catalogue n'offre pas sous la politique de route, Model est le modèle, Policy la politique de route",
+    "other": "modèle inconnu « {{.Model}} » (non proposé sous la politique de route « {{.Policy}} »)"
+  },
+  {
+    "id": "model.backend_mismatch",
+    "description": "Un modèle qui appartient à un autre backend que celui demandé, Model est le modèle, Owner le backend qui le propose, Requested le backend demandé",
+    "other": "le modèle « {{.Model}} » appartient au backend « {{.Owner}} », mais le backend « {{.Requested}} » a été demandé ; choisis un modèle proposé par « {{.Requested}} » ou change de vendor"
+  },
+  {
     "id": "report.wrap",
     "description": "A report from a sub-session fails, Detail carries the cause",
     "other": "rapport : {{.Detail}}"

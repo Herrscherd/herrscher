@@ -142,6 +142,37 @@ func readModel(home string) string {
 	return strings.TrimSpace(string(buf))
 }
 
+func readWorkerModels(home string) map[string]string {
+	buf, err := os.ReadFile(filepath.Join(home, workerModelsFile))
+	if err != nil {
+		return nil
+	}
+	var models map[string]string
+	for _, line := range strings.Split(string(buf), "\n") {
+		role, model, found := strings.Cut(line, "=")
+		role, model = strings.TrimSpace(role), strings.TrimSpace(model)
+		if !found || !validRoleName(role) || model == "" {
+			continue
+		}
+		if models == nil {
+			models = make(map[string]string)
+		}
+		models[role] = model
+	}
+	return models
+}
+
+func validRoleName(role string) bool {
+	for position, char := range role {
+		letter := char >= 'a' && char <= 'z'
+		digitOrDash := position > 0 && (char >= '0' && char <= '9' || char == '-')
+		if !letter && !digitOrDash {
+			return false
+		}
+	}
+	return role != ""
+}
+
 func readCmd(home string) string {
 	buf, err := os.ReadFile(filepath.Join(home, cmdFile))
 	if err != nil {
@@ -290,7 +321,11 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)}, true
+	return agentAt(name, home), true
+}
+
+func agentAt(name, home string) Agent {
+	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), WorkerModels: readWorkerModels(home), Host: readHost(home), Account: readAccount(home)}
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -303,7 +338,7 @@ func (s *Store) List() ([]Agent, error) {
 	var out []Agent
 	for _, name := range names {
 		home := filepath.Join(s.root, name)
-		out = append(out, Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)})
+		out = append(out, agentAt(name, home))
 	}
 	return out, nil
 }

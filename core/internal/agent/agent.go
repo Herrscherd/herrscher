@@ -21,16 +21,17 @@ import (
 )
 
 const (
-	soulFile     = "SOUL.md"
-	userFile     = "USER.md"
-	mcpFile      = "mcp.json"
-	settingsFile = "settings.json"
-	tagsFile     = "TAGS"
-	backendFile  = "backend"
-	cmdFile      = "cmd"
-	hostFile     = "host"
-	modelFile    = "model"
-	accountFile  = "account"
+	soulFile         = "SOUL.md"
+	userFile         = "USER.md"
+	mcpFile          = "mcp.json"
+	settingsFile     = "settings.json"
+	tagsFile         = "TAGS"
+	backendFile      = "backend"
+	cmdFile          = "cmd"
+	hostFile         = "host"
+	modelFile        = "model"
+	accountFile      = "account"
+	workerModelsFile = "worker-models"
 )
 
 const worktreeToken = "{{WORKTREE}}"
@@ -241,12 +242,13 @@ func materializedGitExcludes() []string {
 // Agent is a durable companion: a name, backend vendor, and the home directory
 // that stores its persona and provisioning files.
 type Agent struct {
-	Name    string
-	Home    string
-	Tags    []string
-	Backend string
-	Cmd     string
-	Model   string
+	Name         string
+	Home         string
+	Tags         []string
+	Backend      string
+	Cmd          string
+	Model        string
+	WorkerModels map[string]string
 	// Host is the default place this agent's sessions run, from <home>/host.
 	// Empty = this machine. A session's explicit --host still wins: this is a
 	// default, not a rule.

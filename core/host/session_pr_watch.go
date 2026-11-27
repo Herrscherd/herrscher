@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"log/slog"
 	"math/rand/v2"
 	"sync"
@@ -57,6 +58,10 @@ type prGroup struct {
 	saveMu   sync.Mutex
 	last     contracts.PullRequest
 	hasLast  bool
+	ciMu     sync.Mutex
+	ciBusy   bool
+	ciDirty  bool
+	ciPull   contracts.PullRequest
 	members  map[string]bool
 	cancel   context.CancelFunc
 	finished chan struct{}
@@ -68,10 +73,10 @@ type prRefusal struct {
 	retry  obs.Backoff
 }
 
-func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, seed func(session, task string) bool) *prWatcher {
+func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, seed func(session, task string) bool, notify func(session string, notice contracts.Notice) bool) *prWatcher {
 	return &prWatcher{
 		prs:      newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit),
-		ci:       &ciLoop{messages: messages, lang: lang, store: store, seed: seed, forgeLimit: sessionPRForgeLimit},
+		ci:       &ciLoop{messages: messages, lang: lang, store: store, seed: seed, notify: notify, entropy: cryptorand.Reader, forgeLimit: sessionPRForgeLimit},
 		store:    store,
 		clock:    prwatch.SystemClock(),
 		limit:    &prwatch.Limit{},
@@ -317,33 +322,58 @@ func (w *prWatcher) catchUp(ctx context.Context, group *prGroup, name string) {
 
 func (w *prWatcher) save(group *prGroup) func(context.Context, contracts.PullRequest) error {
 	return func(ctx context.Context, pull contracts.PullRequest) error {
-		names, first := w.saveMembers(ctx, group, pull)
-		w.observeCI(ctx, group, names, pull)
+		first := w.saveMembers(ctx, group, pull)
+		w.observeCI(ctx, group, pull)
 		return first
 	}
 }
 
-func (w *prWatcher) saveMembers(ctx context.Context, group *prGroup, pull contracts.PullRequest) ([]string, error) {
+func (w *prWatcher) saveMembers(ctx context.Context, group *prGroup, pull contracts.PullRequest) error {
 	group.saveMu.Lock()
 	defer group.saveMu.Unlock()
 	group.last, group.hasLast = pull, true
-	names := w.members(group)
 	var first error
-	for _, name := range names {
+	for _, name := range w.members(group) {
 		if err := w.saveMember(ctx, name, group.key.number, pull); err != nil && first == nil {
 			first = err
 		}
 	}
-	return names, first
+	return first
 }
 
-func (w *prWatcher) observeCI(ctx context.Context, group *prGroup, names []string, pull contracts.PullRequest) {
-	for _, name := range names {
-		w.watches.Add(1)
-		go func() {
-			defer w.watches.Done()
+func (w *prWatcher) observeCI(ctx context.Context, group *prGroup, pull contracts.PullRequest) {
+	group.ciMu.Lock()
+	group.ciPull = pull
+	if group.ciBusy {
+		group.ciDirty = true
+		group.ciMu.Unlock()
+		return
+	}
+	group.ciBusy = true
+	group.ciMu.Unlock()
+	w.watches.Add(1)
+	go func() {
+		defer w.watches.Done()
+		w.observeLatest(ctx, group)
+	}()
+}
+
+func (w *prWatcher) observeLatest(ctx context.Context, group *prGroup) {
+	for {
+		group.ciMu.Lock()
+		pull := group.ciPull
+		group.ciDirty = false
+		group.ciMu.Unlock()
+		for _, name := range w.members(group) {
 			w.ci.observe(ctx, name, group.forge, pull)
-		}()
+		}
+		group.ciMu.Lock()
+		if !group.ciDirty {
+			group.ciBusy = false
+			group.ciMu.Unlock()
+			return
+		}
+		group.ciMu.Unlock()
 	}
 }
 

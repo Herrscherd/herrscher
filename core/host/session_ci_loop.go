@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"time"
 
@@ -20,6 +21,8 @@ type ciLoop struct {
 	lang       languageSource
 	store      *state.State
 	seed       func(session, task string) bool
+	notify     func(session string, notice contracts.Notice) bool
+	entropy    io.Reader
 	forgeLimit time.Duration
 }
 
@@ -78,7 +81,7 @@ func (c *ciLoop) fix(ctx context.Context, name string, forge contracts.Forge, pu
 		slog.Error("session ci nudge not rendered", "session", name, "err", err)
 		return
 	}
-	c.deliver(name, stored, c.reserved(pull, base.Attempts+1), text)
+	c.deliver(name, stored, c.reserved(pull, base.Attempts+1), pull, text)
 }
 
 func (c *ciLoop) nudgeText(lang i18n.Language, pull contracts.PullRequest, failure ciFailure, attempt int) (string, error) {
@@ -90,11 +93,16 @@ func (c *ciLoop) nudgeText(lang i18n.Language, pull contracts.PullRequest, failu
 		}
 		logText = stand
 	}
+	block, err := ciloop.NewBlock(c.entropy, escapeLine(failure.check.Name), escapeLine(failure.check.URL), logText)
+	if err != nil {
+		return "", err
+	}
 	return c.messages.Text(lang, clitext.SessionCINudge, clitext.Params{
 		clitext.ParamNumber:  pull.Ref.Number(),
 		clitext.ParamAttempt: attempt,
 		clitext.ParamMax:     int(ciloop.MaxAttempts),
-		clitext.ParamLog:     ciloop.Payload(escapeLine(failure.check.Name), escapeLine(failure.check.URL), logText),
+		clitext.ParamTag:     block.Tag,
+		clitext.ParamLog:     block.Body,
 	})
 }
 
@@ -105,15 +113,15 @@ func (c *ciLoop) announce(name string, pull contracts.PullRequest, stored, base 
 		slog.Error("session ci message not rendered", "session", name, "err", err)
 		return
 	}
-	c.deliver(name, stored, c.reserved(pull, base.Attempts), text)
+	c.deliver(name, stored, c.reserved(pull, base.Attempts), pull, text)
 }
 
 func (c *ciLoop) reserved(pull contracts.PullRequest, attempts int) state.CINudge {
 	return state.CINudge{Number: pull.Ref.Number(), Attempts: attempts, Head: pull.HeadSHA.String()}
 }
 
-func (c *ciLoop) deliver(name string, stored, reserved state.CINudge, text string) {
-	claimed, err := c.store.CompareAndSetCINudge(name, stored, reserved)
+func (c *ciLoop) deliver(name string, stored, reserved state.CINudge, pull contracts.PullRequest, text string) {
+	claimed, err := c.store.ClaimCINudge(name, stored, reserved, pull.HeadSHA.String())
 	if err != nil {
 		slog.Error("session ci message not recorded, nothing sent", "session", name, "err", err)
 		return
@@ -125,8 +133,26 @@ func (c *ciLoop) deliver(name string, stored, reserved state.CINudge, text strin
 		return
 	}
 	slog.Warn("session ci message not delivered, no live session", "session", name)
-	if _, err := c.store.CompareAndSetCINudge(name, reserved, stored); err != nil {
-		slog.Error("session ci attempt not returned", "session", name, "err", err)
+	if err := c.store.ReleaseCINudge(name, reserved, stored); err != nil {
+		c.refundFailed(name, reserved, err)
+	}
+}
+
+func (c *ciLoop) refundFailed(name string, reserved state.CINudge, err error) {
+	slog.Error("session ci attempt not returned", "session", name, "err", err)
+	lang := namedSessionLanguage(c.store, name, c.lang())
+	detail, textErr := c.messages.Text(lang, clitext.SessionCIRefundFailed, clitext.Params{
+		clitext.ParamNumber:  reserved.Number,
+		clitext.ParamAttempt: reserved.Attempts,
+		clitext.ParamCause:   err.Error(),
+	})
+	if textErr != nil {
+		slog.Error("session ci refund notice not rendered", "session", name, "err", textErr)
+		return
+	}
+	notice := contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", detail)}}
+	if !c.notify(name, notice) {
+		slog.Warn("session ci attempt notice not sent, no live session", "session", name)
 	}
 }
 

@@ -249,16 +249,25 @@ The loop stops by itself:
   for that head commit, as a notice that the failure cannot be located. The loop
   does not read those pages again for that head commit.
 
-The attempt is reserved and recorded before the message is handed over. A message
-that no live session accepts gives the attempt back. When the state cannot be saved,
-nothing is sent. A crash between the reservation and the hand-over spends the
-attempt and may lose that one message, but it never sends the same message twice.
+One observation runs at a time per pull request. A save that arrives while one is
+running marks it to run again on the newest head, so an observation of an older head
+never spends an attempt once a newer head is saved. The attempt is reserved and
+recorded before the message is handed over, and the reservation only holds while the
+recorded head is still the one observed. A message that no live session accepts gives
+the attempt back. When the state cannot be saved, nothing is sent. When the attempt
+cannot be given back, the session's gateways get a notice that says so, the head stays
+marked as reported, and nothing is sent again until a new head is saved; if no live
+session carries the notice, only the host log records it. A crash between the
+reservation and the hand-over spends the attempt and may lose that one message, but it
+never sends the same message twice.
 
 The check name, the page and the log are data from the forge, not instructions.
-They sit between `<ci-log>` and `</ci-log>` in the message, with `&`, `<` and `>`
-escaped, so no tag can open or close the block in any writing. When the forge gives
-no readable log, the message says so and carries no log. The token never reaches the
-message.
+They sit between `<ci-log-TAG>` and `</ci-log-TAG>` in the message, where TAG is 16
+hex digits drawn from the system random source for each message. The log is kept as
+it is (invalid UTF-8 bytes are replaced). A log that already contains the drawn tag
+gets another draw, so a log cannot know the closing marker in advance and cannot
+close the block. When the forge gives no readable log, the message says so and
+carries no log. The token never reaches the message.
 
 Known limits: the port does not tell apart a review that requests changes from one
 that does not, so that case is not a human stop. The port does not tell required

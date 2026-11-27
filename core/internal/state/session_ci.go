@@ -16,17 +16,18 @@ func (s Session) CINudge() CINudge {
 	return CINudge{Number: s.CINudgePullRequest, Attempts: s.CINudgeAttempts, Head: s.CINudgeHead}
 }
 
-// CompareAndSetCINudge replaces the CI nudge of the named session by next only when it still
-// holds prev, in one step under the state lock. It restores prev and returns the error when the
-// state cannot be saved, and reports false when the record no longer holds prev.
-func (s *State) CompareAndSetCINudge(name string, prev, next CINudge) (bool, error) {
+// ClaimCINudge replaces the CI nudge of the named session by next only when it still holds
+// prev and the pull request head recorded on the session is head, in one step under the state
+// lock. It restores prev and returns the error when the state cannot be saved, and reports false
+// when the record no longer holds prev or the recorded head is no longer head.
+func (s *State) ClaimCINudge(name string, prev, next CINudge, head string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx, ok := s.sessionIndexLocked(name)
 	if !ok {
 		return false, fmt.Errorf("%w: %q", errNoSession, name)
 	}
-	if s.Sessions[idx].CINudge() != prev {
+	if s.Sessions[idx].CINudge() != prev || s.Sessions[idx].PullRequestHeadSHA != head {
 		return false, nil
 	}
 	setSessionCINudge(&s.Sessions[idx], next)
@@ -35,6 +36,26 @@ func (s *State) CompareAndSetCINudge(name string, prev, next CINudge) (bool, err
 		return false, err
 	}
 	return true, nil
+}
+
+// ReleaseCINudge puts prev back on the named session when it still holds reserved. On error the
+// file still holds reserved, so the record in memory keeps it too.
+func (s *State) ReleaseCINudge(name string, reserved, prev CINudge) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.sessionIndexLocked(name)
+	if !ok {
+		return fmt.Errorf("%w: %q", errNoSession, name)
+	}
+	if s.Sessions[idx].CINudge() != reserved {
+		return nil
+	}
+	setSessionCINudge(&s.Sessions[idx], prev)
+	if err := s.saveLocked(); err != nil {
+		setSessionCINudge(&s.Sessions[idx], reserved)
+		return err
+	}
+	return nil
 }
 
 func setSessionCINudge(session *Session, nudge CINudge) {

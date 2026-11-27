@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -290,5 +291,38 @@ func TestSetDefaultWritesPrivatelyPastAStrayStagingName(t *testing.T) {
 	}
 	if got, err := store.Default("claude"); err != nil || got != "work" {
 		t.Fatalf("Default = %q, %v; want work", got, err)
+	}
+}
+
+func TestReadsSurviveAReadOnlyAccountsDirectoryWithAStaleStagingFile(t *testing.T) {
+	store := newStore(t)
+	name := mustName(t, "work")
+	if _, err := store.Create(contracts.VendorClaude, name); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefault(contracts.VendorClaude, name); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(store.Root, "."+defaultsFileName+".4242520")
+	if err := os.WriteFile(stale, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(store.Root, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(store.Root, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	if got, err := store.Default(contracts.VendorClaude); err != nil || got != "work" {
+		t.Fatalf("Default on a read-only accounts directory = %q, %v; want work", got, err)
+	}
+	if _, err := store.List(); err != nil {
+		t.Fatalf("List on a read-only accounts directory: %v", err)
 	}
 }

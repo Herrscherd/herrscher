@@ -225,9 +225,6 @@ func (s Store) Resolve(session, vendor string) (string, string, error) {
 
 func (s Store) loadDefaults() (map[string]string, error) {
 	path := filepath.Join(s.Root, defaultsFileName)
-	if err := atomicfile.Sweep(path); err != nil {
-		return nil, fmt.Errorf("sweep account defaults: %w", err)
-	}
 	data, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return make(map[string]string), nil
@@ -250,7 +247,9 @@ func (s Store) saveDefaults(defaults map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("encode account defaults: %w", err)
 	}
-	if err := atomicfile.Write(filepath.Join(s.Root, defaultsFileName), data, fileMode); err != nil {
+	path := filepath.Join(s.Root, defaultsFileName)
+	atomicfile.SweepLogged(path)
+	if err := atomicfile.Write(path, data, fileMode); err != nil {
 		return fmt.Errorf("write account defaults: %w", err)
 	}
 	return nil

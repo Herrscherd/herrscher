@@ -433,6 +433,43 @@ func TestHeldRenewalIsDroppedWhenAnotherProcessSavedANewerPair(t *testing.T) {
 	}
 }
 
+func TestHeldRenewalIsNotServedOverANewerPairThatNeedsItsOwnRefresh(t *testing.T) {
+	server := newSequencedRefreshServer(t,
+		`{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`,
+		`{"access_token":"ghu_fresh2","refresh_token":"ghr_fresh2","expires_in":28800}`,
+	)
+	dir := t.TempDir()
+	first := newCredentialsIn(t, dir, server.URL)
+	mustPut(t, first.creds, Record{
+		AccessToken:     "ghu_stale",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_old",
+	})
+	blockWrites(t, first.creds.store)
+	held, err := tokenSource(t, first.creds, "github.com")
+	if err != nil || held.Secret() != "ghu_fresh" {
+		t.Fatalf("Token with the write refused = %v, %v; want the renewed token kept in memory", held.Secret(), err)
+	}
+
+	allowWrites(t, first.creds.store)
+	other := NewStore(dir)
+	if err = other.Put(t.Context(), mustHost(t, "github.com"), Record{
+		AccessToken:     "ghu_other",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_other",
+	}); err != nil {
+		t.Fatalf("Put by the other process: %v", err)
+	}
+
+	token, err := tokenSource(t, first.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_fresh2" {
+		t.Fatalf("Token = %v, %v; want ghu_fresh2 renewed from the newer pair", token.Secret(), err)
+	}
+	if hits := server.hitCount(); hits != 2 {
+		t.Fatalf("refresh calls = %d, want 2", hits)
+	}
+}
+
 func TestWarningsNeverCarryTheTokens(t *testing.T) {
 	server := newRefreshServer(t, `{"access_token":"ghu_ACCESS_LOG_SECRET","refresh_token":"ghr_REFRESH_LOG_SECRET","expires_in":28800}`)
 	setup := newTestCredentials(t, server.URL)
@@ -650,9 +687,15 @@ type refreshServer struct {
 
 func newRefreshServer(t *testing.T, reply string) *refreshServer {
 	t.Helper()
+	return newSequencedRefreshServer(t, reply)
+}
+
+func newSequencedRefreshServer(t *testing.T, replies ...string) *refreshServer {
+	t.Helper()
 	server := &refreshServer{}
 	server.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		server.mu.Lock()
+		reply := replies[min(server.hits, len(replies)-1)]
 		server.hits++
 		server.mu.Unlock()
 		if err := r.ParseForm(); err != nil {

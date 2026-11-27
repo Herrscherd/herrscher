@@ -217,11 +217,13 @@ func moduleArg(sub, arg string) (string, string) {
 }
 
 func resolveHost(messages *clitext.Messages, explicit string) (string, error) {
-	candidates := []string{explicit, ".", "herrscher"}
-	for _, candidate := range candidates {
-		if candidate == "" {
-			continue
+	if explicit != "" {
+		if _, err := os.Stat(filepath.Join(explicit, manifestFile)); err != nil {
+			return "", failure(messages, errNoHostModule, clitext.ManageHostNotFound, clitext.Params{clitext.ParamPath: explicit})
 		}
+		return explicit, nil
+	}
+	for _, candidate := range []string{".", "herrscher"} {
 		if _, err := os.Stat(filepath.Join(candidate, manifestFile)); err == nil {
 			return candidate, nil
 		}

@@ -248,13 +248,13 @@ Off by default: `MEMORY_LEARNED_SKILLS`.
 
 An agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge or
 hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex,
-Cursor and Grok.
+Cursor, Grok and Antigravity.
 
 ## Choosing a session's vendor
 
 Without `--model`, a session's vendor is the first of these that is set:
 `--vendor`, then the vendor whose CLI the `--cmd` binary is (`claude`, `codex`,
-`cursor-agent` or `grok`), then `HERRSCHER_BACKEND`. A `--cmd` left unset is the
+`cursor-agent`, `grok` or `agy`), then `HERRSCHER_BACKEND`. A `--cmd` left unset is the
 host's default command, and a vendor whose CLI is not that command runs its own
 default instead, so `--vendor grok` runs `grok` without a `--cmd`. With `--model`, the model names its
 vendor: `--vendor` or `HERRSCHER_BACKEND`, when set, must agree with it, and

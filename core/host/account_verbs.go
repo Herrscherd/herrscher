@@ -26,7 +26,7 @@ const (
 var errConversationAccount = errors.New("the session has a conversation under another account: rerun with fresh to start a new conversation, or cancel")
 
 func sessionAccountsVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
-	return contracts.New(nsSession, "accounts").
+	return contracts.New(nsSession, "accounts").Reads().
 		Help(clitext.CmdHelpSessionAccounts).
 		Param(paramName, clitext.CmdParamSessionAccountsName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {

@@ -106,6 +106,15 @@ func hostErrorKeys() []hostErrorKey {
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
 		{errUnsupportedLang, "cli.host.fault.unsupported_lang"},
 		{usage.ErrEmptyValue, "cli.host.fault.usage_empty_value"},
+		{errEnvKey, "cli.host.fault.env_key"},
+		{errEnvValue, "cli.host.fault.env_value"},
+		{errEnvNoFile, "cli.host.fault.env_no_file"},
+		{errEnvNoSuchKey, "cli.host.fault.env_no_such_key"},
+		{errSecretSession, "cli.host.fault.secret_from_session"},
+		{errEnvRequestOutside, "cli.host.fault.env_request_outside"},
+		{errEnvRequestUnheard, "cli.host.fault.env_request_unheard"},
+		{errEnvQuote, "cli.host.fault.env_quote"},
+		{errSelfToolsSilent, "cli.host.fault.self_tools_silent"},
 	}
 }
 

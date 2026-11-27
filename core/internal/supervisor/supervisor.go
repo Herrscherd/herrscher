@@ -56,6 +56,7 @@ type Supervisor struct {
 	controlPathOf    func(target string) (string, error)
 	failureSink      func(sess state.Session, stage Stage, err error)
 	controlWarn      sync.Once
+	localPrepare     func(ctx context.Context, sess state.Session)
 }
 
 // Placement is what the supervisor needs to know about a host to launch there.
@@ -219,6 +220,11 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 	s.bridgeEnv = append([]string(nil), kv...)
 }
 
+// SetLocalPrepare wires what readies the worktree of a session on this machine before each launch of its bridge.
+func (s *Supervisor) SetLocalPrepare(prepare func(ctx context.Context, sess state.Session)) {
+	s.localPrepare = prepare
+}
+
 // Start launches a supervised bridge for sess (idempotent per name).
 //
 // It cannot fail, and says so: launching is handing the run loop a goroutine,
@@ -308,6 +314,9 @@ func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
 	}
 	if sess.Host != "" && !s.runRemotePrepare(ctx, sess) {
 		return
+	}
+	if sess.Host == "" && s.localPrepare != nil {
+		s.localPrepare(ctx, sess)
 	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	if err := cmd.Run(); err != nil {

@@ -35,6 +35,9 @@ type healthInputs struct {
 	repo       string
 	watching   bool
 	now        func() time.Time
+	selfTools  func() health.SelfTools
+
+	selfToolsAnswer func(ctx context.Context, socket string) (int, error)
 }
 
 type healthSource struct {
@@ -69,8 +72,32 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
 	probes = append(probes, forgeProbes(inputs)...)
+	probes = append(probes, selfToolsProbes(inputs)...)
 	history := lastCompactions(inputs.ledger)
 	return append(probes, compactionProbes(inputs.compaction.names, history, compactionKey)...)
+}
+
+func selfToolsProbes(inputs healthInputs) []health.Probe {
+	if inputs.selfTools == nil {
+		return nil
+	}
+	facts := inputs.selfTools()
+	return []health.Probe{{
+		Check: health.Check{Group: health.GroupCore, Name: health.ServiceSelfTools, Facts: health.Facts{SelfTools: &facts}},
+		Run: func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
+			if !deep || !facts.Enabled || inputs.selfToolsAnswer == nil || principalOf(ctx).Session != "" {
+				return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{SelfTools: &facts}
+			}
+			answered, err := inputs.selfToolsAnswer(ctx, inputs.daemon.Socket)
+			if err != nil {
+				detail := contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", err.Error())}}
+				return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: detail}, health.Facts{SelfTools: &facts}
+			}
+			measured := facts
+			measured.Tools = answered
+			return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{SelfTools: &measured}
+		},
+	}}
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {

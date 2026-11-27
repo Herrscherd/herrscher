@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
-	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
@@ -28,10 +27,11 @@ func catalog() map[string]map[string]string {
 			kindTelegram: "github.com/Herrscherd/herrscher-telegram-gateway",
 		},
 		catBackend: {
-			kindClaude: "github.com/Herrscherd/herrscher-claude-backend",
-			kindCodex:  "github.com/Herrscherd/herrscher-codex-backend",
-			kindCursor: "github.com/Herrscherd/herrscher-cursor-backend",
-			kindGrok:   "github.com/Herrscherd/herrscher-grok-backend",
+			kindClaude:      "github.com/Herrscherd/herrscher-claude-backend",
+			kindCodex:       "github.com/Herrscherd/herrscher-codex-backend",
+			kindCursor:      "github.com/Herrscherd/herrscher-cursor-backend",
+			kindGrok:        "github.com/Herrscherd/herrscher-grok-backend",
+			kindAntigravity: "github.com/Herrscherd/herrscher-antigravity-backend",
 		},
 		catMemory: {
 			kindObsidian: "github.com/Herrscherd/herrscher-obsidian-memory",
@@ -73,70 +73,28 @@ func defaultStack() map[string]string {
 	}
 }
 
-// InitCmd composes the host's plugin stack from scratch: it picks one module per
-// category (defaulting to the batteries-included stack), rewrites plugins.go to
-// exactly that set, seeds a .env from .env.example, then go-gets and rebuilds.
-// On a terminal with no stack flag it opens the interactive setup instead.
-// Pass --gateway/--backend/--memory/--orchestrator to swap a category, the kind
-// "none" to drop one, or --with MODULE to pin an extra module verbatim.
-func InitCmd(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) int {
-	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
-	return errwriter.Finish(initHost(ctx, messages, hostMessages, out, errOut, args), out, errOut)
+type stackOptions struct {
+	hostDir string
+	noBuild bool
+	noTrial bool
+	choices map[string]string
+	extras  []string
 }
 
-func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, out, errOut *errwriter.Writer, args []string) int {
-	flags := flag.NewFlagSet("init", flag.ContinueOnError)
-	hostDir := flags.String("host", "", msg(messages, clitext.ManageFlagHost, nil))
-	noBuild := flags.Bool("no-build", false, msg(messages, clitext.ManageFlagInitNoBuild, nil))
-	noTrial := flags.Bool("no-trial", false, msg(messages, clitext.ManageFlagInitNoTrial, nil))
-	list := flags.Bool("list", false, msg(messages, clitext.ManageFlagList, nil))
-	yes := flags.Bool("yes", false, msg(messages, clitext.ManageFlagInitYes, nil))
-	gateway := flags.String(catGateway, defaultStack()[catGateway], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catGateway}))
-	backend := flags.String(catBackend, defaultStack()[catBackend], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catBackend}))
-	memory := flags.String(catMemory, defaultStack()[catMemory], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catMemory}))
-	orchestrator := flags.String(catOrchestrator, defaultStack()[catOrchestrator], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catOrchestrator}))
-	extractor := flags.String(catExtractor, defaultStack()[catExtractor], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catExtractor}))
-	skills := flags.String(catSkills, defaultStack()[catSkills], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catSkills}))
-	compactor := flags.String(catCompactor, defaultStack()[catCompactor], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catCompactor}))
-	var extras multiFlag
-	flags.Var(&extras, "with", msg(messages, clitext.ManageFlagWith, nil))
-	if err := flags.Parse(args); err != nil {
-		return parseExit(err)
-	}
-
-	if *list {
-		writeCatalog(messages, out)
-		return 0
-	}
-
-	dir, hostErr := resolveHost(messages, *hostDir)
-	compose := hostErr == nil
-	interactive := !*yes && !stackFlagsSet(flags) && isTerminal(os.Stdin) && isTerminal(os.Stderr)
-
-	choices := map[string]string{
-		catGateway:      *gateway,
-		catBackend:      *backend,
-		catMemory:       *memory,
-		catOrchestrator: *orchestrator,
-		catExtractor:    *extractor,
-		catSkills:       *skills,
-		catCompactor:    *compactor,
-	}
-	if interactive {
-		return runSetup(ctx, messages, errOut, liveDeps(messages, hostMessages, *hostDir), screenWelcome)
-	}
-	modules, err := resolveStack(messages, choices, extras)
+func composeStack(ctx context.Context, messages *clitext.Messages, out, errOut *errwriter.Writer, opts stackOptions) int {
+	modules, err := resolveStack(messages, opts.choices, opts.extras)
 	if err != nil {
 		errOut.Println(err)
 		return exitUsage
 	}
 	trial := func(code int) int {
-		if code != 0 || *noTrial {
+		if code != 0 || opts.noTrial {
 			return code
 		}
 		return trialStack(ctx, messages, out, errOut, modules)
 	}
-	if !compose {
+	dir, hostErr := resolveHost(messages, opts.hostDir)
+	if hostErr != nil {
 		summaryConfig(messages, envTarget(), 0)
 		return trial(0)
 	}
@@ -153,8 +111,8 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 	summaryStack(messages, modules)
 	seedEnv(messages, out, errOut, dir)
 
-	if *noBuild {
-		out.Println(msg(messages, clitext.ManageInitWroteNoBuild, nil))
+	if opts.noBuild {
+		out.Println(msg(messages, clitext.ManageSetupWroteNoBuild, nil))
 		return trial(0)
 	}
 	return trial(buildOrRestore(ctx, messages, errOut, dir, saved, modules))

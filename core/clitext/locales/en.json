@@ -40,14 +40,9 @@
     "other": "print the build version"
   },
   {
-    "id": "cli.usage.start.init",
-    "description": "Usage line: compose the plugin stack and the secrets",
-    "other": "compose the plugin stack (flags, or the setup on a terminal)"
-  },
-  {
     "id": "cli.usage.start.setup",
     "description": "Usage line: open the interactive setup and its dashboard",
-    "other": "pick modules, sign in, configure everything (dashboard)"
+    "other": "pick modules, sign in, configure everything (dashboard); --yes for scripts"
   },
   {
     "id": "cli.usage.session.verbs",
@@ -140,7 +135,7 @@
     "other": "     HERRSCHER_DEFAULT_MODEL (model taken when `session create` names none)"
   },
   {
-    "id": "cli.usage.env.init",
+    "id": "cli.usage.env.setup_route",
     "description": "Environment line: `herrscher setup route` sets the route",
     "other": "     `herrscher setup route` sets these three, no need to write them by hand"
   },
@@ -477,7 +472,7 @@
   {
     "id": "cli.bridge.flag.vendor",
     "description": "Help of the --vendor flag of bridge",
-    "other": "backend vendor: claude | codex | cursor (empty = the vendor of the cmd binary, then HERRSCHER_BACKEND; with a model, HERRSCHER_BACKEND, then the model's vendor)"
+    "other": "backend vendor: claude | codex | cursor | grok | antigravity (empty = the vendor of the cmd binary, then HERRSCHER_BACKEND; with a model, HERRSCHER_BACKEND, then the model's vendor)"
   },
   {
     "id": "cli.bridge.flag.resume",
@@ -856,6 +851,11 @@
     "other": "{{.Module}}@{{.Version}} wants contracts {{.Want}}; the composition resolves {{.Have}}"
   },
   {
+    "id": "cli.manage.host_not_found",
+    "description": "Error: --host names a directory with no plugins.go",
+    "other": "no host module at {{.Path}} (no plugins.go there)"
+  },
+  {
     "id": "cli.manage.no_host_module",
     "description": "Error: no host module was found where the command looked",
     "other": "no host module found (looked for plugins.go); pass --host DIR"
@@ -893,7 +893,7 @@
   {
     "id": "cli.manage.unknown_kind.listed",
     "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
-    "other": "{{.Category}}: unknown kind {{.Kind}} (try `herrscher init --list`)"
+    "other": "{{.Category}}: unknown kind {{.Kind}} (try `herrscher setup --list`)"
   },
   {
     "id": "cli.manage.invalid_module_path",
@@ -997,7 +997,7 @@
   },
   {
     "id": "cli.manage.flag.host",
-    "description": "Flag help: the --host flag of the plugin, init, update and install verbs",
+    "description": "Flag help: the --host flag of the plugin, setup, update and install verbs",
     "other": "path to the host module"
   },
   {
@@ -1011,13 +1011,13 @@
     "other": "go get -u the plugins but skip tidy/build"
   },
   {
-    "id": "cli.manage.flag.init_no_build",
-    "description": "Flag help: the --no-build flag of herrscher init",
+    "id": "cli.manage.flag.setup_no_build",
+    "description": "Flag help: the --no-build flag of herrscher setup",
     "other": "write plugins.go but skip go get/build"
   },
   {
-    "id": "cli.manage.flag.init_no_trial",
-    "description": "Flag help: the --no-trial flag of herrscher init",
+    "id": "cli.manage.flag.setup_no_trial",
+    "description": "Flag help: the --no-trial flag of herrscher setup",
     "other": "skip the short prompt sent to the chosen backend at the end"
   },
   {
@@ -1027,32 +1027,32 @@
   },
   {
     "id": "cli.manage.flag.list",
-    "description": "Flag help: the --list flag of herrscher init",
+    "description": "Flag help: the --list flag of herrscher setup",
     "other": "list the module catalog() and exit"
   },
   {
-    "id": "cli.manage.flag.init_yes",
-    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
+    "id": "cli.manage.flag.setup_yes",
+    "description": "Flag help: the --yes flag of herrscher setup, which skips the wizard",
     "other": "skip the interactive wizard; use flags/defaults"
   },
   {
     "id": "cli.manage.flag.category",
-    "description": "Flag help: a stack flag of herrscher init, Category is the flag's category",
+    "description": "Flag help: a stack flag of herrscher setup, Category is the flag's category",
     "other": "{{.Category}} module kind (or none)"
   },
   {
     "id": "cli.manage.flag.with",
-    "description": "Flag help: the --with flag of herrscher init, which adds a module path",
+    "description": "Flag help: the --with flag of herrscher setup, which adds a module path",
     "other": "pin an extra module path verbatim (repeatable)"
   },
   {
-    "id": "cli.manage.init.wrote_no_build",
-    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
+    "id": "cli.manage.setup.wrote_no_build",
+    "description": "Confirmation: setup wrote plugins.go without building, and how to build it",
     "other": "wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply"
   },
   {
     "id": "cli.manage.wrote_settings",
-    "description": "Confirmation: init wrote settings to an env file, Count selects the plural form",
+    "description": "Confirmation: setup wrote settings to an env file, Count selects the plural form",
     "one": "wrote 1 setting to {{.Path}}",
     "other": "wrote {{.Count}} settings to {{.Path}}"
   },
@@ -1063,17 +1063,17 @@
   },
   {
     "id": "cli.manage.seed_failed",
-    "description": "Error: init could not copy .env.example to .env",
+    "description": "Error: setup could not copy .env.example to .env",
     "other": "seed {{.Path}}: {{.Err}}"
   },
   {
     "id": "cli.manage.seeded",
-    "description": "Confirmation: init copied .env.example to .env",
+    "description": "Confirmation: setup copied .env.example to .env",
     "other": "seeded {{.Path}} from .env.example: fill in your secrets"
   },
   {
     "id": "cli.manage.env_write_failed",
-    "description": "Error: init could not write the secrets",
+    "description": "Error: setup could not write the secrets",
     "other": "write secrets: {{.Err}}"
   },
   {
@@ -1143,7 +1143,7 @@
   },
   {
     "id": "cli.manage.stack_header",
-    "description": "Heading of the stack summary printed after init composes the plugin list",
+    "description": "Heading of the stack summary printed after setup composes the plugin list",
     "other": "stack"
   },
   {
@@ -1540,7 +1540,7 @@
   {
     "id": "cli.help.param.session.handoff.vendor",
     "description": "Help of the --vendor param of the command session handoff",
-    "other": "agent backend vendor for the new session: claude | codex | cursor"
+    "other": "agent backend vendor for the new session: claude | codex | cursor | grok | antigravity"
   },
   {
     "id": "cli.help.param.session.handoff.account",
@@ -2365,7 +2365,7 @@
   {
     "id": "cli.help.param.session.create.vendor",
     "description": "Help of the --vendor param of the command session create",
-    "other": "agent backend vendor: claude | codex | cursor"
+    "other": "agent backend vendor: claude | codex | cursor | grok | antigravity"
   },
   {
     "id": "cli.help.param.session.create.model",
@@ -2605,7 +2605,7 @@
   {
     "id": "cli.help.param.agent.create.backend",
     "description": "Help of the --backend param of the command agent create",
-    "other": "agent backend vendor: claude | codex | cursor"
+    "other": "agent backend vendor: claude | codex | cursor | grok | antigravity"
   },
   {
     "id": "cli.help.param.agent.create.cmd",
@@ -4571,9 +4571,19 @@
     "other": "unknown section {{.Name}}"
   },
   {
+    "id": "cli.setup.stack_takes_no_section",
+    "description": "Error: setup composing a stack was also given a section name",
+    "other": "setup --yes and the stack flags take no section (got {{.Name}}); run herrscher setup {{.Name}} on its own"
+  },
+  {
+    "id": "cli.setup.stack_flag_needs_yes",
+    "description": "Error: a flag that only applies to the stack composition was given without --yes or a stack flag",
+    "other": "--{{.Name}} only applies with --yes or a stack flag"
+  },
+  {
     "id": "cli.setup.needs_terminal",
     "description": "Error: setup was started without a terminal",
-    "other": "herrscher setup needs a terminal; without one, use herrscher init --yes with its flags"
+    "other": "herrscher setup needs a terminal; without one, use herrscher setup --yes with its flags"
   },
   {
     "id": "cli.setup.failed",
@@ -4744,6 +4754,11 @@
     "id": "cli.setup.module.grok",
     "description": "Description of the Grok backend module",
     "other": "Grok Build CLI, grok.com account or xAI API key"
+  },
+  {
+    "id": "cli.setup.module.antigravity",
+    "description": "Description of the Antigravity backend module",
+    "other": "Google Antigravity CLI (agy)"
   },
   {
     "id": "cli.setup.module.obsidian",
@@ -4944,6 +4959,27 @@
     "id": "cli.setup.cursor.ok",
     "description": "Probe result: cursor-agent is installed and a key is set",
     "other": "cursor-agent found, key entered"
+  },
+  {
+    "id": "cli.setup.antigravity.intro",
+    "description": "Line of the Antigravity screen that says how the agent signs in",
+    "other": "The agent signs in to Antigravity with your Google account, via agy."
+  },
+  {
+    "id": "cli.setup.antigravity.hint",
+    "description": "Hint of the Antigravity screen about the interactive sign in",
+    "other": "agy opens: sign in, then quit it to come back here."
+  },
+  {
+    "id": "cli.setup.antigravity.login",
+    "description": "Action that opens agy to sign in",
+    "other": "sign in with agy"
+  },
+  {
+    "id": "cli.setup.antigravity.ok",
+    "description": "Probe result: agy is signed in and lists models, Count selects the plural form",
+    "one": "agy signed in · 1 model",
+    "other": "agy signed in · {{.Count}} models"
   },
   {
     "id": "cli.setup.memory.sub",
@@ -6086,5 +6122,330 @@
     "id": "cli.setup.telegram.malformed",
     "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
     "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
+  },
+  {
+    "id": "cli.help.cmd.config.get",
+    "description": "Help of the command config get",
+    "other": "print config.json, or the value at one dotted key"
+  },
+  {
+    "id": "cli.help.param.config.get.key",
+    "description": "Help of the parameter key of config get",
+    "other": "dotted key, such as telemetry.enabled; empty prints the whole file"
+  },
+  {
+    "id": "cli.help.cmd.config.set",
+    "description": "Help of the command config set",
+    "other": "set one dotted key of config.json, checked as the daemon reads it"
+  },
+  {
+    "id": "cli.help.param.config.set.key",
+    "description": "Help of the parameter key of config set",
+    "other": "dotted key, such as compactAt or skills.enabled"
+  },
+  {
+    "id": "cli.help.param.config.set.value",
+    "description": "Help of the parameter value of config set",
+    "other": "the value, as JSON (80, true, [\"a\"]) or as plain text"
+  },
+  {
+    "id": "cli.help.cmd.config.unset",
+    "description": "Help of the command config unset",
+    "other": "remove one dotted key of config.json"
+  },
+  {
+    "id": "cli.help.param.config.unset.key",
+    "description": "Help of the parameter key of config unset",
+    "other": "dotted key to remove"
+  },
+  {
+    "id": "cli.host.config.set",
+    "description": "Reply of config set",
+    "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.unset",
+    "description": "Reply of config unset",
+    "other": "{{.Key}} removed from {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.backup",
+    "description": "Reply of a config write that dropped comments",
+    "other": "The file held comments a rewrite cannot keep: the previous version is in {{.Path}}."
+  },
+  {
+    "id": "cli.manage.flag.setup_probe",
+    "description": "Help of the --probe flag of setup check",
+    "other": "also check each account against its service (no sign-in is opened)"
+  },
+  {
+    "id": "cli.manage.flag.json",
+    "description": "Help of the --json flag of setup check",
+    "other": "print the report as JSON"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.list",
+    "description": "Help of the command session issue list",
+    "other": "list the issues of the repository a session works in"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.show",
+    "description": "Help of the command session issue show",
+    "other": "show one issue of the repository a session works in"
+  },
+  {
+    "id": "cli.help.param.session.issue.name",
+    "description": "Help of the parameter name of session issue",
+    "other": "the session whose repository holds the issues"
+  },
+  {
+    "id": "cli.help.param.session.issue.state",
+    "description": "Help of the parameter state of session issue list",
+    "other": "open (default) or closed"
+  },
+  {
+    "id": "cli.help.param.session.issue.labels",
+    "description": "Help of the parameter labels of session issue",
+    "other": "labels, separated by commas"
+  },
+  {
+    "id": "cli.help.param.session.issue.number",
+    "description": "Help of the parameter number of session issue",
+    "other": "the issue number"
+  },
+  {
+    "id": "cli.session.issue.none",
+    "description": "Reply of session issue list with no issue",
+    "other": "no issue matches on {{.Repo}}"
+  },
+  {
+    "id": "cli.session.issue.bad_number",
+    "description": "Refusal of an issue number that is not a positive number",
+    "other": "{{.Number}} is not an issue number"
+  },
+  {
+    "id": "cli.session.issue.bad_state",
+    "description": "Refusal of an issue state other than open or closed",
+    "other": "{{.State}} is not an issue state: open or closed"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.open",
+    "description": "Help of the command session issue open",
+    "other": "open an issue on the repository a session works in, through the host's forge connection"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.comment",
+    "description": "Help of the command session issue comment",
+    "other": "comment on an issue of the repository a session works in"
+  },
+  {
+    "id": "cli.help.param.session.issue.title",
+    "description": "Help of the parameter title of session issue open",
+    "other": "the issue title"
+  },
+  {
+    "id": "cli.help.param.session.issue.body",
+    "description": "Help of the parameter body of session issue",
+    "other": "the text, in Markdown"
+  },
+  {
+    "id": "cli.session.issue.opened",
+    "description": "Reply of session issue open",
+    "other": "opened issue #{{.Number}}: {{.URL}}"
+  },
+  {
+    "id": "cli.session.issue.commented",
+    "description": "Reply of session issue comment",
+    "other": "commented on issue #{{.Number}}"
+  },
+  {
+    "id": "cli.session.issue.no_writer",
+    "description": "Refusal when the forge plugin cannot write issues",
+    "other": "the forge plugin compiled in cannot open or comment on issues: update it with `herrscher update`"
+  },
+  {
+    "id": "cli.help.cmd.setup.check",
+    "description": "Help of the command setup check",
+    "other": "report each section of the setup as ok, warning, bad or off, without changing anything"
+  },
+  {
+    "id": "cli.help.cmd.connect.status",
+    "description": "Help of the command connect status",
+    "other": "show the forge connections of the host and where each token comes from"
+  },
+  {
+    "id": "cli.help.cmd.plugin.list",
+    "description": "Help of the command plugin list",
+    "other": "list the modules compiled into the binary, with their versions"
+  },
+  {
+    "id": "cli.help.cmd.plugin.add",
+    "description": "Help of the command plugin add",
+    "other": "add a module and rebuild the binary from source"
+  },
+  {
+    "id": "cli.help.cmd.plugin.rm",
+    "description": "Help of the command plugin rm",
+    "other": "remove a module and rebuild the binary from source"
+  },
+  {
+    "id": "cli.help.param.plugin.module",
+    "description": "Help of the parameter module of plugin add and rm",
+    "other": "the module path, optionally with @version"
+  },
+  {
+    "id": "cli.help.param.plugin.no_build",
+    "description": "Help of the parameter no_build of plugin add and rm",
+    "other": "edit the module list without rebuilding"
+  },
+  {
+    "id": "cli.help.cmd.env.get",
+    "description": "Help of the command env get",
+    "other": "print the variables of the daemon's settings file, secrets hidden"
+  },
+  {
+    "id": "cli.help.cmd.env.set",
+    "description": "Help of the command env set",
+    "other": "set one variable in the daemon's settings file; a session never sets a secret"
+  },
+  {
+    "id": "cli.help.cmd.env.unset",
+    "description": "Help of the command env unset",
+    "other": "remove one variable from the daemon's settings file"
+  },
+  {
+    "id": "cli.help.param.env.key",
+    "description": "Help of the parameter key of env",
+    "other": "the variable name, such as HERRSCHER_BACKEND"
+  },
+  {
+    "id": "cli.help.param.env.value",
+    "description": "Help of the parameter value of env set",
+    "other": "the value, on one line"
+  },
+  {
+    "id": "cli.host.env.set",
+    "description": "Reply of env set",
+    "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.env.unset",
+    "description": "Reply of env unset",
+    "other": "{{.Key}} removed from {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.help.cmd.session.pr.reply",
+    "description": "Help of the command session pr reply",
+    "other": "reply in one review thread of a session's pull request"
+  },
+  {
+    "id": "cli.help.param.session.pr.thread",
+    "description": "Help of the parameter thread of session pr reply",
+    "other": "the thread id, as `session pr comments --json` gives it"
+  },
+  {
+    "id": "cli.help.param.session.pr.reply_body",
+    "description": "Help of the parameter body of session pr reply",
+    "other": "the reply, in Markdown"
+  },
+  {
+    "id": "cli.session.pr.replied",
+    "description": "Reply of session pr reply",
+    "other": "replied in a review thread of pull request #{{.Number}}"
+  },
+  {
+    "id": "cli.health.facts.self_tools",
+    "description": "Facts of the self tools health check",
+    "other": "{{.Mode}} · {{.Count}} tools · {{.Size}} bytes of schemas a turn"
+  },
+  {
+    "id": "cli.health.facts.self_tools_off",
+    "description": "Facts of the self tools health check when they are off",
+    "other": "off: sessions get no herrscher MCP server"
+  },
+  {
+    "id": "cli.help.param.session.issue.limit",
+    "description": "Help of the parameter limit of session issue list",
+    "other": "the most issues to list, 100 by default"
+  },
+  {
+    "id": "cli.session.issue.truncated",
+    "description": "Line under an issue listing cut at its limit",
+    "other": "(the first {{.Count}} only: raise --limit to see more)"
+  },
+  {
+    "id": "cli.session.issue.bad_limit",
+    "description": "Refusal of an issue limit out of range",
+    "other": "--limit takes a number from 1 to {{.Count}}"
+  },
+  {
+    "id": "cli.host.fault.env_key",
+    "description": "Error of env: not a variable name",
+    "other": "not a variable name: letters, digits and _, not starting with a digit"
+  },
+  {
+    "id": "cli.host.fault.env_value",
+    "description": "Error of env set: a value on several lines",
+    "other": "a value holds no line break"
+  },
+  {
+    "id": "cli.host.fault.env_no_file",
+    "description": "Error of env: the daemon has no settings file",
+    "other": "the daemon was started without a settings file, so there is none to edit"
+  },
+  {
+    "id": "cli.host.fault.env_no_such_key",
+    "description": "Error of env: the variable is not in the file",
+    "other": "the settings file does not set this variable"
+  },
+  {
+    "id": "cli.host.fault.secret_from_session",
+    "description": "Error of env set: a session tried to write a secret",
+    "other": "a session never writes a secret or a variable it cannot read back: ask the operator with `env request`"
+  },
+  {
+    "id": "cli.help.cmd.env.request",
+    "description": "Help of the command env request",
+    "other": "ask the operator to set a secret in the daemon's settings file; no value is sent"
+  },
+  {
+    "id": "cli.help.param.env.reason",
+    "description": "Help of the parameter reason of env request",
+    "other": "why the session needs it"
+  },
+  {
+    "id": "cli.host.env.requested",
+    "description": "Reply of env request",
+    "other": "asked the operator to set {{.Key}}; it takes effect at the daemon's next start"
+  },
+  {
+    "id": "cli.host.fault.env_request_outside",
+    "description": "Error of env request outside a session",
+    "other": "env request is how a session asks the operator for a secret; from a terminal, run `herrscher env set`"
+  },
+  {
+    "id": "cli.host.fault.env_request_unheard",
+    "description": "Error of env request when no gateway can carry it",
+    "other": "the daemon cannot reach the session's gateways yet, so nobody would read the request"
+  },
+  {
+    "id": "cli.host.fault.env_quote",
+    "description": "Error of env set: a value no quoting keeps intact",
+    "other": "a value holding a single quote cannot also hold a double quote, a dollar, a backquote or a backslash"
+  },
+  {
+    "id": "cli.host.fault.self_tools_silent",
+    "description": "Health: the self tools server listed no tool",
+    "other": "herrscher mcp answered, but listed no tool"
+  },
+  {
+    "id": "cli.help.param.approve.rule.session",
+    "description": "Help of the parameter session of approve rule",
+    "other": "bind the rule to this session alone; a session asking for a rule always gets one of its own"
+  },
+  {
+    "id": "cli.host.approve.rule_session_added",
+    "description": "Reply of approve rule for one session",
+    "other": "rule {{.Rule}} added for session {{.Name}} alone"
   }
 ]

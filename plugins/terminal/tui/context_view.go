@@ -60,7 +60,7 @@ func contextCategories() []contextCategory {
 	return []contextCategory{
 		{nameKey: "tui.context.cat_system", needKey: "tui.context.cat_system_need"},
 		{nameKey: "tui.context.cat_host", needKey: "tui.context.cat_host_need", rest: true},
-		{nameKey: "tui.context.cat_tools", needKey: "tui.context.cat_tools_need"},
+		{nameKey: "tui.context.cat_tools", needKey: "tui.context.cat_tools_need", parts: []contracts.ContextPart{contracts.ContextSelfTools}},
 		{nameKey: "tui.context.cat_memory", needKey: "tui.context.cat_memory_need", parts: []contracts.ContextPart{contracts.ContextMemory}},
 		{nameKey: "tui.context.cat_skills", needKey: "tui.context.cat_skills_need", parts: []contracts.ContextPart{contracts.ContextSkills}},
 		{nameKey: "tui.context.cat_files", needKey: "tui.context.cat_files_need"},

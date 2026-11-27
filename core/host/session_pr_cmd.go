@@ -25,6 +25,8 @@ const (
 	verbPRStatus   = "status"
 	verbPRChecks   = "checks"
 	verbPRComments = "comments"
+	verbPRReply    = "reply"
+	paramThread    = "thread"
 	paramTitle     = "title"
 	paramBody      = "body"
 	paramBase      = "base"
@@ -87,6 +89,7 @@ type prCheckView struct {
 }
 
 type prThreadView struct {
+	ID       string          `json:"id"`
 	Path     string          `json:"path"`
 	Line     int             `json:"line"`
 	Resolved bool            `json:"resolved"`
@@ -108,7 +111,7 @@ func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state
 }
 
 func (p sessionPRs) addTo(reg *cli.Registry) error {
-	return addVerbs(reg, p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb())
+	return addVerbs(reg, append(p.issueVerbs(), p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb(), p.replyVerb())...)
 }
 
 func (p sessionPRs) openVerb() contracts.Cmd {
@@ -143,6 +146,36 @@ func (p sessionPRs) commentsVerb() contracts.Cmd {
 		Help(clitext.CmdHelpSessionPRComments).
 		Param(paramName, clitext.CmdParamSessionPRName, true).
 		Do(p.comments)
+}
+
+func (p sessionPRs) replyVerb() contracts.Cmd {
+	return contracts.New(nsSession, verbPR, verbPRReply).
+		Help(clitext.CmdHelpSessionPRReply).
+		Param(paramName, clitext.CmdParamSessionPRName, true).
+		ValueParam(paramThread, clitext.CmdParamSessionPRThread, true).
+		ValueParam(paramBody, clitext.CmdParamSessionPRReplyBody, true).
+		Do(p.reply)
+}
+
+func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
+	target, err := p.target(ctx, input.Get(paramName))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	body := input.Get(paramBody)
+	if strings.TrimSpace(body) == "" {
+		return contracts.Result{}, p.failure(target.language, contracts.ErrEmptyComment)
+	}
+	thread, err := contracts.NewThreadRef(target.ref, strings.TrimSpace(input.Get(paramThread)))
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	return cli.Data(p.messages.Text(target.language, clitext.SessionPRReplied, clitext.Params{clitext.ParamNumber: target.ref.Number()}))
 }
 
 func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, dir string) (contracts.ForgeRepoRef, string, error) {
@@ -444,7 +477,7 @@ func checkView(check contracts.Check) prCheckView {
 }
 
 func threadView(thread contracts.ReviewThread) prThreadView {
-	view := prThreadView{Path: thread.Path, Line: thread.Line, Resolved: thread.Resolved, Comments: make([]prCommentView, 0, len(thread.Comments))}
+	view := prThreadView{ID: thread.ID, Path: thread.Path, Line: thread.Line, Resolved: thread.Resolved, Comments: make([]prCommentView, 0, len(thread.Comments))}
 	for _, comment := range thread.Comments {
 		view.Comments = append(view.Comments, prCommentView{Author: comment.Author.Login, Body: comment.Body, CreatedAt: comment.CreatedAt})
 	}

@@ -3,7 +3,7 @@ stdout '^Je regarde\.$'
 ! stdout 'Voici'
 stderr 'unexpected error: claude stream ended before the turn finished$'
 ! stderr 'hub-socket'
-grep -count=1 '^prompt .*say ping please' $WORK/claude.log
+grep -count=1 '^prompt "<memory.*say ping please' $WORK/claude.log
 
 -- claude.script --
 text Je regarde.

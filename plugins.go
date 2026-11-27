@@ -2,6 +2,7 @@ package main
 
 import (
 	// herrscher:plugins
+	_ "github.com/Herrscherd/herrscher-antigravity-backend"
 	_ "github.com/Herrscherd/herrscher-claude-backend"
 	_ "github.com/Herrscherd/herrscher-codex-backend"
 	_ "github.com/Herrscherd/herrscher-cursor-backend"

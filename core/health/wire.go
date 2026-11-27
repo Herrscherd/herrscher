@@ -44,6 +44,14 @@ type wireCheck struct {
 	Unknown    bool                  `json:"compaction_unknown,omitempty"`
 	ForgeReset time.Time             `json:"forge_reset,omitzero"`
 	Forge      *wireForge            `json:"forge,omitempty"`
+	SelfTools  *wireSelfTools        `json:"self_tools,omitempty"`
+}
+
+type wireSelfTools struct {
+	Enabled     bool   `json:"enabled"`
+	Exposure    string `json:"exposure"`
+	Tools       int    `json:"tools"`
+	SchemaBytes int    `json:"schema_bytes"`
 }
 
 type wireForge struct {
@@ -128,6 +136,9 @@ func encodeCheck(check Check) (wireCheck, error) {
 		Unknown:    check.Facts.CompactionUnknown,
 		ForgeReset: check.Facts.ForgeReset,
 	}
+	if self := check.Facts.SelfTools; self != nil {
+		wire.SelfTools = &wireSelfTools{Enabled: self.Enabled, Exposure: self.Exposure, Tools: self.Tools, SchemaBytes: self.SchemaBytes}
+	}
 	if pool := check.Facts.Pool; pool != nil {
 		wire.Pool = &wirePool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: int64(pool.CoolingFor)}
 	}
@@ -186,6 +197,9 @@ func decodeCheck(wire wireCheck) (Check, error) {
 			CompactionUnknown: wire.Unknown,
 			ForgeReset:        wire.ForgeReset,
 		},
+	}
+	if self := wire.SelfTools; self != nil {
+		check.Facts.SelfTools = &SelfTools{Enabled: self.Enabled, Exposure: self.Exposure, Tools: self.Tools, SchemaBytes: self.SchemaBytes}
 	}
 	if pool := wire.Pool; pool != nil {
 		check.Facts.Pool = &Pool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: time.Duration(pool.CoolingFor)}

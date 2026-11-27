@@ -141,8 +141,11 @@ func TestWriteReplacesTheFilePrivatelyPastAStrayStagingName(t *testing.T) {
 		t.Fatalf("Write blocked by a stray staging name: %v", err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != documentMode {
-		t.Fatalf("config mode = %v, %v; want %v", info.Mode().Perm(), err, documentMode)
+	if err != nil {
+		t.Fatalf("stat config: %v", err)
+	}
+	if info.Mode().Perm() != documentMode {
+		t.Fatalf("config mode = %v; want %v", info.Mode().Perm(), documentMode)
 	}
 	if cfg, err := Load(path); err != nil || cfg.Cmd != "claude --verbose" {
 		t.Fatalf("Load = %+v, %v; want the edit", cfg, err)

@@ -63,8 +63,11 @@ func TestEnvDocumentWritesPrivatelyPastAStrayStagingName(t *testing.T) {
 		t.Fatalf("write blocked by a stray staging name: %v", err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != envFileMode {
-		t.Fatalf("env file mode = %v, %v; want %v", info.Mode().Perm(), err, envFileMode)
+	if err != nil {
+		t.Fatalf("stat env file: %v", err)
+	}
+	if info.Mode().Perm() != envFileMode {
+		t.Fatalf("env file mode = %v; want %v", info.Mode().Perm(), envFileMode)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil || string(raw) != "A=1\nB=2\n" {

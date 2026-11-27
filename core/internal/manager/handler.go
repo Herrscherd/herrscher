@@ -29,6 +29,7 @@ type Handler struct {
 	fg              forges
 	up              updater
 	agents          agentStore
+	botTokens       botTokens
 	st              *state.State
 	messages        *clitext.Messages
 	defaultCmd      string
@@ -366,6 +367,10 @@ func (h *Handler) SetTerminalAdmin(td channelAdmin) { h.td = td }
 func (h *Handler) SetGatewayAdmins(admins map[string]contracts.ChannelAdmin) {
 	h.gatewayAdmins = admins
 }
+
+// SetBotTokens wires the source that tells whether an agent has its own bot
+// token on a gateway. Without it no agent is reported as having one.
+func (h *Handler) SetBotTokens(tokens botTokens) { h.botTokens = tokens }
 
 // PartDir returns the participants journal directory (used by tests/wiring).
 func (h *Handler) PartDir() string { return h.partDir }

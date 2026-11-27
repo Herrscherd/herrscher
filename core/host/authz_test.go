@@ -264,7 +264,7 @@ func TestAGatewayCannotClaimTheIdentityOfAPairedDevice(t *testing.T) {
 	st := authzState(t, nil, map[string]string{"device:0123": "owner", "chat:1": "owner"})
 	h := authzHub(t, st, []string{"role", "grant"})
 	ctx := contracts.WithPrincipal(context.Background(), "device:0123")
-	if err := h.authorize(ctx, []string{"role", "grant"}); err == nil {
+	if _, err := h.authorize(ctx, []string{"role", "grant"}); err == nil {
 		t.Fatal("a gateway claiming the identity of an owner device was believed")
 	}
 }
@@ -273,13 +273,13 @@ func TestDeviceVerbsNeedARoleTableForGatewaysButNotTheLocalOperator(t *testing.T
 	st := authzState(t, nil, nil)
 	h := authzHub(t, st, []string{"device", "list"}, []string{"session", "list"})
 	gateway := contracts.WithPrincipal(context.Background(), "chat:1")
-	if err := h.authorize(gateway, []string{"device", "list"}); err == nil {
+	if _, err := h.authorize(gateway, []string{"device", "list"}); err == nil {
 		t.Fatal("with no role table a gateway account must not run a device verb")
 	}
-	if err := h.authorize(gateway, []string{"session", "list"}); err != nil {
+	if _, err := h.authorize(gateway, []string{"session", "list"}); err != nil {
 		t.Fatalf("with no role table a gateway keeps the old behaviour on other verbs: %v", err)
 	}
-	if err := h.authorize(withLocalPrincipal(context.Background()), []string{"device", "list"}); err != nil {
+	if _, err := h.authorize(withLocalPrincipal(context.Background()), []string{"device", "list"}); err != nil {
 		t.Fatalf("the local operator must run a device verb with no role table: %v", err)
 	}
 }
@@ -298,26 +298,26 @@ func answerHub(t *testing.T, roles map[string]string, pending map[string]approva
 func TestOnlyOwnerAndOperatorLeaveAStandingAnswer(t *testing.T) {
 	h := answerHub(t, map[string]string{"chat:1": "owner", "chat:2": "operator", "chat:3": "approver"}, nil)
 	args := []string{"approve", "allow", "abc", "--session", "revue"}
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:3"), args); err == nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:3"), args); err == nil {
 		t.Fatal("an approver must not leave a standing answer with --session")
 	}
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:2"), args); err != nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:2"), args); err != nil {
 		t.Fatalf("an operator may leave a standing answer: %v", err)
 	}
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), args); err != nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), args); err != nil {
 		t.Fatalf("an owner may leave a standing answer: %v", err)
 	}
-	if err := h.authorize(withLocalPrincipal(context.Background()), args); err != nil {
+	if _, err := h.authorize(withLocalPrincipal(context.Background()), args); err != nil {
 		t.Fatalf("the local operator may leave a standing answer: %v", err)
 	}
 }
 
 func TestAnApproverAnswersOnceButNotAStandingAnswerWithAlways(t *testing.T) {
 	h := answerHub(t, map[string]string{"chat:3": "approver"}, nil)
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:3"), []string{"approve", "allow", "abc"}); err != nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:3"), []string{"approve", "allow", "abc"}); err != nil {
 		t.Fatalf("an approver answers a request once: %v", err)
 	}
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:3"), []string{"approve", "allow", "abc", "--session", "revue"}); err == nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:3"), []string{"approve", "allow", "abc", "--session", "revue"}); err == nil {
 		t.Fatal("an approver must not turn an answer into a standing rule")
 	}
 }
@@ -327,21 +327,21 @@ func TestOnlyTheOwnerAnswersARequestAboutDevicesOrRoles(t *testing.T) {
 	h := answerHub(t, map[string]string{"chat:1": "owner", "chat:2": "operator", "chat:3": "approver"}, pending)
 	for _, claim := range []string{"chat:2", "chat:3"} {
 		ctx := contracts.WithPrincipal(context.Background(), claim)
-		if err := h.authorize(ctx, []string{"approve", "deny", "abc"}); err == nil {
+		if _, err := h.authorize(ctx, []string{"approve", "deny", "abc"}); err == nil {
 			t.Fatalf("%s must not decide a request about herrscher's roles", claim)
 		}
-		if err := h.authorize(ctx, []string{"approve", "allow", "abc"}); err == nil {
+		if _, err := h.authorize(ctx, []string{"approve", "allow", "abc"}); err == nil {
 			t.Fatalf("%s must not allow a request about herrscher's roles", claim)
 		}
 	}
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), []string{"approve", "allow", "abc"}); err != nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), []string{"approve", "allow", "abc"}); err != nil {
 		t.Fatalf("the owner decides a request about herrscher's roles: %v", err)
 	}
 }
 
 func TestAGatewayWithoutARoleTableCannotAnswerOnBehalfOfThePerson(t *testing.T) {
 	h := answerHub(t, nil, nil)
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), []string{"approve", "allow", "abc", "--session", "revue"}); err == nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), []string{"approve", "allow", "abc", "--session", "revue"}); err == nil {
 		t.Fatal("with no role table a gateway must not leave a standing answer")
 	}
 }
@@ -350,13 +350,13 @@ func TestTheRoleVerbsNeedTheLocalOperatorWhileNoRoleTableExists(t *testing.T) {
 	st := authzState(t, nil, nil)
 	h := authzHub(t, st, []string{"role", "grant"}, []string{"role", "list"})
 	gateway := contracts.WithPrincipal(context.Background(), "chat:1")
-	if err := h.authorize(gateway, []string{"role", "grant"}); err == nil {
+	if _, err := h.authorize(gateway, []string{"role", "grant"}); err == nil {
 		t.Fatal("with no role table a gateway must not grant a role")
 	}
-	if err := h.authorize(gateway, []string{"role", "list"}); err == nil {
+	if _, err := h.authorize(gateway, []string{"role", "list"}); err == nil {
 		t.Fatal("with no role table a gateway must not list roles either")
 	}
-	if err := h.authorize(withLocalPrincipal(context.Background()), []string{"role", "grant"}); err != nil {
+	if _, err := h.authorize(withLocalPrincipal(context.Background()), []string{"role", "grant"}); err != nil {
 		t.Fatalf("the local operator grants the first role: %v", err)
 	}
 }

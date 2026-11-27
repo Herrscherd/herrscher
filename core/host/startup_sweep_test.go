@@ -17,6 +17,14 @@ func TestLoadHubStateSweepsTheStagingFilesOfTheState(t *testing.T) {
 	fresh := filepath.Join(dir, ".state.json.4242581")
 	stagingtest.Plant(t, stale, time.Hour)
 	stagingtest.Plant(t, fresh, time.Second)
+	transcripts := state.TranscriptsDir(dir)
+	if err := os.MkdirAll(transcripts, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ghostStale := filepath.Join(transcripts, ".ghost.jsonl.4242582")
+	ghostFresh := filepath.Join(transcripts, ".ghost.jsonl.4242583")
+	stagingtest.Plant(t, ghostStale, time.Hour)
+	stagingtest.Plant(t, ghostFresh, time.Second)
 
 	if _, err := loadHubState(Options{StatePath: statePath}); err != nil {
 		t.Fatalf("loadHubState: %v", err)
@@ -24,6 +32,8 @@ func TestLoadHubStateSweepsTheStagingFilesOfTheState(t *testing.T) {
 
 	stagingtest.Absent(t, stale)
 	stagingtest.Present(t, fresh)
+	stagingtest.Absent(t, ghostStale)
+	stagingtest.Present(t, ghostFresh)
 }
 
 func TestSweepTranscriptStagingCoversSessionsAbsentFromState(t *testing.T) {

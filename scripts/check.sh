@@ -77,6 +77,22 @@ e2e_only_tests() {
 	printf '%s\n' "$only"
 }
 
+runs_without_skip() {
+	local pattern=$1 pkg=$2 log
+	if ! log=$(capped go test -count=1 -v -run "$pattern" "$pkg"); then
+		printf '%s\n' "$log"
+		return 1
+	fi
+	if grep -- '--- SKIP' <<<"$log" >&2; then
+		echo "$pkg: a test that needs a folder outside every git repository was skipped, point TMPDIR outside any repository" >&2
+		return 1
+	fi
+	if ! grep -q -- '--- PASS' <<<"$log"; then
+		echo "$pkg: no test matches $pattern" >&2
+		return 1
+	fi
+}
+
 golangci_lint=github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
@@ -115,6 +131,8 @@ go run ./tools/i18ncheck .
 regenerated_from_scratch
 no_dash_punctuation
 capped go test -race -shuffle=on -timeout 20m ./...
+runs_without_skip '^TestOutsideAnyRepositoryTellsAFolderOfNoRepositoryFromAFolderOfOne$' ./core/internal/worktree/
+runs_without_skip '^(TestMigrationSkipsTheCheckpointsOfASessionInNoRepository|TestMigrationLeavesABareWorktreeInNoRepositoryWhereItIs)$' ./core/host/
 CGO_ENABLED=0 capped go build ./...
 CGO_ENABLED=0 GOOS=windows capped go vet ./...
 CGO_ENABLED=0 GOOS=darwin capped go build ./...

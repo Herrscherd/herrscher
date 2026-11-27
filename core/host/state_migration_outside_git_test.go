@@ -79,7 +79,8 @@ func TestMigrationLeavesABareWorktreeInNoRepositoryWhereItIs(t *testing.T) {
 }
 
 func TestMigrationRefusesCheckpointRefsGitCannotReadAndSaysHowToRepairThem(t *testing.T) {
-	broken := folderOutsideAnyRepository(t, "broken")
+	t.Setenv("LANGUAGE", "fr")
+	broken := t.TempDir()
 	if err := os.WriteFile(filepath.Join(broken, ".git"), []byte("gitdir: "+filepath.Join(broken, "nowhere")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

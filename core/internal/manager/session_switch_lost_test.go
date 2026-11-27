@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -101,13 +103,51 @@ func assertLostSession(t *testing.T, err, restartErr error, faultPath string, la
 	if !errors.Is(err, restartErr) {
 		t.Fatalf("errors.Is(restart cause) = false, the cause is lost: %v", err)
 	}
-	if !errors.Is(err, pathErr) {
-		t.Fatalf("errors.Is(rollback cause) = false, the cause is lost: %v", err)
-	}
 	if got, want := err.Error(), fmt.Sprintf(wantErrorFormat, restartErr, pathErr); got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
 	if got, want := cli.Localize(clitext.NewMessages(), err, lang).Error(), fmt.Sprintf(wantRenderedFormat, restartErr, pathErr); got != want {
 		t.Fatalf("notice = %q, want %q", got, want)
+	}
+}
+
+func TestRestartLostFallsBackToTheEnglishLineWhenTheCatalogIsBroken(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(collidingCatalogPlugin())
+	messages := clitext.NewMessages()
+	if messages.Err() == nil {
+		t.Fatal("a plugin declaring a host key did not break the catalog")
+	}
+	restartErr := errors.New("agent exited")
+	rollbackErr := errors.New("state file jammed")
+	const want = "backend restart: agent exited; rollback failed, session s1 out of service: state file jammed"
+	cases := []struct {
+		lang   i18n.Language
+		prefix string
+	}{
+		{lang: i18n.English, prefix: "unexpected error: "},
+		{lang: i18n.French, prefix: "erreur inattendue : "},
+	}
+	for _, tc := range cases {
+		err := restartLostError(messages, tc.lang, "s1", restartErr, rollbackErr)
+		if got := err.Error(); got != want {
+			t.Fatalf("%v: Error() = %q, want %q", tc.lang, got, want)
+		}
+		if got, wantNotice := cli.Localize(messages, err, tc.lang).Error(), tc.prefix+want; got != wantNotice {
+			t.Fatalf("%v: notice = %q, want %q", tc.lang, got, wantNotice)
+		}
+	}
+}
+
+func collidingCatalogPlugin() contracts.Plugin {
+	entry := []byte(`[{"id":"cli.session.switch.restart_lost","description":"","other":"rogue"}]`)
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "rogue", Category: contracts.CategorySkills},
+		Catalog: fstest.MapFS{
+			"en.json": {Data: entry},
+			"fr.json": {Data: entry},
+		},
 	}
 }

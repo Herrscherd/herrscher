@@ -139,13 +139,16 @@ func TestSetReplyTakesEffectAtOnceInTheDaemonDirectory(t *testing.T) {
 	}
 }
 
-func TestSetReplyWritesChannelsBeforeTheRule(t *testing.T) {
+func TestSetReplyKeepsChannelsWhenTheRuleWriteFails(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
 	store, ok := h.agents.(*agent.Store)
 	if !ok {
 		t.Fatal("the test handler must run on a file store")
 	}
 	createRin(t, h)
+	if err := store.SetChannels("rin", []agent.Channel{{Gateway: "chat", Conversation: "222"}}); err != nil {
+		t.Fatalf("seed channels: %v", err)
+	}
 	replyPath := filepath.Join(store.Root(), "rin", "reply")
 	if err := os.Mkdir(replyPath, 0o755); err != nil {
 		t.Fatalf("block the reply file: %v", err)
@@ -154,7 +157,7 @@ func TestSetReplyWritesChannelsBeforeTheRule(t *testing.T) {
 		t.Fatal("a rule write that cannot land must fail the command")
 	}
 	channels, err := store.Channels("rin")
-	if err != nil || len(channels) != 1 || channels[0].String() != "chat:111" {
-		t.Fatalf("channels after a failed rule = %v, %v; want the channels written first", channels, err)
+	if err != nil || len(channels) != 1 || channels[0].String() != "chat:222" {
+		t.Fatalf("channels after a failed rule = %v, %v; want the previous chat:222", channels, err)
 	}
 }

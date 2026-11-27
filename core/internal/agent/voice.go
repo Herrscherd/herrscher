@@ -136,6 +136,38 @@ func (s *Store) SetChannels(name string, channels []Channel) error {
 	return atomicfile.Write(filepath.Join(home, channelsFile), text, fileMode)
 }
 
+// SetReplyWithChannels replaces the channels and the reply rule of an existing
+// agent. Both are checked before anything is written, then the channels are
+// written and the rule after them. When the rule cannot be written, the channels
+// are put back as they were, or removed when the agent had none, and the rule
+// error is returned.
+func (s *Store) SetReplyWithChannels(name string, rule contracts.ReplyRule, channels []Channel) error {
+	home, err := s.home(name)
+	if err != nil {
+		return err
+	}
+	ruleText, err := ruleFileText(rule)
+	if err != nil {
+		return err
+	}
+	channelsText, err := channelsFileText(channels)
+	if err != nil {
+		return err
+	}
+	channelsPath := filepath.Join(home, channelsFile)
+	previous, existed, err := readOptional(channelsPath)
+	if err != nil {
+		return err
+	}
+	if err := atomicfile.Write(channelsPath, channelsText, fileMode); err != nil {
+		return err
+	}
+	if err := atomicfile.Write(filepath.Join(home, replyFile), ruleText, fileMode); err != nil {
+		return errors.Join(err, restoreChannels(channelsPath, previous, existed))
+	}
+	return nil
+}
+
 func ruleFileText(rule contracts.ReplyRule) ([]byte, error) {
 	text, err := rule.MarshalText()
 	if err != nil {
@@ -154,6 +186,27 @@ func channelsFileText(channels []Channel) ([]byte, error) {
 		out.WriteByte('\n')
 	}
 	return []byte(out.String()), nil
+}
+
+func readOptional(path string) ([]byte, bool, error) {
+	raw, err := os.ReadFile(filepath.Clean(path))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return raw, true, nil
+}
+
+func restoreChannels(path string, previous []byte, existed bool) error {
+	if existed {
+		return atomicfile.Write(path, previous, fileMode)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func normalizeChannels(channels []Channel) []Channel {

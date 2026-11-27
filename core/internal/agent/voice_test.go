@@ -142,3 +142,20 @@ func TestChannelsReportsABadLineInTheFile(t *testing.T) {
 		t.Fatalf("err = %v; want ErrBadChannel for the bad line", err)
 	}
 }
+
+func TestSetReplyWithChannelsRemovesChannelsFileWhenRuleFails(t *testing.T) {
+	s := NewStore(t.TempDir())
+	a, err := s.Create(CreateSpec{Name: "rin"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(a.Home, replyFile), 0o755); err != nil {
+		t.Fatalf("block the reply file: %v", err)
+	}
+	if err := s.SetReplyWithChannels("rin", contracts.ReplyInChannels, []Channel{{"chat", "111"}}); err == nil {
+		t.Fatal("a rule that cannot be written must fail")
+	}
+	if _, err := os.Stat(filepath.Join(a.Home, channelsFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("channels file after a failed rule: %v; want none", err)
+	}
+}

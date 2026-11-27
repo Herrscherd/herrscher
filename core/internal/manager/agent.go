@@ -208,11 +208,10 @@ func (h *Handler) agentSetReplyRun(_ context.Context, input contracts.Input) (co
 	agentName := slugify(name)
 	defer h.invalidateVoices()
 	if len(operands) > 0 {
-		if err := h.agents.SetChannels(agentName, channels); err != nil {
+		if err := h.agents.SetReplyWithChannels(agentName, rule, channels); err != nil {
 			return contracts.Result{}, err
 		}
-	}
-	if err := h.agents.SetReply(agentName, rule); err != nil {
+	} else if err := h.agents.SetReply(agentName, rule); err != nil {
 		return contracts.Result{}, err
 	}
 	return contracts.DataResult(h.text(clitext.HostAgentReplySet, clitext.Params{clitext.ParamName: agentName, clitext.ParamRule: rule.String()})), nil

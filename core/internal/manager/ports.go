@@ -19,7 +19,7 @@ type agentStore interface {
 	Reply(name string) (contracts.ReplyRule, error)
 	SetReply(name string, rule contracts.ReplyRule) error
 	Channels(name string) ([]agent.Channel, error)
-	SetChannels(name string, channels []agent.Channel) error
+	SetReplyWithChannels(name string, rule contracts.ReplyRule, channels []agent.Channel) error
 }
 
 type botTokens interface {

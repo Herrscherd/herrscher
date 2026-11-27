@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 const (
@@ -223,7 +224,8 @@ func (s Store) Resolve(session, vendor string) (string, string, error) {
 }
 
 func (s Store) loadDefaults() (map[string]string, error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, defaultsFileName))
+	path := filepath.Join(s.Root, defaultsFileName)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return make(map[string]string), nil
 	}
@@ -245,12 +247,12 @@ func (s Store) saveDefaults(defaults map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("encode account defaults: %w", err)
 	}
-	target := filepath.Join(s.Root, defaultsFileName)
-	staging := target + ".tmp"
-	if err := os.WriteFile(staging, data, fileMode); err != nil {
+	path := filepath.Join(s.Root, defaultsFileName)
+	atomicfile.SweepLogged(path)
+	if err := atomicfile.Write(path, data, fileMode); err != nil {
 		return fmt.Errorf("write account defaults: %w", err)
 	}
-	return os.Rename(staging, target)
+	return nil
 }
 
 // Runner runs the status check of a vendor CLI under the extra environment and returns its standard output.

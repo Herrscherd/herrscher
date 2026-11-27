@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 var errInjectedSave = errors.New("injected save failure")
@@ -21,7 +23,7 @@ func failRestoredTokenWithoutMark(name string, data []byte, perm os.FileMode) er
 	if bytes.Contains(data, []byte(`"resumeToken": "new"`)) && !bytes.Contains(data, []byte(`"interruptedTurn"`)) {
 		return errInjectedSave
 	}
-	return os.WriteFile(name, data, perm)
+	return atomicfile.Write(name, data, perm)
 }
 
 func TestSetResumeTokenRollsBackWhenSaveFails(t *testing.T) {
@@ -44,7 +46,7 @@ func TestSetResumeTokenAndClearInterruptedTurnStoresBothInOneSave(t *testing.T) 
 	var writes int
 	s.write = func(name string, data []byte, perm os.FileMode) error {
 		writes++
-		return os.WriteFile(name, data, perm)
+		return atomicfile.Write(name, data, perm)
 	}
 
 	must(t, s.SetResumeTokenAndClearInterruptedTurn("main", "new"))
@@ -72,7 +74,7 @@ func TestSetResumeTokenAndClearInterruptedTurnConcurrentMemoryMatchesDisk(t *tes
 		if calls.Add(1)%3 == 0 {
 			return errInjectedSave
 		}
-		return os.WriteFile(name, data, perm)
+		return atomicfile.Write(name, data, perm)
 	}
 
 	var failures atomic.Int64

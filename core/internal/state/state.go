@@ -13,6 +13,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
@@ -210,7 +211,12 @@ type RoleAssignment struct {
 }
 
 // NewState returns an empty state bound to path (not yet written).
-func NewState(path string) *State { return &State{path: path, write: os.WriteFile} }
+func NewState(path string) *State { return NewStateWith(path, atomicfile.Write) }
+
+// NewStateWith returns an empty state bound to path whose file writes go through write.
+func NewStateWith(path string, write func(name string, data []byte, perm os.FileMode) error) *State {
+	return &State{path: path, write: write}
+}
 
 // ApplyDefaults seeds declarative config.json values into the in-memory state
 // for any field not already set, WITHOUT persisting. This keeps config.json the
@@ -313,16 +319,12 @@ func (s *State) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := s.writeFile(tmp, buf, privateFileMode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return s.writeFile(s.path, buf, privateFileMode)
 }
 
 func (s *State) writeFile(name string, data []byte, perm os.FileMode) error {
 	if s.write == nil {
-		return os.WriteFile(name, data, perm)
+		return atomicfile.Write(name, data, perm)
 	}
 	return s.write(name, data, perm)
 }

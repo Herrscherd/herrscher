@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -171,22 +172,23 @@ func TestConcurrentSweepNeverFailsAWriter(t *testing.T) {
 	}
 }
 
-func TestSweepDirRemovesStaleStagingFilesOfEveryTarget(t *testing.T) {
+func TestSweepDirRemovesOnlyStaleStagingFilesOfTheSuffix(t *testing.T) {
 	dir := t.TempDir()
-	stale := []string{".ghost.jsonl.4242520", ".state.json.4242521"}
-	kept := []string{"ghost.jsonl", ".ghost.jsonl.keep", ".ghost.jsonl.4242522"}
-	for _, name := range append(append([]string{}, stale...), kept...) {
+	stale := []string{".ghost.jsonl.4242520"}
+	aged := []string{".other.4242521", ".ghost.other.4242524", "ghost.jsonl"}
+	kept := []string{".ghost.jsonl.keep", ".ghost.jsonl.4242522", ".jsonl.4242523"}
+	for _, name := range slices.Concat(stale, aged, kept) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	old := time.Now().Add(-time.Hour)
-	for _, name := range stale {
+	for _, name := range slices.Concat(stale, aged) {
 		if err := os.Chtimes(filepath.Join(dir, name), old, old); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := SweepDir(dir); err != nil {
+	if err := SweepDir(dir, ".jsonl"); err != nil {
 		t.Fatalf("SweepDir: %v", err)
 	}
 	for _, name := range stale {
@@ -194,15 +196,15 @@ func TestSweepDirRemovesStaleStagingFilesOfEveryTarget(t *testing.T) {
 			t.Fatalf("SweepDir left the stale staging file %s: %v", name, err)
 		}
 	}
-	for _, name := range kept {
+	for _, name := range slices.Concat(aged, kept) {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("SweepDir removed %s, which is not an old staging file: %v", name, err)
+			t.Fatalf("SweepDir removed %s, which is not a stale staging file of a .jsonl target: %v", name, err)
 		}
 	}
 }
 
 func TestSweepDirOfAMissingDirectoryIsNotAnError(t *testing.T) {
-	if err := SweepDir(filepath.Join(t.TempDir(), "absent")); err != nil {
+	if err := SweepDir(filepath.Join(t.TempDir(), "absent"), ".jsonl"); err != nil {
 		t.Fatalf("SweepDir of a missing directory: %v", err)
 	}
 }

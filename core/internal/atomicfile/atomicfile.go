@@ -10,17 +10,8 @@ import (
 	"path/filepath"
 )
 
-// Replacer moves a staged file onto its final path.
-type Replacer func(oldPath, newPath string) error
-
 // Write replaces path with data and gives the new file perm.
 func Write(path string, data []byte, perm os.FileMode) error {
-	return WriteWith(path, data, perm, os.Rename)
-}
-
-// WriteWith is Write with its rename step supplied by the caller, so a test can
-// make the rename fail.
-func WriteWith(path string, data []byte, perm os.FileMode, rename Replacer) error {
 	staging, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return err
@@ -29,7 +20,7 @@ func WriteWith(path string, data []byte, perm os.FileMode, rename Replacer) erro
 	if err := stage(staging, data, perm); err != nil {
 		return errors.Join(err, remove(name))
 	}
-	if err := rename(name, path); err != nil {
+	if err := os.Rename(name, path); err != nil {
 		return errors.Join(err, remove(name))
 	}
 	return nil

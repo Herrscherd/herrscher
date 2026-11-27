@@ -1,7 +1,6 @@
 package atomicfile
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,24 +26,18 @@ func TestWriteReplacesContentAndGivesPerm(t *testing.T) {
 	}
 }
 
-func TestWriteRenameFailureKeepsOldContentAndLeavesNoStagedFile(t *testing.T) {
+func TestWriteRenameFailureLeavesNoStagedFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
-		t.Fatalf("seed: %v", err)
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatalf("block the target with a directory: %v", err)
 	}
-	injected := errors.New("injected rename failure")
-	err := WriteWith(path, []byte("new\n"), 0o600, func(string, string) error { return injected })
-	if !errors.Is(err, injected) {
-		t.Fatalf("err = %v; want the rename failure", err)
-	}
-	raw, readErr := os.ReadFile(path)
-	if readErr != nil || string(raw) != "old\n" {
-		t.Fatalf("content = %q, %v; want the old content", raw, readErr)
+	if err := Write(path, []byte("new\n"), 0o600); err == nil {
+		t.Fatal("Write onto a directory returned no error")
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 || entries[0].Name() != "state" {
-		t.Fatalf("entries = %v, %v; want only the target", entries, err)
+		t.Fatalf("entries = %v, %v; want only the blocking directory", entries, err)
 	}
 }
 

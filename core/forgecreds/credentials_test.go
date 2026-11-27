@@ -364,7 +364,7 @@ func TestRenewalIsKeptInMemoryWhenTheFileCannotBeWritten(t *testing.T) {
 		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
 		RefreshToken:    "ghr_old",
 	})
-	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, setup.creds.store)
 
 	for range 2 {
 		token, err := tokenSource(t, setup.creds, "github.com")
@@ -382,7 +382,7 @@ func TestRenewalIsKeptInMemoryWhenTheFileCannotBeWritten(t *testing.T) {
 		t.Fatalf("file changed by a failed write: %+v", stored)
 	}
 
-	setup.creds.store.rename = os.Rename
+	allowWrites(t, setup.creds.store)
 	token, err := tokenSource(t, setup.creds, "github.com")
 	if err != nil || token.Secret() != "ghu_fresh" {
 		t.Fatalf("Token after the file is writable again = %v, %v", token.Secret(), err)
@@ -404,11 +404,12 @@ func TestHeldRenewalIsDroppedWhenAnotherProcessSavedANewerPair(t *testing.T) {
 		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
 		RefreshToken:    "ghr_old",
 	})
-	first.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, first.creds.store)
 	if _, err := tokenSource(t, first.creds, "github.com"); err != nil {
 		t.Fatalf("Token: %v", err)
 	}
 
+	allowWrites(t, first.creds.store)
 	other := NewStore(dir)
 	if err := other.Put(t.Context(), mustHost(t, "github.com"), Record{
 		AccessToken:     "ghu_other",
@@ -435,7 +436,7 @@ func TestWarningsNeverCarryTheTokens(t *testing.T) {
 		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
 		RefreshToken:    "ghr_old",
 	})
-	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, setup.creds.store)
 	var logs bytes.Buffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
@@ -886,7 +887,7 @@ func renewWithFailingSave(t *testing.T) (testSetup, *refreshServer) {
 	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
 	setup := newTestCredentials(t, server.URL)
 	mustPut(t, setup.creds, Record{AccessToken: "ghu_stale", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"})
-	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, setup.creds.store)
 	if token, err := tokenSource(t, setup.creds, "github.com"); err != nil || token.Secret() != "ghu_fresh" {
 		t.Fatalf("first Token = %v, %v; want the renewed token", token.Secret(), err)
 	}
@@ -985,7 +986,7 @@ func TestUnsavedRenewalWarnsOncePerEpisode(t *testing.T) {
 		t.Fatalf("not saved warnings for failed writes in one episode = %d, want 1: %s", n, logs.String())
 	}
 
-	setup.creds.store.rename = os.Rename
+	allowWrites(t, setup.creds.store)
 	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
 		t.Fatalf("Token once the file is writable: %v", err)
 	}
@@ -998,7 +999,7 @@ func TestUnsavedRenewalWarnsOncePerEpisode(t *testing.T) {
 		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
 		RefreshToken:    "ghr_next",
 	})
-	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, setup.creds.store)
 	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
 		t.Fatalf("Token with a new failed write: %v", err)
 	}
@@ -1134,7 +1135,7 @@ func TestUnfinishedRenewalWarnsOncePerEpisode(t *testing.T) {
 		t.Fatalf("unfinished warnings after the held renewal was replaced in the same episode = %d, want 1: %s", n, logs.String())
 	}
 
-	setup.creds.store.rename = os.Rename
+	allowWrites(t, setup.creds.store)
 	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
 		t.Fatalf("Token once the file is writable: %v", err)
 	}
@@ -1146,7 +1147,7 @@ func TestUnfinishedRenewalWarnsOncePerEpisode(t *testing.T) {
 	}
 
 	mustPut(t, setup.creds, Record{AccessToken: "ghu_near", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_next"})
-	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, setup.creds.store)
 	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
 		t.Fatalf("Token with a new failed write: %v", err)
 	}
@@ -1173,7 +1174,7 @@ func TestHeldRenewalIsServedWhenTheFileBecomesCorrupt(t *testing.T) {
 
 func TestHeldRenewalIsSavedAgainWhenTheFileCannotBeReadOnce(t *testing.T) {
 	setup, server := renewWithFailingSave(t)
-	setup.creds.store.rename = os.Rename
+	allowWrites(t, setup.creds.store)
 	setup.creds.store.read = failOnce(os.ReadFile)
 
 	token, err := tokenSource(t, setup.creds, "github.com")

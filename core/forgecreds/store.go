@@ -70,9 +70,8 @@ type storeFile struct {
 // file runs under an exclusive lock shared by every process of that directory,
 // and that lock is held only while the file is read, changed and written.
 type Store struct {
-	dir    string
-	rename func(oldPath, newPath string) error
-	read   func(path string) ([]byte, error)
+	dir  string
+	read func(path string) ([]byte, error)
 }
 
 // Tx is the connections file as one change of Store.Update sees it. Its
@@ -107,7 +106,7 @@ func (t *Tx) Delete(host contracts.ForgeHost) bool {
 
 // NewStore keeps the forge connections file in dir.
 func NewStore(dir string) *Store {
-	return &Store{dir: dir, rename: os.Rename, read: os.ReadFile}
+	return &Store{dir: dir, read: os.ReadFile}
 }
 
 // Path returns the file the saved records live in.
@@ -267,7 +266,7 @@ func (s *Store) save(file storeFile) error {
 }
 
 func (s *Store) writeAtomic(data []byte) error {
-	if err := atomicfile.WriteWith(s.Path(), data, storeFileMode, s.rename); err != nil {
+	if err := atomicfile.Write(s.Path(), data, storeFileMode); err != nil {
 		return fmt.Errorf("write forge connections: %w", err)
 	}
 	return nil

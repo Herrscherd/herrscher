@@ -63,23 +63,37 @@ command = "zeta"
 			raw:     `{"mcpServers":{"broken":{"type":"stdio","command":""}}}`,
 			wantErr: "missing command",
 		},
+		{
+			name:    "reports an unsupported transport before a later server's missing command",
+			raw:     `{"mcpServers":{"a":{"type":"http"},"b":{"command":""}}}`,
+			wantErr: "unsupported MCP transport",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := renderCodexMCP([]byte(tt.raw), worktree)
-			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("renderCodexMCP() error = %v, want error containing %q", err, tt.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(got) != tt.want {
-				t.Fatalf("renderCodexMCP() =\n%s\nwant:\n%s", got, tt.want)
-			}
+			checkCodexMCPCase(t, tt.raw, tt.want, tt.wantErr, worktree)
 		})
+	}
+}
+
+func checkCodexMCPCase(t *testing.T, raw, want, wantErr, worktree string) {
+	t.Helper()
+	servers, err := parseCodexMCPServers([]byte(raw))
+	var got []byte
+	if err == nil {
+		got = renderCodexMCP(servers, worktree)
+	}
+	if wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("renderCodexMCP() error = %v, want error containing %q", err, wantErr)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Fatalf("renderCodexMCP() =\n%s\nwant:\n%s", got, want)
 	}
 }

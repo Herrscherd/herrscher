@@ -48,10 +48,15 @@ func (e TranscriptEntry) ShownText() string {
 	return e.Text
 }
 
+// TranscriptsDir returns the directory that holds the transcripts under dir.
+func TranscriptsDir(dir string) string {
+	return filepath.Join(dir, "transcripts")
+}
+
 // TranscriptPath returns the transcript path for session name under dir
 // (dir/transcripts/<name>.jsonl), beside participants/<name>.log.
 func TranscriptPath(dir, name string) string {
-	return filepath.Join(dir, "transcripts", name+".jsonl")
+	return filepath.Join(TranscriptsDir(dir), name+".jsonl")
 }
 
 const (

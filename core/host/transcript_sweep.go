@@ -5,8 +5,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func sweepTranscriptStaging(partDir string, sessions []state.Session) {
-	for idx := range sessions {
-		logCleanup(atomicfile.Sweep(state.TranscriptPath(partDir, sessions[idx].Name)))
-	}
+func sweepTranscriptStaging(partDir string) {
+	logCleanup(atomicfile.SweepDir(state.TranscriptsDir(partDir)))
 }

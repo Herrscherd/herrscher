@@ -251,7 +251,7 @@ func loadHubState(opts Options) (*state.State, error) {
 	if err != nil {
 		return nil, err
 	}
-	sweepTranscriptStaging(filepath.Dir(opts.StatePath), store.SnapshotSessions())
+	sweepTranscriptStaging(filepath.Dir(opts.StatePath))
 	var home *state.HomeRef
 	if opts.Home != nil {
 		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}

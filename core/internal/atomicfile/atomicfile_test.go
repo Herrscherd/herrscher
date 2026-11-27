@@ -170,3 +170,39 @@ func TestConcurrentSweepNeverFailsAWriter(t *testing.T) {
 		}
 	}
 }
+
+func TestSweepDirRemovesStaleStagingFilesOfEveryTarget(t *testing.T) {
+	dir := t.TempDir()
+	stale := []string{".ghost.jsonl.4242520", ".state.json.4242521"}
+	kept := []string{"ghost.jsonl", ".ghost.jsonl.keep", ".ghost.jsonl.4242522"}
+	for _, name := range append(append([]string{}, stale...), kept...) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Hour)
+	for _, name := range stale {
+		if err := os.Chtimes(filepath.Join(dir, name), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := SweepDir(dir); err != nil {
+		t.Fatalf("SweepDir: %v", err)
+	}
+	for _, name := range stale {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("SweepDir left the stale staging file %s: %v", name, err)
+		}
+	}
+	for _, name := range kept {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("SweepDir removed %s, which is not an old staging file: %v", name, err)
+		}
+	}
+}
+
+func TestSweepDirOfAMissingDirectoryIsNotAnError(t *testing.T) {
+	if err := SweepDir(filepath.Join(t.TempDir(), "absent")); err != nil {
+		t.Fatalf("SweepDir of a missing directory: %v", err)
+	}
+}

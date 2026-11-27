@@ -30,22 +30,33 @@ func Write(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// Sweep removes the staging files that a Write left beside path and that are at least ten minutes old, which means their writer died between staging and rename. A younger staging file may belong to a live writer, so Sweep keeps it and is safe to call while writers of path run.
+// Sweep removes the staging files that a Write left beside path and that are at least ten minutes old, which means their writer died between staging and rename. A younger staging file may belong to a live writer, so Sweep keeps it and is safe to call while writers of path run. Sweep is not called on each save of a state file or each compaction of a transcript: the daemon sweeps those once at startup, since a directory read per save is not worth it on the hot path.
 func Sweep(path string) error {
 	if path == "" {
 		return nil
 	}
-	dir, base := filepath.Dir(path), filepath.Base(path)
+	base := filepath.Base(path)
+	return sweepDir(filepath.Dir(path), func(name string) bool {
+		return isStagingName(name, base)
+	})
+}
+
+// SweepDir removes the stale staging files of every file in dir, with the same rules as Sweep. The daemon uses it at startup for the transcripts directory, so a transcript of a session no longer in state keeps no residue.
+func SweepDir(dir string) error {
+	return sweepDir(dir, isAnyStagingName)
+}
+
+func sweepDir(dir string, isStaging func(name string) bool) error {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("sweep %s: %w", path, err)
+		return fmt.Errorf("sweep %s: %w", dir, err)
 	}
 	var errs []error
 	for _, entry := range entries {
-		if entry.IsDir() || !isStagingName(entry.Name(), base) {
+		if entry.IsDir() || !isStaging(entry.Name()) {
 			continue
 		}
 		info, err := entry.Info()
@@ -73,6 +84,15 @@ func SweepLogged(path string) {
 func isStagingName(name, base string) bool {
 	suffix, found := strings.CutPrefix(name, "."+base+".")
 	return found && isRandomSuffix(suffix)
+}
+
+func isAnyStagingName(name string) bool {
+	rest, found := strings.CutPrefix(name, ".")
+	if !found {
+		return false
+	}
+	dot := strings.LastIndexByte(rest, '.')
+	return dot > 0 && isRandomSuffix(rest[dot+1:])
 }
 
 func isRandomSuffix(suffix string) bool {

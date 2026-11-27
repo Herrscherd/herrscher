@@ -361,21 +361,20 @@ and no single message may exceed 4 MiB. A server that exceeds the timeout, exits
 refuses a request, answers outside the protocol, or exceeds a size limit is reported
 with its cause. The text report shows the localized cause, then, on the line below, the
 last 1 KiB the server wrote to its stderr, quoted under the label `stderr`. When the caller
-cancels the measure, the cause is
-`canceled`, not `timeout`. Messages the server sends with a method of their own
-(requests to the client, notifications) are skipped, and an answer is matched by its id
-alone. No server is dropped from the report.
+cancels the measure, the cause is `canceled`, not `timeout`. Messages the server sends with
+a method of their own (requests to the client, notifications) are skipped, and an answer is
+matched by its id alone. No server is dropped from the report.
 
 The servers of a report are measured under one budget of 40 seconds shared by all of them.
 Each stdio server takes one of four slots before it starts, and the slots belong to the
 daemon, not to the report: two `mcp weight --deep` requests at the same time share the same
 four, so the daemon never runs more than four measured servers together, whatever the
 number of clients. A server still running when the budget is spent is stopped and reported
-with the cause `budget`, not `timeout`.
-A server still waiting for a slot when the budget is spent, or when the caller cancels, is
-not started and is reported with the cause `budget` or `canceled`. Each started server keeps
-its own 15 second timeout inside that budget. The report lists the servers sorted by name,
-as `mcp.json` is read, whatever order they finish in.
+with the cause `budget`, not `timeout`. A server still waiting for a slot when the budget is
+spent, or when the caller cancels, is not started and is reported with the cause `budget` or
+`canceled`. Each started server keeps its own 15 second timeout inside that budget. The
+report lists the servers sorted by name, as `mcp.json` is read, whatever order they finish
+in.
 
 `mcp weight` runs in the daemon, and it needs one listening: without a daemon it is refused
 with the same message as the other daemon-owned verbs, with or without `--deep`. It is

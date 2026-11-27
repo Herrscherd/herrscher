@@ -7,6 +7,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/testsupport/statesavestest"
 )
 
 func TestARollbackThatCannotPersistIsReported(t *testing.T) {
@@ -15,7 +16,7 @@ func TestARollbackThatCannotPersistIsReported(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "beta", ChannelID: "42", Type: "text", Vendor: "claude"}); err != nil {
 		t.Fatal(err)
 	}
-	blockStateSaves(t, path)
+	statesavestest.Block(t, path)
 	sup := &fakeSup{}
 	h := NewHandler(clitext.NewMessages(), &fakeChannelAdmin{}, sup, &fakeWT{path: t.TempDir(), scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
 

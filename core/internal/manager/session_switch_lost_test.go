@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/testsupport/statesavestest"
 )
 
 type jammedRestartSup struct {
@@ -35,7 +36,7 @@ func (s *jammedRestartSup) RestartWithin(sess state.Session, _ time.Duration) er
 	if len(s.restarted) > 1 {
 		return nil
 	}
-	blockStateSaves(s.t, s.statePath)
+	statesavestest.Block(s.t, s.statePath)
 	return s.restartErr
 }
 

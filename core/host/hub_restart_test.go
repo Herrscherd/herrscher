@@ -8,6 +8,7 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/testsupport/statesavestest"
 )
 
 func TestRestartWithResumeKeepsOldTokenAndMarkOnDiskWhenPersistFails(t *testing.T) {
@@ -17,7 +18,7 @@ func TestRestartWithResumeKeepsOldTokenAndMarkOnDiskWhenPersistFails(t *testing.
 	if err := st.AddSession(state.Session{Name: name, ResumeToken: "old", InterruptedTurn: "turn-1", Incarnation: "incarnation"}); err != nil {
 		t.Fatal(err)
 	}
-	blockStateSaves(t, path)
+	statesavestest.Block(t, path)
 	partDir := t.TempDir()
 	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(io.Discard))
 	h.runtime = isolatedRuntimeDir(t)

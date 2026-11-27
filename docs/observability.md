@@ -323,6 +323,101 @@ model discovery for its whole life. Under `gateway-only` the host drops every na
 whatever the backend returned; a backend that ignores the policy would still launch its own
 CLI, which only that backend's gate prevents.
 
+## MCP tool weight, per agent
+
+`herrscher mcp weight --agent <name>` reads the agent's `mcp.json` and reports, for each
+MCP server, the size of its tool definitions: the number of tools, the size in bytes of
+their raw JSON as the server sent it, and an estimated token count. These numbers are the
+weight of what the server advertises, not what the model sees in its context. `--json`
+prints the same results as a list of objects with `name`, `transport`, `measured`,
+`tools`, `bytes`, `tokens`, `cause`, `detail` and `stderr`. `detail` is the Go error text,
+a machine field that the text report never shows; `stderr` is the tail of the server's own
+stderr, which is data from a third party.
+
+The file is parsed once, strictly: an empty server name, or a server that runs as a local
+process (no `type`, or `stdio`) without a `command`, refuses the whole report with an
+error, as the Codex configuration does. A missing file is an empty report.
+
+Without `--deep` nothing is started. A stdio server is listed as not started, and a
+server with any other transport (`http`, `sse`, a URL) as not stdio. Those are the
+only two causes that come without starting anything.
+
+With `--deep`, each stdio server is started as a child process and asked over
+newline-delimited JSON-RPC for `initialize`, then `notifications/initialized`, then
+`tools/list`. The probe follows `nextCursor` for at most 100 pages. The tool count is
+the number of definitions across all pages. The byte count is the sum of the raw JSON
+of each definition as the server sent it, not re-serialized. Each server is started:
+
+- in a fresh scratch directory under the system temporary directory, removed afterwards;
+- with the whole environment of the daemon process, not that of the client running
+  `mcp weight`: the variables the daemon was started with, tokens included, are passed to
+  the server unfiltered, plus the `env` declared for that server in `mcp.json`;
+- with every `{{WORKTREE}}` in its `command`, `args` and `env` values replaced by the
+  scratch directory path.
+
+The whole exchange with one server is bounded by a 15 second timeout, from the start
+to the last answer. The definitions of all its pages together may not exceed 16 MiB,
+and no single message may exceed 4 MiB. A server that exceeds the timeout, exits early,
+refuses a request, answers outside the protocol, or exceeds a size limit is reported
+with its cause. The text report shows the localized cause, then, on the line below, the
+last 1 KiB the server wrote to its stderr, quoted under the label `stderr`. When the caller
+cancels the measure, the cause is `canceled`, not `timeout`. Messages the server sends with
+a method of their own (requests to the client, notifications) are skipped, and an answer is
+matched by its id alone. No server is dropped from the report.
+
+The servers of a report are measured under one budget of 40 seconds shared by all of them.
+Each stdio server takes one of four slots before it starts, and the slots belong to the
+daemon, not to the report: two `mcp weight --deep` requests at the same time share the same
+four, so the daemon never runs more than four measured servers together, whatever the
+number of clients. A server still running when the budget is spent is stopped and reported
+with the cause `budget`, not `timeout`. A server still waiting for a slot when the budget is
+spent, or when the caller cancels, is not started and is reported with the cause `budget` or
+`canceled`. Each started server keeps its own 15 second timeout inside that budget. The
+report lists the servers sorted by name, as `mcp.json` is read, whatever order they finish
+in.
+
+`mcp weight` runs in the daemon, and it needs one listening: without a daemon it is refused
+with the same message as the other daemon-owned verbs, with or without `--deep`. It is
+read-only and does not wait for the daemon's dispatch lock, so it answers while another
+command is being applied. The command client waits at most 50 seconds for the report. If
+the client gives up or disconnects, the measure is not cancelled: it runs on until the
+budget is spent. Stopping the daemon cancels it, and the probes kill the process groups they
+started, reporting the cause `canceled`.
+
+The probe kills the server, waits up to two seconds for its output to end, and then waits
+for the process to exit. On Unix the server runs in its own process group and the probe
+kills the whole group, so the subprocesses it starts die with it. A subprocess that leaves
+the group itself (for example by starting a new session) can keep the output open past that
+wait: the probe then closes its end of the output, so the reader does not stay blocked, the
+report keeps the tools already listed and gives the cause `stop`, and the text report prints
+a second line for it. On Windows only the direct child is killed, and its subprocesses may
+keep running after the probe returns.
+
+**Tokens are an estimate.** They come from `contextwindow.EstimateTokens`, which counts
+about four bytes per token. They are not counted by the model's tokenizer, and the
+report says so in its footer.
+
+What is not measured:
+
+- servers that are not stdio, which are never contacted;
+- tools a server would hide from the agent through its own configuration, since the
+  probe reads what the server advertises;
+- the system prompt, the tool results and the model's tool-selection cost.
+
+`--deep` runs the commands declared in the agent's `mcp.json` on this machine, with
+the permissions of the operator. Run it only on agents whose `mcp.json` you trust.
+
+### Lint exclusions
+
+The MCP weight code adds three path exclusions to `.golangci.yml`, and each one stays for
+the reason in this table. No other exclusion in the file is described here.
+
+| Path | Linter | Reason |
+|---|---|---|
+| `core/internal/mcpweight/rpc.go` | gosec G204 | `start` runs the server command that the agent's `mcp.json` declares, with its arguments after `{{WORKTREE}}` substitution. No shell is involved, and the operator trusts that file, as `--deep` says. |
+| `core/internal/mcpweight/config.go` | gosec G304 | `ReadServers` reads the `mcp.json` at the path the agent home defines. |
+| `core/internal/mcpweight/fake_test.go` | revive deep-exit | `TestFakeServer` and `serveFake` end the test binary's process, so that it acts as a server that exits, fails or stops answering. The file builds only into test binaries. |
+
 ## Also
 
 Cross-backend skills, where one `SKILL.md` works on every backend. The playbooks

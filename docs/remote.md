@@ -164,21 +164,24 @@ authenticate, and the signed certificate is not handed to anyone yet.
   key, and no log line carries one. This holds against the commands, not against
   a process of the same user: such a process can read the authority's key file,
   just as it can read `HERRSCHER_ANNOUNCE_KEY`. The user account is the boundary.
-- **Shell administration from an agent.** A Bash command that runs `herrscher
-  device` or `herrscher role` needs a person's decision. This is a text barrier,
-  at best. The check reads the command after removing quotes, backslashes and
-  separators, and it treats as administration: a command that names `herrscher`
-  together with the word `device`, `role` or `xargs` (for example
-  `echo role grant bob owner | xargs herrscher`); a command that expands a
-  variable, a substitution or an `eval` and spells `herrscher` out of pieces
-  (for example `B=herrscher; $B device list`); and a command that feeds an
-  interpreter (`sh`, `bash`, `zsh`, `eval`, `python -c`, `perl -e`) with
-  content decoded or unescaped (for example `echo <base64> | base64 -d | sh`).
-  Forms the check does not name can still pass, and the real boundary is the user
-  account. In particular, a script written to a file and then run, a file
-  downloaded and run, or an encoding the check does not know, is not seen. An
-  agent's shell reaches the operator socket as `local`, and a process of the same
-  uid can do what the daemon can.
+- **Shell administration from an agent.** A Bash command that names herrscher's
+  device or role verbs needs a person's decision. This is a text barrier, and it
+  over-blocks on purpose. The command is split on every punctuation mark and every
+  blank, line breaks included, and it needs a person when it contains:
+  - the word `herrscher` together with the word `device`, `role` or `xargs`. This
+    also covers a command that only reads, such as `grep "herrscher role"
+    docs/remote.md`, which needs the owner's decision;
+  - the name spelled out of pieces through an expansion, a substitution or an
+    `eval`, for example `B=herrscher; $B device list` or `x=herr; y=scher; $x$y
+    device list`;
+  - a decoder (`base64`, `xxd`, `gunzip`, `openssl`, an escaped `\x`) sent to an
+    interpreter (`sh`, `bash`, `zsh`, `eval`, `python -c`, `perl -e`), for example
+    `echo <base64> | base64 -d | sh`.
+  Forms the check does not name can still pass. A script written to a file and
+  then run, a file downloaded and then run, and an encoding the check does not
+  know are not seen. The real boundary is the user account: an agent's shell
+  reaches the operator socket as `local`, and a process of the same uid can do
+  what the daemon can.
 - **Certificates.** A client certificate is valid for thirty days and states that
   it is not a CA. It is not renewed yet. The approval signs it, but nothing keeps
   or delivers it: the network listener of a later pull request will hand it to the

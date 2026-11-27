@@ -2,10 +2,6 @@ package approval
 
 import "strings"
 
-var interpreters = []string{"sh", "bash", "zsh", "dash", "eval"}
-
-var decoders = []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"}
-
 // RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, which only a person may
 // decide: no rule, no remembered answer and no mode lets them through. The check reads the command text after
 // removing quoting, backslashes and separators, so it is a text barrier. It does not see a script written to a
@@ -70,7 +66,7 @@ func spellsHerrscher(text string) bool {
 
 func runsUnreadable(raw string, words []string) bool {
 	runs := false
-	for _, interpreter := range interpreters {
+	for _, interpreter := range []string{"sh", "bash", "zsh", "dash", "eval"} {
 		if hasWord(words, interpreter) {
 			runs = true
 		}
@@ -81,7 +77,7 @@ func runsUnreadable(raw string, words []string) bool {
 	if !runs {
 		return false
 	}
-	for _, decoder := range decoders {
+	for _, decoder := range []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"} {
 		if strings.Contains(raw, decoder) {
 			return true
 		}

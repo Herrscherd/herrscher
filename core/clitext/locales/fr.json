@@ -2303,6 +2303,11 @@
     "other": "réécrire le SOUL.md d'un agent (s'applique aux nouvelles sessions)"
   },
   {
+    "id": "cli.help.cmd.agent.set_reply",
+    "description": "Aide de la commande agent set-reply",
+    "other": "choisit quand un agent répond : mention, channels ou never ; les salons sont des identifiants gateway:conversation donnés après la règle"
+  },
+  {
     "id": "cli.help.cmd.set.home",
     "description": "Help of the command set home",
     "other": "régler la catégorie ou le forum qui accueille les canaux de session"
@@ -2638,6 +2643,16 @@
     "other": "nouveau contenu de l'âme"
   },
   {
+    "id": "cli.help.param.agent.set_reply.name",
+    "description": "Aide du paramètre --name de la commande agent set-reply",
+    "other": "l'agent"
+  },
+  {
+    "id": "cli.help.param.agent.set_reply.rule",
+    "description": "Aide du paramètre --rule de la commande agent set-reply",
+    "other": "mention, channels ou never"
+  },
+  {
     "id": "cli.help.param.set.home.channel",
     "description": "Help of the --channel param of the command set home",
     "other": "identifiant de la catégorie ou du forum"
@@ -2721,6 +2736,61 @@
     "id": "cli.host.agent.soul_updated",
     "description": "Reply of a host command, agent soul updated",
     "other": "âme mise à jour pour {{.Name}} (valable pour les nouvelles sessions)."
+  },
+  {
+    "id": "cli.host.agent.reply_set",
+    "description": "Réponse d'une commande de l'hôte, règle de réponse fixée",
+    "other": "règle de réponse de {{.Name}} : {{.Rule}}."
+  },
+  {
+    "id": "cli.host.agent.show_reply",
+    "description": "Ligne de agent show, règle de réponse",
+    "other": "réponse : {{.Rule}}"
+  },
+  {
+    "id": "cli.host.agent.show_channels",
+    "description": "Ligne de agent show, salons de l'agent",
+    "other": "salons : {{.Channels}}"
+  },
+  {
+    "id": "cli.host.agent.show_no_channels",
+    "description": "Ligne de agent show, aucun salon",
+    "other": "salons : aucun"
+  },
+  {
+    "id": "cli.host.agent.show_bot",
+    "description": "Ligne de agent show, état du jeton de bot sur une passerelle",
+    "other": "jeton de bot sur {{.Kind}} : {{.State}}"
+  },
+  {
+    "id": "cli.host.agent.bot_set",
+    "description": "Mot de agent show, un jeton de bot est défini",
+    "other": "défini"
+  },
+  {
+    "id": "cli.host.agent.bot_not_set",
+    "description": "Mot de agent show, aucun jeton de bot défini",
+    "other": "non défini"
+  },
+  {
+    "id": "cli.host.err.unknown_reply_rule",
+    "description": "Réponse d'une commande de l'hôte, règle de réponse inconnue",
+    "other": "règle de réponse inconnue, utilisez mention, channels ou never"
+  },
+  {
+    "id": "cli.host.err.bad_channel",
+    "description": "Réponse d'une commande de l'hôte, salon invalide",
+    "other": "le salon {{.Channel}} n'est pas gateway:conversation"
+  },
+  {
+    "id": "cli.host.err.read_voice",
+    "description": "Réponse d'une commande de l'hôte, erreur de lecture de la voix",
+    "other": "lecture de la règle ou des salons : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.set_voice",
+    "description": "Réponse d'une commande de l'hôte, erreur d'écriture de la voix",
+    "other": "écriture de la règle ou des salons : {{.Err}}"
   },
   {
     "id": "cli.host.service.restarting",

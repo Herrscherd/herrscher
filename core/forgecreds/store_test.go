@@ -158,7 +158,7 @@ func TestFailedWriteKeepsTheExistingFileAndLeavesNoTempFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	blockWrites(t, store)
 	if putErr := store.Put(t.Context(), host, Record{AccessToken: "ghu_replacement"}); putErr == nil {
 		t.Fatalf("Put with a failing rename returned no error")
 	}

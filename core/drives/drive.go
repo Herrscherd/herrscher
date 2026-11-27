@@ -84,9 +84,9 @@ func (d Drive) Target(path Path) (string, error) {
 }
 
 // FolderList renders the exposed folders for a listing.
-func (d Drive) FolderList() string {
-	if len(d.Folders) == 0 {
+func (l Listing) FolderList() string {
+	if len(l.Folders) == 0 {
 		return "/"
 	}
-	return strings.Join(d.Folders, ", ")
+	return strings.Join(l.Folders, ", ")
 }

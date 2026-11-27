@@ -211,6 +211,10 @@ func listsApprovalRules(path []string, input contracts.Input) bool {
 	return strings.Join(path, " ") == "approve rule" && input.Get("rule") == "" && input.Get("rm") == "" && len(input.Rest) == 0
 }
 
+func unprintable(char rune) bool {
+	return !strconv.IsPrint(char)
+}
+
 func callSubject(path []string, input contracts.Input, args []string) string {
 	if canonical, ok := canonicalDriveSubject(path, input); ok {
 		return canonical
@@ -221,7 +225,7 @@ func callSubject(path []string, input contracts.Input, args []string) string {
 func verbSubject(args []string) string {
 	quoted := make([]string, 0, len(args))
 	for _, token := range args {
-		if token == "" || strings.ContainsAny(token, " \t\"'\\") {
+		if token == "" || strings.ContainsAny(token, " \t\"'\\") || strings.ContainsFunc(token, unprintable) {
 			token = strconv.Quote(token)
 		}
 		quoted = append(quoted, token)

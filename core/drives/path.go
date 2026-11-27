@@ -72,16 +72,13 @@ func pathFault(raw string) string {
 	switch {
 	case len(raw) > maxPathLength:
 		return "longer than 1024 bytes"
-	case !utf8.ValidString(raw):
-		return "not UTF-8"
 	case strings.HasPrefix(raw, "/"):
 		return "absolute"
 	case strings.ContainsRune(raw, '\\'):
 		return "holds a backslash"
-	case strings.ContainsFunc(raw, unicode.IsControl):
-		return "holds a control character"
-	case strings.ContainsFunc(raw, invisible):
-		return "holds an invisible or format character"
+	}
+	if reason := characterFault(raw); reason != "" {
+		return reason
 	}
 	trimmed := strings.TrimRight(raw, "/")
 	if trimmed == "" {
@@ -94,6 +91,18 @@ func pathFault(raw string) string {
 		case ".", "..":
 			return "holds a . or .. segment"
 		}
+	}
+	return ""
+}
+
+func characterFault(raw string) string {
+	switch {
+	case !utf8.ValidString(raw):
+		return "not UTF-8"
+	case strings.ContainsFunc(raw, unicode.IsControl):
+		return "holds a control character"
+	case strings.ContainsFunc(raw, invisible):
+		return "holds an invisible or format character"
 	}
 	return ""
 }

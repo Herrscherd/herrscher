@@ -87,7 +87,9 @@ func (c Catalog) HasRemote(name Name) (bool, error) {
 	return false, scanner.Err()
 }
 
-// AddKeyDrive records an S3 or R2 drive. The remote never enters the rclone
+// AddKeyDrive records an S3 or R2 drive, its secret first and the drive
+// after it, so a failure between the two leaves a secret no drive names,
+// never a drive without its secret. The remote never enters the rclone
 // configuration: its settings are kept with the drive, its secret in a file of
 // its own readable by the owner alone, and both reach rclone through the
 // environment of each run, so a token refresh that rewrites the rclone

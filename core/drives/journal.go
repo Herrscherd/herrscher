@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -18,14 +19,16 @@ import (
 
 const (
 	journalRotateBytes = 4 << 20
-	// JournalGenerations is how many rotated files the journal keeps beside the current one.
+	// JournalGenerations is how many rotated files each journal file keeps beside the current one.
 	JournalGenerations = 8
-	// RefusalsPerWindow is how many refusals of one session the journal records in each RefusalWindow.
-	RefusalsPerWindow = 20
-	// RefusalWindow is the span over which the refusals of one session are counted.
-	RefusalWindow = time.Minute
-	lockSuffix    = ".lock"
-	refusalsFile  = "refusals.json"
+	// EntriesPerWindow is how many listings, reads and refusals of one session the journal records in each EntryWindow.
+	EntriesPerWindow = 60
+	// EntryWindow is the span over which the entries of one session are counted.
+	EntryWindow    = time.Minute
+	lockSuffix     = ".lock"
+	ratesFile      = "session-rates.json"
+	suppressedKept = 24 * time.Hour
+	writesFile     = "writes.jsonl"
 )
 
 // Op is what a journal entry records.
@@ -52,8 +55,8 @@ const (
 	OutcomeFailed Outcome = "failed"
 )
 
-// Entry is one line of the journal. Suppressed counts the refusals of the
-// same session left out just before it, past RefusalsPerWindow.
+// Entry is one line of the journal. Suppressed counts the entries of the
+// same session left out just before it, past EntriesPerWindow.
 type Entry struct {
 	Time       time.Time `json:"time"`
 	Session    string    `json:"session,omitempty"`
@@ -87,18 +90,26 @@ type Log struct {
 }
 
 // Journal is the append only record of what sessions read and wrote on the
-// drives. It keeps its current file and JournalGenerations rotated ones, and
-// records at most RefusalsPerWindow refusals of one session in each
-// RefusalWindow, so a session that keeps being refused cannot push the
-// history out.
+// drives. Writes go to a file of their own, so no amount of listing or
+// reading pushes a write out of the history. The other file records at most
+// EntriesPerWindow entries of one session in each EntryWindow. Each file keeps
+// JournalGenerations rotated ones beside it.
 type Journal struct {
 	path string
 }
 
-type refusalCount struct {
+type sessionRate struct {
 	Start      time.Time `json:"start"`
 	Count      int       `json:"count"`
 	Suppressed int       `json:"suppressed"`
+}
+
+func isWrite(entry *Entry) bool {
+	return entry.Op == OpWrite && entry.Outcome != OutcomeRefused
+}
+
+func (j Journal) writesPath() string {
+	return filepath.Join(filepath.Dir(j.path), writesFile)
 }
 
 // Append records one entry.
@@ -111,18 +122,22 @@ func (j Journal) Append(ctx context.Context, entry Entry) error {
 		return err
 	}
 	defer release()
-	keep, err := j.admitRefusal(&entry)
-	if err != nil || !keep {
-		return err
+	target := j.writesPath()
+	if !isWrite(&entry) {
+		target = j.path
+		keep, admitErr := j.admit(&entry)
+		if admitErr != nil || !keep {
+			return admitErr
+		}
 	}
 	line, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
-	if rotateErr := j.rotateWhenFull(); rotateErr != nil {
+	if rotateErr := rotateWhenFull(target); rotateErr != nil {
 		return rotateErr
 	}
-	file, err := os.OpenFile(j.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
+	file, err := os.OpenFile(target, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return err
 	}
@@ -130,66 +145,75 @@ func (j Journal) Append(ctx context.Context, entry Entry) error {
 	return errors.Join(writeErr, file.Close())
 }
 
-func (j Journal) admitRefusal(entry *Entry) (bool, error) {
-	if entry.Outcome != OutcomeRefused || entry.Session == "" {
+func (j Journal) admit(entry *Entry) (bool, error) {
+	if entry.Session == "" {
 		return true, nil
 	}
-	counts, err := j.loadRefusals()
+	rates, err := j.loadRates()
 	if err != nil {
 		return false, err
 	}
-	count := counts[entry.Session]
-	if entry.Time.Sub(count.Start) >= RefusalWindow || entry.Time.Before(count.Start) {
-		count.Start, count.Count = entry.Time, 0
+	rate := rates[entry.Session]
+	if windowEnded(rate, entry.Time) {
+		rate.Start, rate.Count = entry.Time, 0
 	}
-	keep := count.Count < RefusalsPerWindow
+	keep := rate.Count < EntriesPerWindow
 	if keep {
-		count.Count++
-		entry.Suppressed, count.Suppressed = count.Suppressed, 0
+		rate.Count++
+		entry.Suppressed, rate.Suppressed = rate.Suppressed, 0
 	} else {
-		count.Suppressed++
+		rate.Suppressed++
 	}
-	counts[entry.Session] = count
-	return keep, j.saveRefusals(counts)
+	rates[entry.Session] = rate
+	for session, other := range rates {
+		if session != entry.Session && windowEnded(other, entry.Time) && (other.Suppressed == 0 || entry.Time.Sub(other.Start) > suppressedKept) {
+			delete(rates, session)
+		}
+	}
+	return keep, j.saveRates(rates)
 }
 
-func (j Journal) refusalsPath() string {
-	return filepath.Join(filepath.Dir(j.path), refusalsFile)
+func windowEnded(rate sessionRate, now time.Time) bool {
+	return now.Sub(rate.Start) >= EntryWindow || now.Before(rate.Start)
 }
 
-func (j Journal) loadRefusals() (map[string]refusalCount, error) {
-	counts := make(map[string]refusalCount)
-	raw, err := os.ReadFile(filepath.Clean(j.refusalsPath()))
+func (j Journal) ratesPath() string {
+	return filepath.Join(filepath.Dir(j.path), ratesFile)
+}
+
+func (j Journal) loadRates() (map[string]sessionRate, error) {
+	rates := make(map[string]sessionRate)
+	raw, err := os.ReadFile(filepath.Clean(j.ratesPath()))
 	if errors.Is(err, fs.ErrNotExist) {
-		return counts, nil
+		return rates, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if decodeErr := json.Unmarshal(raw, &counts); decodeErr != nil {
-		slog.Warn("drive refusal counts unreadable, counting again", "err", decodeErr)
-		return make(map[string]refusalCount), nil
+	if decodeErr := json.Unmarshal(raw, &rates); decodeErr != nil {
+		slog.Warn("drive session rates unreadable, counting again", "err", decodeErr)
+		return make(map[string]sessionRate), nil
 	}
-	return counts, nil
+	return rates, nil
 }
 
-func (j Journal) saveRefusals(counts map[string]refusalCount) error {
-	raw, err := json.Marshal(counts)
+func (j Journal) saveRates(rates map[string]sessionRate) error {
+	raw, err := json.Marshal(rates)
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(j.refusalsPath(), raw, fileMode)
+	return atomicfile.Write(j.ratesPath(), raw, fileMode)
 }
 
-func (j Journal) generation(index int) string {
+func generation(path string, index int) string {
 	if index == 0 {
-		return j.path
+		return path
 	}
-	return j.path + "." + strconv.Itoa(index)
+	return path + "." + strconv.Itoa(index)
 }
 
-func (j Journal) rotateWhenFull() error {
-	info, err := os.Stat(j.path)
+func rotateWhenFull(path string) error {
+	info, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -200,47 +224,68 @@ func (j Journal) rotateWhenFull() error {
 		return nil
 	}
 	for index := JournalGenerations; index > 0; index-- {
-		if err := os.Rename(j.generation(index-1), j.generation(index)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := os.Rename(generation(path, index-1), generation(path, index)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 	}
 	return nil
 }
 
-// Read returns the last entries that match filter, oldest first, at most limit of them.
+// Read returns the last entries that match filter, oldest first, at most
+// limit of them, or all of them when limit is 0. It reads newest first and
+// stops once it holds limit entries of each file.
 func (j Journal) Read(filter Filter, limit int) (Log, error) {
 	var log Log
-	for index := JournalGenerations; index >= 0; index-- {
-		if err := readEntries(j.generation(index), filter, &log); err != nil {
-			return Log{}, err
-		}
+	activity, err := newestEntries(j.path, filter, limit, &log)
+	if err != nil {
+		return Log{}, err
 	}
-	if limit > 0 && len(log.Entries) > limit {
-		log.Entries = log.Entries[len(log.Entries)-limit:]
+	writes, err := newestEntries(j.writesPath(), filter, limit, &log)
+	if err != nil {
+		return Log{}, err
 	}
+	merged := append(activity, writes...)
+	slices.SortStableFunc(merged, func(left, right Entry) int { return right.Time.Compare(left.Time) })
+	if limit > 0 && len(merged) > limit {
+		merged = merged[:limit]
+	}
+	slices.Reverse(merged)
+	log.Entries = merged
 	return log, nil
 }
 
-func readEntries(path string, filter Filter, log *Log) error {
-	raw, err := os.ReadFile(filepath.Clean(path))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for line := range bytes.Lines(raw) {
-		if len(bytes.TrimSpace(line)) == 0 {
+func newestEntries(path string, filter Filter, limit int, log *Log) ([]Entry, error) {
+	var found []Entry
+	for index := 0; index <= JournalGenerations; index++ {
+		raw, err := os.ReadFile(filepath.Clean(generation(path, index)))
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		var entry Entry
-		if json.Unmarshal(line, &entry) != nil {
-			log.Unreadable++
-			continue
+		if err != nil {
+			return nil, err
 		}
-		if filter.matches(&entry) {
-			log.Entries = append(log.Entries, entry)
+		lines := bytes.Split(bytes.TrimRight(raw, "\n"), []byte("\n"))
+		for line := len(lines) - 1; line >= 0; line-- {
+			if limit > 0 && len(found) == limit {
+				return found, nil
+			}
+			found = appendMatch(found, lines[line], filter, log)
 		}
 	}
-	return nil
+	return found, nil
+}
+
+func appendMatch(found []Entry, line []byte, filter Filter, log *Log) []Entry {
+	if len(bytes.TrimSpace(line)) == 0 {
+		return found
+	}
+	var entry Entry
+	if json.Unmarshal(line, &entry) != nil {
+		log.Unreadable++
+		return found
+	}
+	if filter.matches(&entry) {
+		found = append(found, entry)
+	}
+	return found
 }

@@ -131,18 +131,18 @@ func (c Catalog) Update(ctx context.Context, name string, change func(*Drive) er
 	})
 }
 
-// Remove drops one drive from the catalogue.
+// Remove drops one drive from the catalogue, then its secret. A failure
+// between the two leaves a secret no drive names, which is ignored and
+// replaced by the next add of that name; it never leaves a drive without its
+// secret.
 func (c Catalog) Remove(ctx context.Context, name string) error {
 	return c.edit(ctx, func(all []Drive) ([]Drive, error) {
 		index := slices.IndexFunc(all, func(d Drive) bool { return d.Name == name })
 		if index < 0 {
 			return nil, &NotFoundError{Name: name}
 		}
-		if err := c.forgetSecret(name); err != nil {
-			return nil, err
-		}
 		return slices.Delete(all, index, index+1), nil
-	})
+	}, func() error { return c.forgetSecret(name) })
 }
 
 func ensureDir(path string) error {
@@ -160,7 +160,7 @@ func (c Catalog) hold(ctx context.Context) (func(), error) {
 	return filelock.Acquire(ctx, filepath.Join(c.dir, catalogLockFile))
 }
 
-func (c Catalog) edit(ctx context.Context, change func([]Drive) ([]Drive, error)) error {
+func (c Catalog) edit(ctx context.Context, change func([]Drive) ([]Drive, error), committed ...func() error) error {
 	release, err := c.hold(ctx)
 	if err != nil {
 		return err
@@ -178,5 +178,13 @@ func (c Catalog) edit(ctx context.Context, change func([]Drive) ([]Drive, error)
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(filepath.Join(c.dir, catalogFile), append(raw, '\n'), fileMode)
+	if err := atomicfile.Write(filepath.Join(c.dir, catalogFile), append(raw, '\n'), fileMode); err != nil {
+		return err
+	}
+	for _, after := range committed {
+		if err := after(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -218,7 +218,7 @@ func (d driveVerbs) list(ctx context.Context, input contracts.Input) (contracts.
 	return contracts.DataResult(strings.Join(lines, "\n")), nil
 }
 
-func driveLine(drive drives.Drive) string {
+func driveLine(drive drives.Listing) string {
 	var access strings.Builder
 	access.WriteString(drive.Default.String())
 	for _, agent := range slices.Sorted(maps.Keys(drive.Agents)) {
@@ -379,11 +379,14 @@ func (d driveVerbs) remove(ctx context.Context, input contracts.Input) (contract
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	if _, err := d.service.Catalog().Find(target.drive); err != nil {
+	drive, err := d.service.Catalog().Find(target.drive)
+	if err != nil {
 		return contracts.Result{}, err
 	}
-	if err := d.service.Rclone().DeleteRemote(ctx, target.drive); err != nil {
-		return contracts.Result{}, err
+	if len(drive.Settings) == 0 {
+		if err := d.service.Rclone().DeleteRemote(ctx, target.drive); err != nil {
+			return contracts.Result{}, err
+		}
 	}
 	if err := d.service.Catalog().Remove(ctx, target.drive); err != nil {
 		return contracts.Result{}, err

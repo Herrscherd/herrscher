@@ -84,20 +84,31 @@ func (s Service) Catalog() Catalog { return s.catalog }
 // Rclone is the runner the service uses.
 func (s Service) Rclone() Rclone { return s.rclone }
 
-// Visible lists the drives the caller holds at least read access on, each with that access.
-func (s Service) Visible(caller Caller) ([]Drive, error) {
+// Listing is a drive as drive list shows it: its kind, its folders and the
+// access of the agents, never an rclone setting.
+type Listing struct {
+	Name    string            `json:"name"`
+	Kind    Kind              `json:"kind"`
+	Folders []string          `json:"folders,omitempty"`
+	Default Access            `json:"default"`
+	Agents  map[string]Access `json:"agents,omitempty"`
+}
+
+// Visible lists the drives the caller holds at least read access on. The
+// operator sees every drive and every access, a session its own access alone.
+func (s Service) Visible(caller Caller) ([]Listing, error) {
 	all, err := s.catalog.Load()
 	if err != nil {
 		return nil, err
 	}
-	if caller.isOperator() {
-		return all, nil
-	}
-	visible := make([]Drive, 0, len(all))
+	visible := make([]Listing, 0, len(all))
 	for _, drive := range all {
-		held := drive.AccessOf(caller.Agent)
-		if held.Allows(AccessRead) {
-			visible = append(visible, Drive{Name: drive.Name, Kind: drive.Kind, Folders: drive.Folders, Default: held})
+		if caller.isOperator() {
+			visible = append(visible, Listing{Name: drive.Name, Kind: drive.Kind, Folders: drive.Folders, Default: drive.Default, Agents: drive.Agents})
+			continue
+		}
+		if held := drive.AccessOf(caller.Agent); held.Allows(AccessRead) {
+			visible = append(visible, Listing{Name: drive.Name, Kind: drive.Kind, Folders: drive.Folders, Default: held})
 		}
 	}
 	return visible, nil
@@ -161,7 +172,9 @@ func (s Service) admit(caller Caller, request Request) (Drive, Path, error) {
 	return drive, path, nil
 }
 
-// List lists one level of a folder of the drive. The root of a drive that exposes folders lists those folders.
+// List lists one level of a folder of the drive. The root of a drive that
+// exposes folders lists those folders, without rclone and without a journal
+// entry, since nothing of the remote is read.
 func (s Service) List(ctx context.Context, caller Caller, name, rawPath string) ([]Item, bool, error) {
 	drive, path, err := s.Admit(ctx, caller, Request{Drive: name, Path: rawPath, Op: OpList})
 	if err != nil {
@@ -176,7 +189,6 @@ func (s Service) List(ctx context.Context, caller Caller, name, rawPath string) 
 		for _, folder := range folders {
 			items = append(items, Item{Path: folder.String(), Name: folder.String(), IsDir: true})
 		}
-		s.record(ctx, caller, Entry{Drive: name, Op: OpList, Outcome: OutcomeDone})
 		return items, false, nil
 	}
 	var items []Item
@@ -250,7 +262,10 @@ func (s Service) runnerFor(drive Drive) (Rclone, error) {
 	if err != nil {
 		return Rclone{}, err
 	}
-	return s.rclone.With(env), nil
+	if len(drive.Settings) > 0 {
+		return s.rclone.With(env).WithoutConfig(), nil
+	}
+	return s.rclone, nil
 }
 
 func (s Service) readFile(ctx context.Context, drive Drive, path Path, dst io.Writer, limit int64) (int64, error) {

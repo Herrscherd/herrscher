@@ -31,6 +31,7 @@ const (
 	logPrefixFields    = 3
 	logDateSlashes     = 2
 	rcloneLockSuffix   = ".lock"
+	rcloneGateSuffix   = ".gate"
 	askPasswordOff     = "--ask-password=false"
 )
 
@@ -71,11 +72,14 @@ func (e *TooLargeError) Error() string {
 // RCLONE_ variable of the environment left out, so the operator's own rclone
 // setup never leaks in. A run that may refresh a token holds a shared lock
 // beside the configuration, and a run that rewrites it on purpose holds that
-// lock alone, so a sign in or a removal never races a refresh.
+// lock alone, so a sign in or a removal never races a refresh. A gate taken
+// before either lets a waiting sign in or removal stop new shared holders, so
+// steady reads cannot starve it.
 type Rclone struct {
-	argv   []string
-	config string
-	env    []string
+	argv     []string
+	config   string
+	env      []string
+	unlocked bool
 }
 
 // NewRclone builds the runner. command is split on spaces, and an empty one runs rclone from PATH.
@@ -90,6 +94,13 @@ func NewRclone(command, config string) Rclone {
 // With is the runner with env added to the environment of each rclone it starts.
 func (r Rclone) With(env []string) Rclone {
 	r.env = append(append([]string(nil), r.env...), env...)
+	return r
+}
+
+// WithoutConfig is the runner for a remote defined in the environment alone,
+// which never reads nor writes the configuration, so it takes no lock on it.
+func (r Rclone) WithoutConfig() Rclone {
+	r.unlocked = true
 	return r
 }
 
@@ -239,9 +250,17 @@ func (r Rclone) CreateRemote(ctx context.Context, name, rcloneType string, param
 }
 
 func (r Rclone) shared(ctx context.Context) (func(), error) {
+	if r.unlocked {
+		return func() {}, nil
+	}
 	if err := ensureDir(r.config); err != nil {
 		return nil, err
 	}
+	passed, err := filelock.Acquire(ctx, r.config+rcloneGateSuffix)
+	if err != nil {
+		return nil, err
+	}
+	defer passed()
 	return filelock.AcquireShared(ctx, r.config+rcloneLockSuffix)
 }
 
@@ -249,7 +268,19 @@ func (r Rclone) exclusive(ctx context.Context) (func(), error) {
 	if err := ensureDir(r.config); err != nil {
 		return nil, err
 	}
-	return filelock.Acquire(ctx, r.config+rcloneLockSuffix)
+	closeGate, err := filelock.Acquire(ctx, r.config+rcloneGateSuffix)
+	if err != nil {
+		return nil, err
+	}
+	release, err := filelock.Acquire(ctx, r.config+rcloneLockSuffix)
+	if err != nil {
+		closeGate()
+		return nil, err
+	}
+	return func() {
+		release()
+		closeGate()
+	}, nil
 }
 
 func (r Rclone) prepare(ctx context.Context, args []string) *exec.Cmd {

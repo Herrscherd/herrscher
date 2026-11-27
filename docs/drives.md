@@ -23,13 +23,20 @@ Only rclone writes that file: `rclone config create` when you sign in,
 `rclone config delete` when you remove a drive, and rclone itself when it
 refreshes a token. herrscher never edits it. Every rclone run that may refresh a
 token holds a shared lock, `drives/rclone.conf.lock`, and a sign in or a
-removal holds it alone, so neither runs while a refresh may rewrite the file. A
-sign in in progress makes the drive verbs wait until it ends.
+removal holds it alone, so neither runs while a refresh may rewrite the file.
+A sign in or a removal that waits closes a gate, `drives/rclone.conf.gate`,
+that every new run passes first, so a steady flow of reads cannot keep it
+waiting. A sign in in progress makes the OAuth drive verbs wait until it ends.
+An S3 or R2 drive never touches the file, so it takes no lock and never
+waits.
 
 The OAuth tokens live in `drives/rclone.conf`. An S3 or R2 drive never enters
 it: its settings are kept with the drive in `drives/drives.json`, its secret in
 `drives/secrets.json` (0600), and both reach rclone as `RCLONE_CONFIG_<NAME>_*`
-variables in the environment of each run, which only your account can read. No
+variables in the environment of each run, which only your account can read.
+The secret is written before the drive and forgotten after it, so a failure in
+between leaves at most a secret no drive names, which is ignored and replaced by
+the next add of that name, never a drive without its secret. No
 token or key is ever in a worktree, in the arguments of a process, in an
 approval question or on a gateway.
 
@@ -78,9 +85,9 @@ lets them run, act on every drive.
 of one agent, and `--agent '*'` the default. Only you grant it: a session is
 never let run `drive grant`, not even with your approval, not even as a
 steward, since it would grant itself rights. `drive list` shows each drive,
-its kind, its folders and the access of each agent. A session sees only the
-drives its agent can at least read, with its own access and nothing about the
-others.
+its kind, its folders and the access of each agent, never the settings of an
+S3 or R2 drive. A session sees only the drives its agent can at least read,
+with its own access and nothing about the others.
 
 Every path is checked before rclone runs, and for a session before you are
 asked anything. It is relative, slash separated, UTF-8, with no empty, `.` or
@@ -116,6 +123,10 @@ A session's `--to` and `--from` are paths inside its worktree, and herrscher
 opens them through an `os.Root` of the worktree:
 
 - `..`, an absolute path and a path through a symbolic link are refused;
+- a control, invisible or format character is refused in `--to` and `--from`
+  as in a drive path, for you too, so the question never shows a disguised
+  file name; a segment holding `~` and a digit, the shape of a Windows short
+  name such as `GIT~1`, is refused for a session;
 - a path under `.git`, at any depth, or under a file herrscher materializes for
   the agent (`.claude`, `.codex`, `.cursor`, `.grok`, `.herrscher`, `.mcp.json`,
   `AGENTS.md`) is refused, letter case aside, so a read cannot replace the
@@ -124,7 +135,9 @@ opens them through an `os.Root` of the worktree:
   waiting, so a FIFO or a device is refused at once;
 - `--to` streams into a staging file beside the target, readable by you alone
   (0600, folders 0700), renamed over the target once complete: no copy is held
-  in the daemon's memory, and a failed copy leaves nothing behind.
+  in the daemon's memory, and a failed copy leaves nothing behind. A staging
+  file a stopped daemon left, `.herrscher-drive-*`, is removed by the next
+  copy into that folder once it is an hour old.
 
 From your terminal, `herrscher drive` turns a relative `--to` or `--from` into
 an absolute path before it reaches the daemon. Any other caller, a human of the
@@ -157,17 +170,23 @@ about to use, in that order, never about the arguments as typed.
 
 ## The journal
 
-Every listing, read and write, done, refused or failed, is a line of
-`drives/journal.jsonl`: the time, the session and its agent, the drive, the
-path, the operation, the bytes and the outcome, with the reason of a refusal or
-a failure. Your own operations are journaled with no session. The file is
-rotated at 4 MiB, and eight previous files are kept (`journal.jsonl.1` to
-`journal.jsonl.8`), which `drive log` reads too, oldest first. A line it cannot
-read is counted and said under the listing.
+Every listing of the remote, read and write, done, refused or failed, is a
+line of the journal: the time, the session and its agent, the drive, the path,
+the operation, the bytes and the outcome, with the reason of a refusal or a
+failure. Your own operations are journaled with no session. The root of a
+drive with folders lists those folders without reading the remote, and is not
+journaled.
 
-A session that keeps being refused cannot push the history out: at most 20
-refusals of one session are recorded per minute, and the next recorded refusal
-says how many were left out before it.
+Writes that ran or failed go to `drives/writes.jsonl`, everything else to
+`drives/journal.jsonl`, so no amount of listing or reading pushes a write out
+of the history. Each file is rotated at 4 MiB and keeps eight previous files
+(`.1` to `.8`). `drive log` reads both newest first and stops once it holds
+the entries it shows. A line it cannot read is counted and said under the
+listing.
+
+A session cannot flood `journal.jsonl` either: at most 60 of its listings,
+reads and refusals are recorded per minute, and the next recorded one says how
+many were left out before it.
 
 ## Limits
 

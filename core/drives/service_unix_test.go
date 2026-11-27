@@ -14,6 +14,7 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/drives"
 	"github.com/Herrscherd/herrscher/core/drives/drivestest"
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
 type rig struct {
@@ -350,5 +351,135 @@ func TestAReadPastTheInlineLimitIsRefused(t *testing.T) {
 	_, err := r.service.Read(t.Context(), r.agent, "gdrive", "big.txt")
 	if _, tooLarge := errors.AsType[*drives.TooLargeError](err); !tooLarge {
 		t.Fatalf("err = %v, want a TooLargeError", err)
+	}
+}
+
+func TestTheFolderRootIsListedWithoutRcloneNorAJournalEntry(t *testing.T) {
+	r := newRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Folders: []string{"Neublox", "Karamon"}, Default: drives.AccessRead})
+	for range 100 {
+		items, _, err := r.service.List(t.Context(), r.agent, "gdrive", "")
+		if err != nil || len(items) != 2 {
+			t.Fatalf("List = %+v, %v", items, err)
+		}
+	}
+	if entries := r.journal(t); len(entries) != 0 {
+		t.Fatalf("journal holds %d entries, want none", len(entries))
+	}
+	if runs := r.fake.Runs(t); len(runs) != 0 {
+		t.Fatalf("rclone ran: %q", runs)
+	}
+}
+
+func TestALocalValueThatWouldMisleadTheQuestionIsRefused(t *testing.T) {
+	r := newRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Default: drives.AccessWrite})
+	r.fake.Put(t, "gdrive", "a.md", "x")
+	for _, local := range []string{"out.md\nallow", "‮dm.tuo", "out​.md", "GIT~1/config", "CLAUDE~1/settings.local.json"} {
+		if _, err := r.service.Write(t.Context(), r.agent, "gdrive", "a.md", local); err == nil {
+			t.Errorf("Write from %q succeeded, want a refusal", local)
+		}
+		if _, err := r.service.ReadTo(t.Context(), r.agent, "gdrive", "a.md", local); err == nil {
+			t.Errorf("ReadTo %q succeeded, want a refusal", local)
+		}
+	}
+	if _, err := r.service.ReadTo(t.Context(), drives.Caller{}, "gdrive", "a.md", filepath.Join(t.TempDir(), "x\ny")); err == nil {
+		t.Fatal("the operator's copy to a path holding a line break succeeded")
+	}
+}
+
+func TestACopySweepsTheStagingFilesADeadDaemonLeft(t *testing.T) {
+	r := newRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Default: drives.AccessRead})
+	r.fake.Put(t, "gdrive", "a.md", "x")
+	stale := filepath.Join(r.agent.Worktree, "out", ".herrscher-drive-0000000000000000")
+	fresh := filepath.Join(r.agent.Worktree, "out", ".herrscher-drive-1111111111111111")
+	r.worktreeFile(t, "out/.herrscher-drive-0000000000000000", "half")
+	r.worktreeFile(t, "out/.herrscher-drive-1111111111111111", "running")
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.service.ReadTo(t.Context(), r.agent, "gdrive", "a.md", "out/a.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Fatal("the stale staging file is still there")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("a staging file of a running copy was swept: %v", err)
+	}
+}
+
+func TestAKeyDriveNeverWaitsForTheConfigLock(t *testing.T) {
+	fake := drivestest.Install(t)
+	catalog := drives.Open(filepath.Join(t.TempDir(), "drives"))
+	if err := catalog.AddKeyDrive(t.Context(), drives.Drive{Name: "r2", Kind: drives.KindR2, Default: drives.AccessRead}, drives.KeyRemote{Kind: drives.KindR2, AccessKeyID: "AKID", Secret: "s", Endpoint: drives.R2Endpoint("acct")}); err != nil {
+		t.Fatal(err)
+	}
+	fake.Put(t, "r2", "bucket/a.md", "x")
+	release, err := filelock.Acquire(t.Context(), catalog.RcloneConfig()+".lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	service := drives.NewService(catalog, drives.NewRclone(fake.Command, catalog.RcloneConfig()))
+	done := make(chan error, 1)
+	go func() {
+		_, readErr := service.Read(t.Context(), drives.Caller{}, "r2", "bucket/a.md")
+		done <- readErr
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a key drive waited for the lock of the rclone configuration")
+	}
+}
+
+func TestAWaitingRemovalStopsNewReads(t *testing.T) {
+	r := newRig(t, drives.Drive{Name: "gdrive", Kind: drives.KindGoogleDrive, Default: drives.AccessRead})
+	r.fake.Put(t, "gdrive", "a.md", "x")
+	hold := r.fake.HoldReads(t)
+	first := make(chan error, 1)
+	go func() {
+		_, err := r.service.Read(t.Context(), drives.Caller{}, "gdrive", "a.md")
+		first <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for !hold.Started() {
+		if time.Now().After(deadline) {
+			t.Fatal("the first read never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	removed := make(chan error, 1)
+	go func() { removed <- r.service.Rclone().DeleteRemote(t.Context(), "gdrive") }()
+	time.Sleep(300 * time.Millisecond)
+	second := make(chan error, 1)
+	go func() {
+		_, err := r.service.Read(t.Context(), drives.Caller{}, "gdrive", "a.md")
+		second <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+	hold.Release(t)
+	for _, done := range []chan error{first, removed} {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-second
+	runs := r.fake.Runs(t)
+	deleted, statsAfter := -1, 0
+	for index, run := range runs {
+		if strings.HasSuffix(run, "config delete gdrive") {
+			deleted = index
+		}
+		if deleted >= 0 && strings.Contains(run, "lsjson --stat") {
+			statsAfter++
+		}
+	}
+	stats := strings.Count(strings.Join(runs, "\n"), "lsjson --stat")
+	if deleted < 0 || stats != 2 || statsAfter != 1 {
+		t.Fatalf("runs:\n%s\nwant the second read to start after the removal", strings.Join(runs, "\n"))
 	}
 }

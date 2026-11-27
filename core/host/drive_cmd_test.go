@@ -386,3 +386,37 @@ func TestTheDrivesCheckDegradesOnlyWhenADriveNeedsRclone(t *testing.T) {
 		t.Fatalf("a drive and rclone: %+v, %+v, want ok with the version", report, facts.Drives)
 	}
 }
+
+func TestTheDriveListingNeverShowsAKeyDrivesSettings(t *testing.T) {
+	drivestest.Install(t)
+	partDir := t.TempDir()
+	catalog := drives.Open(DrivesDir(filepath.Join(partDir, "state.json")))
+	if err := catalog.AddKeyDrive(t.Context(), drives.Drive{Name: "r2", Kind: drives.KindR2}, drives.KeyRemote{Kind: drives.KindR2, AccessKeyID: "AKIDVISIBLE", Secret: "s", Endpoint: drives.R2Endpoint("acct")}); err != nil {
+		t.Fatal(err)
+	}
+	verbs := newDriveVerbs(clitext.NewMessages(), fixedLanguage(i18n.English), nil, partDir)
+	for name, ctx := range map[string]context.Context{"operator": withLocalPrincipal(t.Context()), "gateway human": contracts.WithPrincipal(t.Context(), "chat:42")} {
+		for _, asJSON := range []bool{false, true} {
+			res, err := verbs.list(ctx, contracts.Input{JSON: asJSON})
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := cli.Text(res, i18n.English)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out, "AKIDVISIBLE") || strings.Contains(out, "acct") || !strings.Contains(out, "r2") {
+				t.Fatalf("%s, json %v: %q shows a setting or misses the drive", name, asJSON, out)
+			}
+		}
+	}
+}
+
+func TestAQuestionSubjectQuotesWhatCouldDisguiseIt(t *testing.T) {
+	for _, token := range []string{"out.md\nallow", "‮dm.tuo", "a​b"} {
+		subject := verbSubject([]string{"drive", "write", "gdrive", "a.md", "--from", token})
+		if strings.ContainsAny(subject, "\n‮​") {
+			t.Fatalf("subject %q holds the raw character", subject)
+		}
+	}
+}

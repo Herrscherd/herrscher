@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 const (
@@ -17,16 +18,22 @@ const (
 	localDirMode   = os.FileMode(0o700)
 	tempNameBytes  = 8
 	tempNamePrefix = ".herrscher-drive-"
+	stagingStale   = time.Hour
 )
 
 var (
 	// ErrLocalPathProtected reports a session path under .git or a file herrscher materializes for the agent.
 	ErrLocalPathProtected = errors.New("the path is under .git or a file herrscher writes for the agent, which a drive never reads into or sends")
+	// ErrLocalShortName reports a session path with a segment shaped like a Windows short name, such as GIT~1, which could name a protected folder.
+	ErrLocalShortName = errors.New("a segment holds ~ and a digit, the shape of a Windows short name, which could name a protected folder")
 	// ErrLocalSymlink reports a session path that goes through a symbolic link.
 	ErrLocalSymlink = errors.New("the path goes through a symbolic link")
 )
 
 func (s Service) checkLocal(caller Caller, raw string) error {
+	if reason := characterFault(raw); reason != "" {
+		return &InvalidPathError{Path: raw, Reason: reason}
+	}
 	if caller.isOperator() {
 		if !filepath.IsAbs(raw) {
 			return ErrLocalPathOutside
@@ -41,12 +48,20 @@ func (s Service) checkLocal(caller Caller, raw string) error {
 	}
 	segments := strings.Split(filepath.ToSlash(filepath.Clean(raw)), "/")
 	for index, segment := range segments {
+		if looksShortName(segment) {
+			return ErrLocalShortName
+		}
 		protected := strings.EqualFold(segment, gitSegment) || (index == 0 && slices.ContainsFunc(s.protected, func(name string) bool { return strings.EqualFold(name, segment) }))
 		if protected {
 			return ErrLocalPathProtected
 		}
 	}
 	return nil
+}
+
+func looksShortName(segment string) bool {
+	tilde := strings.IndexByte(segment, '~')
+	return tilde >= 0 && tilde+1 < len(segment) && segment[tilde+1] >= '0' && segment[tilde+1] <= '9'
 }
 
 func (s Service) localRoot(caller Caller, raw string) (*os.Root, string, error) {
@@ -116,6 +131,7 @@ func createStaging(root *os.Root, name string) (*os.File, string, error) {
 			return nil, "", err
 		}
 	}
+	sweepStaleStaging(root, filepath.Dir(name))
 	suffix := make([]byte, tempNameBytes)
 	if _, err := rand.Read(suffix); err != nil {
 		return nil, "", err
@@ -123,6 +139,27 @@ func createStaging(root *os.Root, name string) (*os.File, string, error) {
 	staging := filepath.Join(filepath.Dir(name), tempNamePrefix+hex.EncodeToString(suffix))
 	file, err := root.OpenFile(staging, os.O_WRONLY|os.O_CREATE|os.O_EXCL|stagingOpenFlags, localFileMode)
 	return file, staging, err
+}
+
+func sweepStaleStaging(root *os.Root, dir string) {
+	folder, err := root.Open(dir)
+	if err != nil {
+		return
+	}
+	defer closeLocal(folder)
+	entries, err := folder.ReadDir(-1)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), tempNamePrefix) || !entry.Type().IsRegular() {
+			continue
+		}
+		info, err := entry.Info()
+		if err == nil && time.Since(info.ModTime()) > stagingStale {
+			discardStaging(root, filepath.Join(dir, entry.Name()))
+		}
+	}
 }
 
 func discardStaging(root *os.Root, staging string) {

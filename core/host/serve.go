@@ -254,8 +254,9 @@ func loadHubState(opts Options) (*state.State, error) {
 		return nil, err
 	}
 	partDir := filepath.Dir(opts.StatePath)
-	for _, sess := range store.SnapshotSessions() {
-		logCleanup(atomicfile.Sweep(state.TranscriptPath(partDir, sess.Name)))
+	sessions := store.SnapshotSessions()
+	for idx := range sessions {
+		logCleanup(atomicfile.Sweep(state.TranscriptPath(partDir, sessions[idx].Name)))
 	}
 	var home *state.HomeRef
 	if opts.Home != nil {

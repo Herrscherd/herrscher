@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func blockStateSaves(t *testing.T, statePath string) func() {
+func blockStateSaves(t *testing.T, statePath string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows ignores directory modes, so a failed state save cannot be produced")
@@ -19,11 +19,16 @@ func blockStateSaves(t *testing.T, statePath string) func() {
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	unblock := func() {
+	t.Cleanup(func() {
 		if err := os.Chmod(dir, 0o700); err != nil {
 			t.Error(err)
 		}
+	})
+}
+
+func unblockStateSaves(t *testing.T, statePath string) {
+	t.Helper()
+	if err := os.Chmod(filepath.Dir(statePath), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	t.Cleanup(unblock)
-	return unblock
 }

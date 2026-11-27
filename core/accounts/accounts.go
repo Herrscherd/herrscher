@@ -228,7 +228,7 @@ func (s Store) loadDefaults() (map[string]string, error) {
 	if err := atomicfile.Sweep(path); err != nil {
 		return nil, fmt.Errorf("sweep account defaults: %w", err)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return make(map[string]string), nil
 	}

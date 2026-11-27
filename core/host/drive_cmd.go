@@ -361,17 +361,17 @@ func (d driveVerbs) grant(ctx context.Context, input contracts.Input) (contracts
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	agent := strings.TrimSpace(input.Get(paramDriveAgent))
-	if agent == "" {
+	named := strings.TrimSpace(input.Get(paramDriveAgent))
+	if named == "" {
 		return contracts.Result{}, errDriveAgentMissing
 	}
 	if err := d.service.Catalog().Update(ctx, target.drive, func(drive *drives.Drive) error {
-		*drive = drive.WithAccess(agent, access)
+		*drive = drive.WithAccess(named, access)
 		return nil
 	}); err != nil {
 		return contracts.Result{}, err
 	}
-	return contracts.DataResult(d.text(clitext.HostDriveGranted, clitext.Params{clitext.ParamDrive: target.drive, clitext.ParamAgent: agent, clitext.ParamAccess: access.String()})), nil
+	return contracts.DataResult(d.text(clitext.HostDriveGranted, clitext.Params{clitext.ParamDrive: target.drive, clitext.ParamAgent: named, clitext.ParamAccess: access.String()})), nil
 }
 
 func (d driveVerbs) remove(ctx context.Context, input contracts.Input) (contracts.Result, error) {

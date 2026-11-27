@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -165,7 +166,8 @@ func (j Journal) loadRefusals() (map[string]refusalCount, error) {
 	if err != nil {
 		return nil, err
 	}
-	if json.Unmarshal(raw, &counts) != nil {
+	if decodeErr := json.Unmarshal(raw, &counts); decodeErr != nil {
+		slog.Warn("drive refusal counts unreadable, counting again", "err", decodeErr)
 		return make(map[string]refusalCount), nil
 	}
 	return counts, nil

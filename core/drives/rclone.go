@@ -31,6 +31,7 @@ const (
 	logPrefixFields    = 3
 	logDateSlashes     = 2
 	rcloneLockSuffix   = ".lock"
+	askPasswordOff     = "--ask-password=false"
 )
 
 var (
@@ -176,7 +177,7 @@ func (r Rclone) Write(ctx context.Context, target string, body io.Reader, size i
 		return err
 	}
 	defer release()
-	cmd := r.prepare(ctx, []string{"--ask-password=false", "rcat", "--size", strconv.FormatInt(size, 10), "--", target})
+	cmd := r.prepare(ctx, []string{askPasswordOff, "rcat", "--size", strconv.FormatInt(size, 10), "--", target})
 	cmd.Stdin = body
 	errOut := &tailBuffer{limit: stderrBytes}
 	cmd.Stdout, cmd.Stderr = io.Discard, errOut
@@ -205,7 +206,7 @@ func (r Rclone) DeleteRemote(ctx context.Context, name string) error {
 		return err
 	}
 	defer release()
-	cmd := r.prepare(ctx, []string{"--ask-password=false", "config", "delete", name})
+	cmd := r.prepare(ctx, []string{askPasswordOff, "config", "delete", name})
 	errOut := &tailBuffer{limit: stderrBytes}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewReader(nil), io.Discard, errOut
 	if runErr := cmd.Run(); runErr != nil {
@@ -267,7 +268,7 @@ func (r Rclone) stream(ctx context.Context, operation string, consume func(io.Re
 	defer release()
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	cmd := r.prepare(runCtx, append([]string{"--ask-password=false"}, args...))
+	cmd := r.prepare(runCtx, append([]string{askPasswordOff}, args...))
 	cmd.Stdin = bytes.NewReader(nil)
 	errOut := &tailBuffer{limit: stderrBytes}
 	cmd.Stderr = errOut

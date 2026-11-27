@@ -209,16 +209,14 @@ func TestNoDriveVerbPrintsTheTokenOfTheRemote(t *testing.T) {
 	}
 }
 
-func (r driveRig) refusedWithoutAQuestion(t *testing.T, argv ...string) error {
+func (r driveRig) refusedWithoutAQuestion(t *testing.T, argv ...string) {
 	t.Helper()
-	_, err := r.dispatch(t, argv...)
-	if err == nil {
+	if _, err := r.dispatch(t, argv...); err == nil {
 		t.Fatalf("%v ran, want a refusal", argv)
 	}
 	if pending := pendingApprovals(r.approvals); len(pending) != 0 {
 		t.Fatalf("%v asked the operator: %+v", argv, pending)
 	}
-	return err
 }
 
 func TestAWriteNamedTwiceIsRefusedBeforeAnyQuestion(t *testing.T) {

@@ -219,12 +219,12 @@ func TestACopyIsPrivateAndLeavesNoStagingFile(t *testing.T) {
 		t.Fatalf("ReadTo = %d, %v", size, err)
 	}
 	full := filepath.Join(r.agent.Worktree, "assets", "img.png")
-	if raw, err := os.ReadFile(full); err != nil || string(raw) != "\x89PNG\xff\xfe" {
-		t.Fatalf("copied file = %q, %v", raw, err)
+	if raw, readErr := os.ReadFile(full); readErr != nil || string(raw) != "\x89PNG\xff\xfe" {
+		t.Fatalf("copied file = %q, %v", raw, readErr)
 	}
 	for path, want := range map[string]os.FileMode{full: 0o600, filepath.Dir(full): 0o700} {
-		if info, err := os.Stat(path); err != nil || info.Mode().Perm() != want {
-			t.Errorf("%s mode = %v, %v, want %v", path, info.Mode().Perm(), err, want)
+		if info, statErr := os.Stat(path); statErr != nil || info.Mode().Perm() != want {
+			t.Errorf("%s mode = %v, %v, want %v", path, info, statErr, want)
 		}
 	}
 	entries, err := os.ReadDir(filepath.Dir(full))

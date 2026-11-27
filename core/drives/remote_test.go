@@ -41,11 +41,11 @@ func TestAKeyDriveNeverEntersTheRcloneConfigAndReachesRcloneByItsEnvironment(t *
 			t.Errorf("environment %v lacks %q", env, want)
 		}
 	}
-	if err := catalog.AddKeyDrive(t.Context(), drive, remote); !errors.Is(err, ErrDriveExists) {
-		t.Fatalf("a second drive of the same name: err = %v, want ErrDriveExists", err)
+	if againErr := catalog.AddKeyDrive(t.Context(), drive, remote); !errors.Is(againErr, ErrDriveExists) {
+		t.Fatalf("a second drive of the same name: err = %v, want ErrDriveExists", againErr)
 	}
-	if err := catalog.Remove(t.Context(), "my-r2"); err != nil {
-		t.Fatal(err)
+	if removeErr := catalog.Remove(t.Context(), "my-r2"); removeErr != nil {
+		t.Fatal(removeErr)
 	}
 	secrets, err := catalog.loadSecrets()
 	if err != nil || len(secrets) != 0 {
@@ -104,11 +104,11 @@ func TestTheJournalCountsTheLinesItCannotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := file.WriteString("{torn\nnot json\n"); err != nil {
-		t.Fatal(err)
+	if _, writeErr := file.WriteString("{torn\nnot json\n"); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	log, err := journal.Read(Filter{}, 0)
 	if err != nil || len(log.Entries) != 1 || log.Unreadable != 2 {

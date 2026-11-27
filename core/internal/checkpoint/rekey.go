@@ -128,29 +128,29 @@ func PlanRekey(ctx context.Context, dir, from, target string) (Rekey, error) {
 		plan.Moves = append(plan.Moves, move)
 	}
 	if clash {
-		plan.renumber(from, targets)
+		renumber(plan.Moves, from, target, targets)
 	}
 	return plan, nil
 }
 
-func (r *Rekey) renumber(from string, targets map[string]string) {
+func renumber(moves []RefMove, from, target string, targets map[string]string) {
 	next := 1
 	for name := range targets {
-		if index, ok := refIndex(name, r.target); ok && index >= next {
+		if index, ok := refIndex(name, target); ok && index >= next {
 			next = index + 1
 		}
 	}
-	slices.SortStableFunc(r.Moves, func(a, b RefMove) int {
-		aIndex, _ := refIndex(a.From, from)
-		bIndex, _ := refIndex(b.From, from)
-		return cmp.Compare(aIndex, bIndex)
+	slices.SortStableFunc(moves, func(left, right RefMove) int {
+		leftIndex, _ := refIndex(left.From, from)
+		rightIndex, _ := refIndex(right.From, from)
+		return cmp.Compare(leftIndex, rightIndex)
 	})
-	for idx := range r.Moves {
-		move := &r.Moves[idx]
+	for idx := range moves {
+		move := &moves[idx]
 		if _, numbered := refIndex(move.From, from); !numbered || move.landed {
 			continue
 		}
-		move.To, move.renumbered = checkpointRef(r.target, next), true
+		move.To, move.renumbered = checkpointRef(target, next), true
 		next++
 	}
 }

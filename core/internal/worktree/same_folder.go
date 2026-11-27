@@ -9,29 +9,29 @@ import (
 
 // SameFolderName reports whether two recorded folder paths name the same folder without looking at the disk: they
 // match once cleaned, ignoring case on darwin and windows, whose default filesystems do.
-func SameFolderName(a, b string) bool {
-	a, b = filepath.Clean(a), filepath.Clean(b)
+func SameFolderName(first, second string) bool {
+	first, second = filepath.Clean(first), filepath.Clean(second)
 	if caseInsensitiveFolders() {
-		return strings.EqualFold(a, b)
+		return strings.EqualFold(first, second)
 	}
-	return a == b
+	return first == second
 }
 
 // SameLocalFolder reports whether two folder paths of this machine name the same folder: by [SameFolderName], or,
 // when both exist, by being the same file on disk, which also sees through links and case on any filesystem.
-func SameLocalFolder(a, b string) bool {
-	if SameFolderName(a, b) {
+func SameLocalFolder(first, second string) bool {
+	if SameFolderName(first, second) {
 		return true
 	}
-	aInfo, err := os.Stat(a)
+	firstInfo, err := os.Stat(first)
 	if err != nil {
 		return false
 	}
-	bInfo, err := os.Stat(b)
+	secondInfo, err := os.Stat(second)
 	if err != nil {
 		return false
 	}
-	return os.SameFile(aInfo, bInfo)
+	return os.SameFile(firstInfo, secondInfo)
 }
 
 func caseInsensitiveFolders() bool {

@@ -33,6 +33,17 @@ func readOnlyScratchSession(t *testing.T, repo string) string {
 	return scratch
 }
 
+func assertASecondStopNamesTheFirstCopy(t *testing.T, path string) {
+	t.Helper()
+	again := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{defaultGateways: []string{"chat"}})
+	if text, _ := stateFormatText(clitext.NewMessages(), i18n.English, again); !strings.Contains(text, "before any change is "+path+".before-format-1.bak.") {
+		t.Errorf("a second stop names another copy than the first: %q", text)
+	}
+	if copies, globErr := filepath.Glob(path + ".before-format-1*"); globErr != nil || len(copies) != 1 {
+		t.Fatalf("copies after two stops = %v, want only the first", copies)
+	}
+}
+
 func TestMigrationStoppedAfterAMoveKeepsItsGeneratedIDAndResumesWhereItStopped(t *testing.T) {
 	repo, from := bareSessionRepo(t, "alpha")
 	scratch := readOnlyScratchSession(t, repo)
@@ -62,13 +73,7 @@ func TestMigrationStoppedAfterAMoveKeepsItsGeneratedIDAndResumesWhereItStopped(t
 			}
 		}
 	}
-	again := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{defaultGateways: []string{"chat"}})
-	if text, _ := stateFormatText(clitext.NewMessages(), i18n.English, again); !strings.Contains(text, "before any change is "+path+".before-format-1.bak.") {
-		t.Errorf("a second stop names another copy than the first: %q", text)
-	}
-	if copies, globErr := filepath.Glob(path + ".before-format-1*"); globErr != nil || len(copies) != 1 {
-		t.Fatalf("copies after two stops = %v, want only the first", copies)
-	}
+	assertASecondStopNamesTheFirstCopy(t, path)
 	if chmodErr := os.Chmod(filepath.Join(repo, ".herrscher-scratch"), 0o700); chmodErr != nil {
 		t.Fatal(chmodErr)
 	}

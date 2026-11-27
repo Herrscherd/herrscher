@@ -9,9 +9,3 @@ func TestCommandSocketPathWindows(t *testing.T) {
 		t.Fatalf("CommandSocketPathIn(instance-1) = %q", got)
 	}
 }
-
-func TestEventsSocketPathOfNoInstanceIsEmpty(t *testing.T) {
-	if got := EventsSocketPath(""); got != "" {
-		t.Fatalf("EventsSocketPath(\"\") = %q, want no pipe", got)
-	}
-}

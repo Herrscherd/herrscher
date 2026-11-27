@@ -24,12 +24,6 @@ func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
 	}
 }
 
-func TestEventsSocketPathOfNoInstanceIsEmpty(t *testing.T) {
-	if got := EventsSocketPath(""); got != "" {
-		t.Fatalf("EventsSocketPath(\"\") = %q, want no socket", got)
-	}
-}
-
 func TestPublicSocketPathsShareOneDirectory(t *testing.T) {
 	command := CommandSocketPath("instance-1")
 	events := EventsSocketPath("instance-1")
@@ -41,6 +35,9 @@ func TestPublicSocketPathsShareOneDirectory(t *testing.T) {
 	}
 	if filepath.Base(events) != "herrscher-events-instance-1.sock" {
 		t.Fatalf("EventsSocketPath(instance-1) base = %q", filepath.Base(events))
+	}
+	if none := EventsSocketPath(""); none != "" {
+		t.Fatalf("EventsSocketPath(\"\") = %q, want no socket", none)
 	}
 }
 

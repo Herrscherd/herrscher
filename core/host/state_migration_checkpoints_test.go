@@ -29,7 +29,7 @@ func refsMatching(t *testing.T, dir, pattern string) []string {
 	return strings.Fields(listed)
 }
 
-func checkpointedBareSession(t *testing.T) (string, string, string) {
+func checkpointedBareSession(t *testing.T) (string, string) {
 	t.Helper()
 	repo, from := bareSessionRepo(t, "alpha")
 	head := gitOutput(t, repo, "rev-parse", "HEAD")
@@ -37,11 +37,11 @@ func checkpointedBareSession(t *testing.T) (string, string, string) {
 		gitOutput(t, repo, "update-ref", ref, head)
 	}
 	path := writeFormat0State(t, []map[string]any{{"name": "alpha", "incarnation": migratedIncarnation, "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": from, "dir": from, "gateways": []string{"chat"}}}, nil)
-	return repo, from, path
+	return repo, path
 }
 
 func TestMigrationFilesTheCheckpointsOfASessionUnderItsIncarnation(t *testing.T) {
-	repo, _, path := checkpointedBareSession(t)
+	repo, path := checkpointedBareSession(t)
 	original, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestMigrationFilesTheCheckpointsOfASessionUnderItsIncarnation(t *testing.T)
 }
 
 func TestMigrationAnnouncesARefAlreadyAtItsNewNameAsFinishedNotMoved(t *testing.T) {
-	repo, _, path := checkpointedBareSession(t)
+	repo, path := checkpointedBareSession(t)
 	gitOutput(t, repo, "update-ref", "refs/herrscher/checkpoints/"+migratedIncarnation+"/1", gitOutput(t, repo, "rev-parse", "HEAD"))
 	announcer, out, _ := recordingAnnouncer()
 	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
@@ -114,8 +114,8 @@ func downgradeToFormat0(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	var file map[string]any
-	if err := json.Unmarshal(raw, &file); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(raw, &file); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	delete(file, "format")
 	rewritten, err := json.Marshal(file)
@@ -128,7 +128,7 @@ func downgradeToFormat0(t *testing.T, path string) {
 }
 
 func TestMigrationAfterAnOlderBuildRanFilesItsNewCheckpointsAfterTheMigratedOnes(t *testing.T) {
-	repo, _, path := checkpointedBareSession(t)
+	repo, path := checkpointedBareSession(t)
 	inputs := migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}
 	if err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), inputs); err != nil {
 		t.Fatal(err)

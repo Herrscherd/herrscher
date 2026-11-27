@@ -102,7 +102,7 @@ func TestAMigrationStartedAgainNamesTheFirstCopyAndWritesNoOther(t *testing.T) {
 	if err != nil || resumed != backup {
 		t.Fatalf("Backup after a stop = %q, %v, want the first copy %q", resumed, err, backup)
 	}
-	if copies, _ := filepath.Glob(path + ".before-format-*"); len(copies) != 1 {
+	if copies, globErr := filepath.Glob(path + ".before-format-*"); globErr != nil || len(copies) != 1 {
 		t.Fatalf("copies after a stop = %v, want only %s", copies, backup)
 	}
 	if got := mustRead(t, backup); !bytes.Equal(got, original) {

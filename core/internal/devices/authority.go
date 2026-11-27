@@ -51,26 +51,47 @@ type Authority struct {
 
 // AuthorityGate serialises the creation and loading of the authority across the goroutines of one process, so
 // two approvals that race on a missing authority cannot each write a key and a certificate that do not match.
-// It is separate from the state lock, so the disk work does not hold the registry.
+// It is separate from the state lock, so the disk work does not hold the registry. Its zero value is ready to use.
 type AuthorityGate struct {
-	mu sync.Mutex
+	once sync.Once
+	turn chan struct{}
 }
 
-// LoadOrCreate loads the authority kept under stateDir, or creates it. It holds the gate's mutex for the
-// goroutines of this process and an exclusive lock file for the other processes, a one-off command included.
+// LoadOrCreate loads the authority kept under stateDir, or creates it. It waits for the gate's turn for the
+// goroutines of this process and an exclusive lock file for the other processes, a one-off command included. A
+// cancelled ctx ends the wait in either.
 func (g *AuthorityGate) LoadOrCreate(ctx context.Context, stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	dir := filepath.Join(stateDir, secretDirName)
-	if err := os.MkdirAll(dir, privateDirMode); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
+	g.once.Do(func() { g.turn = make(chan struct{}, 1) })
+	select {
+	case g.turn <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, ctx.Err())
+	}
+	defer func() { <-g.turn }()
+	dir := secretDir(stateDir)
+	if err := prepareSecretDir(dir); err != nil {
+		return nil, err
 	}
 	release, err := filelock.Acquire(ctx, filepath.Join(dir, authorityLockFile))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
 	}
 	defer release()
-	return loadOrCreateAuthority(stateDir, now, rnd, enrolled)
+	return loadOrCreateAuthority(dir, now, rnd, enrolled)
+}
+
+func secretDir(stateDir string) string {
+	return filepath.Join(stateDir, secretDirName)
+}
+
+func prepareSecretDir(dir string) error {
+	if err := os.MkdirAll(dir, privateDirMode); err != nil {
+		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
+	}
+	if err := os.Chmod(dir, privateDirMode); err != nil {
+		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
+	}
+	return nil
 }
 
 // VerifiedClient is a client certificate the authority has checked.
@@ -86,14 +107,7 @@ const (
 	pairPartial
 )
 
-func loadOrCreateAuthority(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
-	dir := filepath.Join(stateDir, secretDirName)
-	if err := os.MkdirAll(dir, privateDirMode); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
-	}
-	if err := os.Chmod(dir, privateDirMode); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
-	}
+func loadOrCreateAuthority(dir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
 	caCert, caKey, err := loadOrCreateAuthorityCertificate(dir, now, rnd, enrolled)
 	if err != nil {
 		return nil, err

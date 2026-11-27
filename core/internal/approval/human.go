@@ -5,41 +5,38 @@ import (
 	"strings"
 )
 
-// RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, or names them with a
-// command that can reach them, which only a person may decide: no rule, no remembered answer and no mode lets them
-// through. It is a text barrier. It splits the command on every punctuation mark and every blank, so it sees the
-// name wherever the shell puts it, and it over-blocks on purpose: a command that names herrscher with device or
-// role needs a person even when it only reads. It does not see a script written to a file and run afterwards, a
-// file downloaded and run, or an encoding it does not name.
+// RequiresHuman reports whether req is a Bash command that may administer herrscher's devices or roles, which only a
+// person may decide: no rule, no remembered answer and no mode lets it through. It is a coarse text barrier and it
+// over-blocks on purpose. It needs a person when the command, with every character but ASCII letters removed, holds
+// herr or scher together with device, role or xargs, or when it names herrscher through a glob that can expand to it.
+// It also needs a person when the command runs code from a pipe or inline into an interpreter and holds a decoder or
+// an encoding. It does not see a payload that spells none of these letters and passes through no decoder it knows.
 func RequiresHuman(req Request) bool {
 	if CanonicalTool(req.Tool) != toolBash {
 		return false
 	}
-	words := strings.Fields(normalizeShell(req.Subject))
-	if namesHerrscher(req.Subject, words) && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
+	letters := lettersOnly(req.Subject)
+	names := strings.Contains(letters, "herr") || strings.Contains(letters, "scher") || namesHerrscherByGlob(req.Subject)
+	verbs := strings.Contains(letters, "device") || strings.Contains(letters, "role") || strings.Contains(letters, "xargs")
+	if names && verbs {
 		return true
 	}
-	if (strings.ContainsAny(req.Subject, "$`") || hasWord(words, "eval")) && assemblesHerrscher(words) {
-		return true
-	}
-	return runsUnreadable(req.Subject, words)
+	return runsDecodedCode(req.Subject)
 }
 
-func normalizeShell(command string) string {
-	unquoted := strings.NewReplacer(`\n`, " ", `\t`, " ", `\`, "", `"`, "", `'`, "", "`", "").Replace(command)
-	return strings.ToLower(strings.Map(func(char rune) rune {
-		if strings.ContainsRune("[]{}(),;:&|<>=/.!", char) {
-			return ' '
+func lettersOnly(command string) string {
+	var letters strings.Builder
+	for _, char := range strings.ToLower(command) {
+		if char >= 'a' && char <= 'z' {
+			letters.WriteRune(char)
 		}
-		return char
-	}, unquoted))
+	}
+	return letters.String()
 }
 
-func namesHerrscher(command string, words []string) bool {
-	if hasWord(words, "herrscher") {
-		return true
-	}
-	for _, field := range strings.Fields(strings.NewReplacer(`\`, "", `"`, "", `'`, "", "`", "").Replace(command)) {
+func namesHerrscherByGlob(command string) bool {
+	unquoted := strings.NewReplacer(`\`, "", `"`, "", `'`, "", "`", "").Replace(command)
+	for _, field := range strings.Fields(unquoted) {
 		if !strings.ContainsAny(field, "*?[") {
 			continue
 		}
@@ -51,45 +48,76 @@ func namesHerrscher(command string, words []string) bool {
 	return false
 }
 
-func hasWord(words []string, want string) bool {
-	for _, word := range words {
-		if word == want {
+func tokenize(command string) []string {
+	spaced := strings.NewReplacer("<<", " << ", "<(", " <( ", "|", " | ", ";", " ; ", "&", " & ", "(", " ( ", ")", " ) ", "`", " ` ", `"`, " ", "'", " ").Replace(command)
+	return strings.Fields(strings.ToLower(spaced))
+}
+
+func runsDecodedCode(command string) bool {
+	tokens := tokenize(command)
+	return runsInterpreter(tokens) && hasDecoder(command, tokens)
+}
+
+func runsInterpreter(tokens []string) bool {
+	afterPipe := false
+	for idx, token := range tokens {
+		if token == "|" {
+			afterPipe = true
+			continue
+		}
+		if !isInterpreter(token) {
+			continue
+		}
+		if afterPipe || takesInlineCode(tokens, idx) {
 			return true
 		}
 	}
 	return false
 }
 
-func assemblesHerrscher(words []string) bool {
-	const name = "herrscher"
-	reachable := make([]bool, len(name)+1)
-	reachable[len(name)] = true
-	for offset := len(name) - 1; offset >= 0; offset-- {
-		for _, word := range words {
-			if word == "" || strings.Contains(word, "$") {
-				continue
-			}
-			if strings.HasPrefix(name[offset:], word) && reachable[offset+len(word)] {
-				reachable[offset] = true
-				break
-			}
-		}
-	}
-	return reachable[0]
-}
-
-func runsUnreadable(raw string, words []string) bool {
-	runs := hasWord(words, "sh") || hasWord(words, "bash") || hasWord(words, "zsh") || hasWord(words, "dash") || hasWord(words, "eval")
-	if strings.Contains(raw, "python -c") || strings.Contains(raw, "perl -e") || strings.Contains(raw, "python3 -c") {
-		runs = true
-	}
-	if !runs {
+func takesInlineCode(tokens []string, idx int) bool {
+	if idx+1 >= len(tokens) {
 		return false
 	}
-	for _, decoder := range []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"} {
-		if strings.Contains(raw, decoder) {
+	next := tokens[idx+1]
+	switch next {
+	case "-c", "-e", "--eval":
+		return true
+	}
+	return strings.HasPrefix(next, "<<") || strings.HasPrefix(next, "<(")
+}
+
+func isInterpreter(token string) bool {
+	name := path.Base(token)
+	switch name {
+	case "sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "source", "python", "python2", "python3",
+		"perl", "node", "deno", "bun", "ruby", "php", "lua", "tclsh":
+		return true
+	}
+	version, isPython := strings.CutPrefix(name, "python")
+	return isPython && strings.Trim(version, "0123456789.") == ""
+}
+
+func isDecoder(name string) bool {
+	switch name {
+	case "base64", "base32", "xxd", "od", "uudecode", "zcat", "gunzip", "openssl", "rev", "tr":
+		return true
+	}
+	return false
+}
+
+func hasDecoder(command string, tokens []string) bool {
+	for idx, token := range tokens {
+		name := path.Base(token)
+		if isDecoder(name) {
+			return true
+		}
+		if name == "printf" && strings.Contains(command, `\`) {
+			return true
+		}
+		if name == "echo" && idx+1 < len(tokens) && tokens[idx+1] == "-e" {
 			return true
 		}
 	}
-	return false
+	return strings.Contains(command, "$'")
 }

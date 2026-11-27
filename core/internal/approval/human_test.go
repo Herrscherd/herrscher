@@ -39,6 +39,20 @@ func TestRequiresHumanCatchesEveryWayOfNamingHerrscherAdministration(t *testing.
 		"sh <<EOF\nherrscher device list\nEOF",
 		`echo "herrscher device list" | sh`,
 		"timeout 5 herrscher device list",
+		"{her,}rscher device list",
+		"herr{,}scher device list",
+		"x=scher; herr$x device list",
+		`herr$x"scher" device list`,
+		"herr$()scher device list",
+		`herr$'\x73'cher device list`,
+		"herr`\nscher device list",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | python3",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | node",
+		"python3  -c 'import base64; exec(base64.b64decode(\"cHJpbnQoMSk=\"))'",
+		`python3 -c 'import subprocess; subprocess.run(["herr"+"scher","device","list"])'`,
+		`printf '\150\145rrscher device list' | sh`,
+		"echo herring role",
+		`echo "herrscher role" | xargs echo`,
 	} {
 		if !RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
 			t.Fatalf("%q must need a person", subject)
@@ -62,6 +76,8 @@ func TestRequiresHumanLeavesOrdinaryCommandsToTheRules(t *testing.T) {
 		"echo $X herring fischer",
 		"echo ls | sh",
 		"echo cm9sZQ== | base64 -d",
+		"echo role grant bob owner | xargs echo",
+		"go test ./...",
 	} {
 		if RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
 			t.Fatalf("%q must stay under the rules", subject)

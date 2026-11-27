@@ -166,23 +166,26 @@ authenticate, and the signed certificate is not handed to anyone yet.
   key, and no log line carries one. This holds against the commands, not against
   a process of the same user: such a process can read the authority's key file,
   just as it can read `HERRSCHER_ANNOUNCE_KEY`. The user account is the boundary.
-- **Shell administration from an agent.** A Bash command that names herrscher's
-  device or role verbs needs a person's decision. This is a text barrier, and it
-  over-blocks on purpose. The command is split on every punctuation mark and every
-  blank, line breaks included, and it needs a person when it contains:
-  - the word `herrscher`, or a shell glob that can expand to it (`/bin/herr*`,
-    `/bin/herr[s]cher`), together with the word `device`, `role` or `xargs`. This
-    also covers a command that only reads, such as `grep "herrscher role"
-    docs/remote.md`, which needs the owner's decision;
-  - the name spelled out of pieces through an expansion, a substitution or an
-    `eval`, for example `B=herrscher; $B device list` or `x=herr; y=scher; $x$y
-    device list`;
-  - a decoder (`base64`, `xxd`, `gunzip`, `openssl`, an escaped `\x`) sent to an
-    interpreter (`sh`, `bash`, `zsh`, `eval`, `python -c`, `perl -e`), for example
-    `echo <base64> | base64 -d | sh`.
-  Forms the check does not name can still pass. A script written to a file and
-  then run, a file downloaded and then run, and an encoding the check does not
-  know are not seen. The real boundary is the user account: an agent's shell
+- **Shell administration from an agent.** A Bash command that may administer
+  herrscher's devices or roles needs a person's decision. Two rules decide it,
+  and both over-block on purpose:
+  - the command, with every character that is not an ASCII letter removed
+    (backslashes, quotes, `$`, braces, digits, punctuation and line breaks
+    included), contains `herr` or `scher` together with `device`, `role` or
+    `xargs`; a shell glob that expands to `herrscher` (`/bin/herr*`,
+    `/bin/herr[s]cher`) counts as the name too. This also catches a command that
+    only reads, such as `grep "herrscher role" docs/remote.md`, and a word such as
+    `herring` next to `role`;
+  - the command feeds a stream or inline code to an interpreter (`sh`, `bash`,
+    `zsh`, `dash`, `ksh`, `fish`, `eval`, `source`, `python`, `python3`, `perl`,
+    `node`, `deno`, `bun`, `ruby`, `php`, `lua`, `tclsh`, placed after a pipe or
+    followed by `-c`, `-e`, `--eval`, `<<`, `<<<` or `<(`), and it holds a decoder
+    or an encoding (`base64`, `base32`, `xxd`, `od`, `uudecode`, `zcat`, `gunzip`,
+    `openssl`, `rev`, `tr`, `printf` with a backslash, `echo -e`, `$'`).
+  The check does not see a payload that spells none of those letters and passes
+  through no decoder in the list above. That covers a script written to a file and
+  run by a later command, a file downloaded and then run, and an encoding that is
+  not in the list. The real boundary is the user account: an agent's shell
   reaches the operator socket as `local`, and a process of the same uid can do
   what the daemon can.
 - **Certificates.** A client certificate is valid for thirty days and states that

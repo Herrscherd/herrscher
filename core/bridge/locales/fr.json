@@ -13,5 +13,15 @@
     "id": "approval.no_answer",
     "description": "Un appel d'outil est refusé parce que l'opérateur n'a pas répondu pendant l'attente du hook, Wait porte la durée",
     "other": "personne n'a répondu dans {{.Wait}}"
+  },
+  {
+    "id": "skills.menu.more",
+    "description": "Avis dans le menu des compétences quand un budget de jetons en a masqué, Count porte leur nombre",
+    "other": "{{.Count}} autres compétences existent et ne sont pas listées ici. Pour toutes les lister, l'utilisateur peut lancer /skills dans le terminal."
+  },
+  {
+    "id": "skills.expansion.cut",
+    "description": "Avis après un corps de compétence coupé par le budget de jetons des expansions, Name est la compétence et Path le fichier à lire en entier",
+    "other": "La compétence {{.Name}} est coupée ici pour tenir dans le budget des compétences. Pour la lire en entier, ouvre {{.Path}}."
   }
 ]

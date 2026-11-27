@@ -13,5 +13,15 @@
     "id": "approval.no_answer",
     "description": "A tool call is refused because the operator did not answer within the hook wait, Wait carries the duration",
     "other": "nobody answered within {{.Wait}}"
+  },
+  {
+    "id": "skills.menu.more",
+    "description": "Notice in the skill menu when a token budget hid skills, Count carries how many were hidden",
+    "other": "{{.Count}} more skills exist and are not listed here. To list them all, the user can run /skills in the terminal."
+  },
+  {
+    "id": "skills.expansion.cut",
+    "description": "Notice after a skill body cut by the expansions token budget, Name is the skill and Path the file to read in full",
+    "other": "The {{.Name}} skill is cut here to fit the skill budget. To read it in full, open {{.Path}}."
   }
 ]

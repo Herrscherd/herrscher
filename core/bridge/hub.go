@@ -327,7 +327,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
 	defer turn.discard()
-	injected := composeTurnContext(memCtx, eng, aff)
+	injected := composeTurnContext(memCtx, eng, aff, event.Text, lang)
 	prompt := contracts.Prompt{Content: event.Text, Context: injected.String(), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
@@ -44,5 +45,31 @@ func newSkillEngineIn(backend contracts.Backend, cwd string) *skills.Engine {
 		}
 		extra = cfg.Skills.Roots
 	}
-	return skills.NewEngine(skillRoots(cwd, extra))
+	eng := skills.NewEngine(skillRoots(cwd, extra))
+	eng.SetBudget(skillBudget(cfg.Skills))
+	return eng
+}
+
+func skillBudget(cfg *config.SkillsConfig) skills.Budget {
+	if cfg == nil || cfg.Budget == nil {
+		return skills.Budget{}
+	}
+	return skills.Budget{Menu: cfg.Budget.MenuTokens, Expansions: cfg.Budget.ExpansionTokens}
+}
+
+type skillNotices struct {
+	lang     i18n.Language
+	messages *bridgeMessages
+}
+
+func newSkillNotices(lang i18n.Language) skillNotices {
+	return skillNotices{lang: lang, messages: newBridgeMessages()}
+}
+
+func (n skillNotices) MenuMore(hidden int) string {
+	return n.messages.render(n.lang, "skills.menu.more", map[string]any{"Count": hidden})
+}
+
+func (n skillNotices) ExpansionCut(name, path string) string {
+	return n.messages.render(n.lang, "skills.expansion.cut", map[string]any{"Name": name, "Path": path})
 }

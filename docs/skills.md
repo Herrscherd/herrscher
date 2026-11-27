@@ -137,11 +137,52 @@ In `~/.config/herrscher/config.json`, all optional:
 ```jsonc
 "skills": {
   "enabled": true,                 // omit or true = on; false disables injection
-  "roots": ["/opt/team-skills"]    // extra roots, appended after the three defaults
+  "roots": ["/opt/team-skills"],   // extra roots, appended after the three defaults
+  "budget": {                      // omit = no budget (every skill is listed, every body in full)
+    "menuTokens": 600,             // cap on the menu, in estimated tokens
+    "expansionTokens": 4000        // cap on the active skill bodies, in estimated tokens
+  }
 }
 ```
 
-A missing `skills` object, or a missing `enabled`, means the feature is **on**.
+A missing `skills` object, or a missing `enabled`, means the feature is **on**. A missing
+`budget` object, or a zero field in it, means that block is **unbounded**: the menu and the
+expansions are then exactly what they were before budgets existed.
+
+The budget is read from the daemon's `config.json`, so it applies to every session the
+daemon runs; the engine is built per session from that file.
+
+## Budgets
+
+Both caps are estimated with the same four-bytes-per-token estimate the context window
+uses (`contextwindow.EstimateTokens`). They are estimates, not vendor counts.
+
+**The menu.** When the full menu is over `menuTokens`, the engine chooses which skills to
+list, and no skill is ever dropped silently:
+
+- A skill that is **active** (its body is expanded this session) is always listed, even
+  when that alone is over the cap.
+- The other skills are ranked by a deterministic lexical score against the current
+  message: each word of the message that occurs in the skill's name counts twice, and each
+  word that occurs in its description counts once. Words shorter than three letters are
+  ignored. Ties break by name, so the same message and the same skills always give the
+  same menu.
+- Skills are added in that order while the menu stays within the cap.
+- The menu ends with a localized line saying how many more skills exist and that the user
+  can list them all with `/skills` in the terminal.
+
+With no message, or a message that shares no word with any skill, the ranking falls back
+to name order.
+
+**The expansions.** The active bodies share one cap, taken in name order. A body that
+fits is injected whole. A body that does not fit is cut at the last whole line that fits
+the remaining budget (mid-line only when one line alone is longer than that), and a localized line follows it naming the skill and the absolute
+path of its `SKILL.md`, which the model can `Read` in full. A skill that comes after the
+budget is spent is still listed, with an empty body and the same line, so nothing is
+silently hidden. The tags and these notices are outside the cap; the bodies are inside it.
+
+The cut is a fallback, not a filter: the engine never removes a skill from the active set
+because of the budget, and the full text is always reachable by reading the file.
 
 ## Related
 

@@ -2,10 +2,12 @@ package agent
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -112,5 +114,77 @@ func TestUnreadableReplyRuleIsTreatedAsNever(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "treated as never") {
 		t.Fatalf("the bad rule was not logged: %q", logs.String())
+	}
+}
+
+func TestAgentVoicesConcurrentWithRuleWrites(t *testing.T) {
+	store, dir, logs, _ := directoryWith(t, []string{"CHAT_BOT_TOKEN_RIN=" + testSecret})
+	for _, name := range []string{"rin", "anna"} {
+		if _, err := store.Create(CreateSpec{Name: name}); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+	}
+	dir.ttl = 0
+	rules := []contracts.ReplyRule{contracts.ReplyOnMention, contracts.ReplyInChannels, contracts.ReplyNever}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := range 60 {
+			if err := store.SetReply("rin", rules[i%len(rules)]); err != nil {
+				t.Errorf("set reply: %v", err)
+			}
+			if err := store.SetChannels("rin", []Channel{{"chat", fmt.Sprint(i)}}); err != nil {
+				t.Errorf("set channels: %v", err)
+			}
+		}
+	}()
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 60 {
+				if voices := dir.AgentVoices("chat"); len(voices) != 2 {
+					t.Errorf("voices = %d; want 2", len(voices))
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if strings.Contains(logs.String(), "treated as never") {
+		t.Fatalf("a read saw a half-written rule file: %q", logs.String())
+	}
+}
+
+func TestInvalidateVoicesRereadsBeforeTheTTL(t *testing.T) {
+	store, dir, _, _ := directoryWith(t, nil)
+	if _, err := store.Create(CreateSpec{Name: "rin"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyOnMention {
+		t.Fatalf("reply = %v; want mention", got)
+	}
+	if err := store.SetReply("rin", contracts.ReplyNever); err != nil {
+		t.Fatalf("set reply: %v", err)
+	}
+	dir.InvalidateVoices()
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyNever {
+		t.Fatalf("reply after invalidation = %v; want never", got)
+	}
+}
+
+func TestRefusedBotTokenIsLoggedBySentinelNeverByValue(t *testing.T) {
+	store, dir, logs, _ := directoryWith(t, []string{"CHAT_BOT_TOKEN_RIN=" + testSecret + " extra"})
+	if _, err := store.Create(CreateSpec{Name: "rin"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if voice := dir.AgentVoices("chat")[0]; voice.Token.Valid() {
+		t.Fatal("a token with a space must not be given")
+	}
+	if !strings.Contains(logs.String(), "invalid bot token") {
+		t.Fatalf("the refusal was not logged by its sentinel: %q", logs.String())
+	}
+	if strings.Contains(logs.String(), testSecret) {
+		t.Fatal("the token value leaked into the log")
 	}
 }

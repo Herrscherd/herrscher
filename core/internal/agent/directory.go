@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -82,7 +84,18 @@ func (d *Directory) AgentVoices(gateway string) []contracts.AgentVoice {
 			Channels: channelsOn(gateway, rule.channels),
 		})
 	}
+	slices.SortFunc(voices, func(a, b contracts.AgentVoice) int { return strings.Compare(a.Agent, b.Agent) })
 	return voices
+}
+
+// InvalidateVoices makes the next read reload the rules from disk.
+func (d *Directory) InvalidateVoices() {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.loaded = false
 }
 
 // HasToken reports whether an agent has its own bot token on the gateway of
@@ -108,11 +121,20 @@ func (d *Directory) tokenLocked(gateway, agent string, rules []voiceRule) contra
 	token, err := contracts.NewBotToken(secret)
 	if err != nil {
 		if d.firstTime("token:" + key) {
-			d.log.Warn("bot token is empty, the agent speaks as the gateway's own bot", "key", key)
+			d.log.Warn("bot token refused, the agent speaks as the gateway's own bot", "key", key, "reason", refusalOf(err))
 		}
 		return contracts.BotToken{}
 	}
 	return token
+}
+
+func refusalOf(err error) error {
+	for _, sentinel := range []error{contracts.ErrEmptyBotToken, contracts.ErrInvalidBotToken} {
+		if errors.Is(err, sentinel) {
+			return sentinel
+		}
+	}
+	return err
 }
 
 func (d *Directory) sharedLocked(gateway, key string, rules []voiceRule) bool {
@@ -143,16 +165,16 @@ func (d *Directory) currentLocked() []voiceRule {
 }
 
 func (d *Directory) readLocked() []voiceRule {
-	agents, err := d.store.List()
+	names, err := d.store.names()
 	if err != nil {
 		if d.firstTime("list:" + err.Error()) {
 			d.log.Warn("agent list unreadable, agents keep their last rules", "err", err)
 		}
 		return d.rules
 	}
-	rules := make([]voiceRule, 0, len(agents))
-	for index := range agents {
-		rules = append(rules, d.ruleOf(agents[index].Name))
+	rules := make([]voiceRule, 0, len(names))
+	for _, name := range names {
+		rules = append(rules, d.ruleOf(name))
 	}
 	return rules
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -295,6 +294,19 @@ func (s *Store) Get(name string) (Agent, bool) {
 // List returns every agent home under the store root, sorted by name. A missing
 // root yields an empty list (no agents created yet).
 func (s *Store) List() ([]Agent, error) {
+	names, err := s.names()
+	if err != nil {
+		return nil, err
+	}
+	var out []Agent
+	for _, name := range names {
+		home := filepath.Join(s.root, name)
+		out = append(out, Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)})
+	}
+	return out, nil
+}
+
+func (s *Store) names() ([]string, error) {
 	entries, err := os.ReadDir(s.root)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -302,14 +314,11 @@ func (s *Store) List() ([]Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []Agent
+	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+		if entry.IsDir() {
+			names = append(names, entry.Name())
 		}
-		home := filepath.Join(s.root, entry.Name())
-		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out, nil
+	return names, nil
 }

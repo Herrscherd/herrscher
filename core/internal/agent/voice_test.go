@@ -2,9 +2,11 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -126,5 +128,59 @@ func TestBotTokenKey(t *testing.T) {
 	}
 	if BotTokenKey("chat", "my-agent") != BotTokenKey("chat", "my_agent") {
 		t.Fatal("names differing by a dash and an underscore must share a key, so the clash is detectable")
+	}
+}
+
+func TestChannelsReportsABadLineInTheFile(t *testing.T) {
+	s := NewStore(t.TempDir())
+	a, err := s.Create(CreateSpec{Name: "rin"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(a.Home, channelsFile), []byte("chat:111\nnocolon\n"), fileMode); err != nil {
+		t.Fatalf("write channels: %v", err)
+	}
+	if _, err := s.Channels("rin"); !errors.Is(err, ErrBadChannel) {
+		t.Fatalf("err = %v; want ErrBadChannel for the bad line", err)
+	}
+}
+
+func TestWriteAtomicLeavesNoStagedFileWhenRenameFails(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, replyFile)
+	if err := os.Mkdir(target, dirMode); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := writeAtomic(target, []byte("never\n")); err == nil {
+		t.Fatal("writing onto a directory must fail")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != replyFile {
+		t.Fatalf("a staged file was left behind: %v", entries)
+	}
+}
+
+func TestConcurrentWritersOfOneFileDoNotClash(t *testing.T) {
+	path := filepath.Join(t.TempDir(), replyFile)
+	var wg sync.WaitGroup
+	errs := make(chan error, 8*20)
+	for writer := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 20 {
+				errs <- writeAtomic(path, []byte(fmt.Sprintf("writer %d\n", writer)))
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent write failed: %v", err)
+		}
 	}
 }

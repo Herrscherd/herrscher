@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -156,9 +157,36 @@ func (s *Store) home(name string) (string, error) {
 }
 
 func writeAtomic(path string, data []byte) error {
-	staged := path + ".tmp"
-	if err := os.WriteFile(staged, data, fileMode); err != nil {
+	staging, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(staged, path)
+	if err := stageVoiceFile(staging, data); err != nil {
+		discardStaged(staging)
+		return err
+	}
+	if err := os.Rename(staging.Name(), path); err != nil {
+		discardStaged(staging)
+		return err
+	}
+	return nil
+}
+
+func stageVoiceFile(staging *os.File, data []byte) error {
+	if err := staging.Chmod(fileMode); err != nil {
+		return err
+	}
+	if _, err := staging.Write(data); err != nil {
+		return err
+	}
+	return staging.Close()
+}
+
+func discardStaged(staging *os.File) {
+	if err := staging.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+		slog.Warn("close staged agent file", "err", err)
+	}
+	if err := os.Remove(staging.Name()); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("remove staged agent file", "err", err)
+	}
 }

@@ -72,13 +72,53 @@ func (w *Worktreer) checkSameRepository(ctx context.Context, plan Relocation, wo
 	if own == expected {
 		return nil
 	}
-	return NewFailure(w.messages, clitext.WorktreeRelocateForeignRepository, clitext.Params{
-		clitext.ParamName:    strconv.Quote(plan.Name),
-		clitext.ParamPath:    strconv.Quote(worktreePath),
-		clitext.ParamTarget:  strconv.Quote(repositoryOfGitDir(own)),
-		clitext.ParamRepo:    strconv.Quote(plan.Repo),
-		clitext.ParamCommand: "git -C " + shellquote.Quote(plan.Repo) + " worktree repair " + shellquote.Quote(worktreePath),
-	}, nil)
+	params := clitext.Params{
+		clitext.ParamName:   strconv.Quote(plan.Name),
+		clitext.ParamPath:   strconv.Quote(worktreePath),
+		clitext.ParamTarget: strconv.Quote(repositoryOfGitDir(own)),
+		clitext.ParamRepo:   strconv.Quote(plan.Repo),
+	}
+	adminDir, err := adminDirIn(ctx, worktreePath, own, expected)
+	if err != nil {
+		return NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(worktreePath), clitext.ParamErr: err}, err)
+	}
+	if adminDir == "" {
+		return NewFailure(w.messages, clitext.WorktreeRelocateForeignUnlinked, params, nil)
+	}
+	params[clitext.ParamCommand] = relinkCommand(worktreePath, adminDir)
+	return NewFailure(w.messages, clitext.WorktreeRelocateForeignRepository, params, nil)
+}
+
+func adminDirIn(ctx context.Context, worktreePath, ownCommon, expectedCommon string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", worktreePath, "rev-parse", "--path-format=absolute", "--git-dir").Output()
+	if err != nil {
+		return "", err
+	}
+	gitDir := filepath.Clean(strings.TrimSpace(string(out)))
+	if resolved, resolveErr := filepath.EvalSymlinks(gitDir); resolveErr == nil {
+		gitDir = resolved
+	}
+	if filepath.Dir(gitDir) != filepath.Join(ownCommon, worktreesDirName) {
+		return "", nil
+	}
+	adminDir := filepath.Join(expectedCommon, worktreesDirName, filepath.Base(gitDir))
+	info, err := os.Lstat(adminDir)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", nil
+	}
+	return adminDir, nil
+}
+
+func relinkCommand(worktreePath, adminDir string) string {
+	gitEntry := filepath.Join(worktreePath, gitEntryName)
+	return "printf '%s\\n' " + shellquote.Quote("gitdir: "+adminDir) + " > " + shellquote.Quote(gitEntry) +
+		" && printf '%s\\n' " + shellquote.Quote(gitEntry) + " > " + shellquote.Quote(filepath.Join(adminDir, adminGitdirName))
 }
 
 func commonGitDir(ctx context.Context, dir string) (string, error) {
@@ -116,11 +156,19 @@ func (w *Worktreer) checkMovedBranch(ctx context.Context, plan Relocation) error
 	if tip == plan.ToBranch {
 		renamed = plan.FromBranch
 	}
-	return NewFailure(w.messages, clitext.WorktreeRelocateHeadGone, clitext.Params{
-		clitext.ParamName:    strconv.Quote(plan.Name),
-		clitext.ParamPath:    strconv.Quote(plan.ToPath),
-		clitext.ParamTip:     strconv.Quote(tip),
-		clitext.ParamBranch:  strconv.Quote(renamed),
-		clitext.ParamCommand: "git -C " + shellquote.Quote(plan.ToPath) + " symbolic-ref HEAD " + shellquote.Quote("refs/heads/"+renamed),
-	}, nil)
+	renamedPresent, err := w.BranchExistsAt(ctx, plan.Repo, renamed)
+	if err != nil {
+		return err
+	}
+	params := clitext.Params{
+		clitext.ParamName:   strconv.Quote(plan.Name),
+		clitext.ParamPath:   strconv.Quote(plan.ToPath),
+		clitext.ParamTip:    strconv.Quote(tip),
+		clitext.ParamBranch: strconv.Quote(renamed),
+	}
+	if !renamedPresent {
+		return NewFailure(w.messages, clitext.WorktreeRelocateBranchesGone, params, nil)
+	}
+	params[clitext.ParamCommand] = "git -C " + shellquote.Quote(plan.ToPath) + " symbolic-ref HEAD " + shellquote.Quote("refs/heads/"+renamed)
+	return NewFailure(w.messages, clitext.WorktreeRelocateHeadGone, params, nil)
 }

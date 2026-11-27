@@ -217,12 +217,22 @@ func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *sta
 // terminal-only one. One set can only ever answer the first.
 func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, gws []Deps, options Options) (*cli.Registry, error) {
 	messages := hostMessages.owner
+	lang := options.operatorLanguage()
 	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
-		return nil, localizeStateFormatError(cliMessages, options.operatorLanguage(), err)
+		return nil, localizeStateFormatError(cliMessages, lang, err)
 	}
+	if options.DefaultGateways == nil {
+		options.DefaultGateways = nonTerminalKinds(gws)
+	}
+	announcer := stateAnnouncer{cliMessages: cliMessages, lang: lang, log: obs.Stderr(false), out: options.Warnings}
 	if hostState.Outdated() {
-		return nil, localizeStateFormatError(cliMessages, options.operatorLanguage(), &statePendingMigrationError{path: options.StatePath})
+		if !options.OwnsState {
+			return nil, localizeStateFormatError(cliMessages, lang, &statePendingMigrationError{path: options.StatePath})
+		}
+		if migrateErr := migrateHubState(ctx, messages, announcer, hostState, hubMigrationInputs(ctx, messages, options)); migrateErr != nil {
+			return nil, localizeServeError(messages, cliMessages, lang, migrateErr)
+		}
 	}
 	var home *state.HomeRef
 	if options.Home != nil {
@@ -230,13 +240,15 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	}
 	hostState.ApplyDefaults(home, options.Workspace, options.Source)
 
-	announcer := stateAnnouncer{cliMessages: cliMessages, lang: options.operatorLanguage(), log: obs.Stderr(false), out: options.Warnings}
-	instID, err := resolveInstanceID(messages, announcer, hostState, options.InstanceID, options.Owner)
+	instID, err := operatorInstanceID(messages, announcer, hostState, options)
 	if _, invalid := errors.AsType[*storedInstanceInvalidError](err); invalid {
-		return nil, localizeStateFormatError(cliMessages, options.operatorLanguage(), err)
+		return nil, localizeStateFormatError(cliMessages, lang, err)
+	}
+	if unset, ok := errors.AsType[*instanceUnsetError](err); ok {
+		return nil, localizedHostError{text: renderMigrationText(cliMessages, lang, clitext.InstanceUnset, clitext.Params{clitext.ParamPath: unset.path}), cause: err}
 	}
 	if err != nil {
-		return nil, localizeHostError(messages, cliMessages, options.operatorLanguage(), err)
+		return nil, localizeHostError(messages, cliMessages, lang, err)
 	}
 
 	self, execErr := os.Executable()
@@ -244,9 +256,6 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	sup := supervisor.NewSupervisor(ctx, self, options.Runtime)
 	sup.SetStatePath(options.StatePath)
 	sup.SetBridgeEnv(append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...))
-	if options.DefaultGateways == nil {
-		options.DefaultGateways = nonTerminalKinds(gws)
-	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings).withMessages(messages, options.languageSource()), newSessionTable(messages, cliMessages))
 	if err != nil {
 		return nil, err

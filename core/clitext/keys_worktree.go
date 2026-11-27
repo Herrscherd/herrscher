@@ -55,6 +55,9 @@ const (
 	WorktreeRelocateInstanceFolder    = "cli.worktree.relocate_instance_folder"
 	WorktreeRelocateForeignRepository = "cli.worktree.relocate_foreign_repository"
 	WorktreeRelocateHeadGone          = "cli.worktree.relocate_head_gone"
+	WorktreeRelocateForeignUnlinked   = "cli.worktree.relocate_foreign_unlinked"
+	WorktreeRelocateBranchesGone      = "cli.worktree.relocate_branches_gone"
+	WorktreeInstanceInvalid           = "cli.worktree.instance_invalid"
 )
 
 func worktreeKeys() map[Key][]string {
@@ -103,5 +106,8 @@ func worktreeKeys() map[Key][]string {
 		WorktreeRelocateInstanceFolder:    {ParamName, ParamValue, ParamPath},
 		WorktreeRelocateForeignRepository: {ParamName, ParamPath, ParamTarget, ParamRepo, ParamCommand},
 		WorktreeRelocateHeadGone:          {ParamName, ParamPath, ParamTip, ParamBranch, ParamCommand},
+		WorktreeRelocateForeignUnlinked:   {ParamName, ParamPath, ParamTarget, ParamRepo},
+		WorktreeRelocateBranchesGone:      {ParamName, ParamPath, ParamTip, ParamBranch},
+		WorktreeInstanceInvalid:           {ParamValue},
 	}
 }

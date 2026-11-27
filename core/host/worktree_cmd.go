@@ -6,9 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
@@ -31,7 +33,21 @@ func RunWorktree(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	if flags.sub != "materialize" && (flags.repo == "" || flags.name == "") {
 		return &worktreeFlagsError{Sub: flags.sub}
 	}
+	if namespacedWorktreeSub(flags.sub) && !instanceid.Validate(flags.instance) {
+		text := renderMigrationText(cliMessages, clitext.ClientLanguage(), clitext.WorktreeInstanceInvalid, clitext.Params{clitext.ParamValue: strconv.Quote(flags.instance)})
+		return &worktreeInstanceError{text: text}
+	}
 	return runWorktreeSub(ctx, cliMessages, hostMessages, flags)
+}
+
+const (
+	worktreeSubCreate      = "create"
+	worktreeSubPreExisting = "pre-existing"
+	worktreeSubRemove      = "remove"
+)
+
+func namespacedWorktreeSub(sub string) bool {
+	return sub == worktreeSubCreate || sub == worktreeSubPreExisting || sub == worktreeSubRemove
 }
 
 type worktreeFlags struct {
@@ -69,11 +85,11 @@ func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
 func runWorktreeSub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, file worktreeFlags) error {
 	worktrees := worktree.NewWorktreer(cliMessages, file.instance)
 	switch file.sub {
-	case "create":
+	case worktreeSubCreate:
 		return createWorktree(ctx, worktrees, file)
-	case "pre-existing":
+	case worktreeSubPreExisting:
 		return emitJSON(map[string]bool{"preExisting": worktrees.PreExisting(ctx, file.repo, file.name)})
-	case "remove":
+	case worktreeSubRemove:
 		return removeWorktree(ctx, worktrees, file)
 	case "materialize":
 		return materializeWorktree(ctx, hostMessages.owner, file.worktreePath)

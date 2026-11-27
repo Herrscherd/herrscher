@@ -13,7 +13,7 @@ import (
 
 const gitlinkMode = "160000"
 
-func (w *Worktreer) checkMovable(ctx context.Context, plan Relocation) error {
+func (w *Worktreer) refuseLocked(ctx context.Context, plan Relocation) error {
 	locked, err := w.lockedWorktree(ctx, plan)
 	if err != nil {
 		return err
@@ -25,15 +25,26 @@ func (w *Worktreer) checkMovable(ctx context.Context, plan Relocation) error {
 			clitext.ParamCommand: "git -C " + shellquote.Quote(plan.Repo) + " worktree unlock " + shellquote.Quote(plan.FromPath),
 		}, nil)
 	}
+	return nil
+}
+
+func (w *Worktreer) checkMovable(ctx context.Context, plan Relocation) error {
+	if err := w.refuseLocked(ctx, plan); err != nil {
+		return err
+	}
 	submodules, err := w.holdsSubmodules(ctx, plan.FromPath)
 	if err != nil {
 		return err
 	}
 	if submodules {
+		gitDir, gitDirErr := exec.CommandContext(ctx, "git", "-C", plan.FromPath, "rev-parse", "--path-format=absolute", "--git-dir").Output()
+		if gitDirErr != nil {
+			return NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(plan.FromPath), clitext.ParamErr: gitDirErr}, gitDirErr)
+		}
 		return NewFailure(w.messages, clitext.WorktreeRelocateSubmodules, clitext.Params{
 			clitext.ParamName:    strconv.Quote(plan.Name),
 			clitext.ParamPath:    strconv.Quote(plan.FromPath),
-			clitext.ParamCommand: manualSubmoduleRelocation(plan),
+			clitext.ParamCommand: manualSubmoduleRelocation(plan, filepath.Clean(strings.TrimSpace(string(gitDir)))),
 		}, nil)
 	}
 	return nil
@@ -105,12 +116,12 @@ func submodulesHeld(ctx context.Context, path string) (bool, error) {
 	return false, nil
 }
 
-func manualSubmoduleRelocation(plan Relocation) string {
+func manualSubmoduleRelocation(plan Relocation, adminDir string) string {
 	quote := shellquote.Quote
 	steps := []string{
 		"mkdir -p " + quote(filepath.Dir(plan.ToPath)),
 		"mv " + quote(plan.FromPath) + " " + quote(plan.ToPath),
-		"git -C " + quote(plan.Repo) + " worktree repair " + quote(plan.ToPath),
+		relinkCommand(plan.ToPath, adminDir),
 	}
 	if plan.moveBranch {
 		steps = append(steps, "git -C "+quote(plan.Repo)+" branch -m "+quote(plan.FromBranch)+" "+quote(plan.ToBranch))

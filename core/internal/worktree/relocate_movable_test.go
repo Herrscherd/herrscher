@@ -79,6 +79,8 @@ func writeFile(t *testing.T, path, content string) {
 
 func TestPlanRefusesAWorktreeWithSubmodulesAndItsCommandsMoveItWithoutLosingAnything(t *testing.T) {
 	repo, from, lib := worktreeWithSubmodule(t)
+	beta := filepath.Join(repo, sessionsDir, "beta")
+	gitIn(t, repo, "worktree", "add", "--relative-paths", beta, "-b", "session/beta")
 	w := NewWorktreer(clitext.NewMessages(), "inst")
 	_, err := w.PlanBareRelocation(t.Context(), BareSession{Name: "alpha", Path: from})
 	runShell(t, refusalCommand(t, err, clitext.WorktreeRelocateSubmodules))
@@ -109,6 +111,9 @@ func TestPlanRefusesAWorktreeWithSubmodulesAndItsCommandsMoveItWithoutLosingAnyt
 	}
 	if update := gitIn(t, repo, "config", "submodule.lib.update"); update != "rebase" {
 		t.Fatalf("submodule.lib.update after the move = %q, want rebase", update)
+	}
+	if link, readErr := os.ReadFile(filepath.Join(beta, ".git")); readErr != nil || !strings.HasPrefix(string(link), "gitdir: ..") {
+		t.Fatalf("the link of the sibling beta after the commands = %q, %v, want it relative", link, readErr)
 	}
 }
 

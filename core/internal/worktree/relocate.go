@@ -10,12 +10,15 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
 const (
 	relocatedDirMode = 0o750
+	adminGitdirName  = "gitdir"
+	worktreesDirName = "worktrees"
 	keptBranchPrefix = "kept/"
 )
 
@@ -115,6 +118,11 @@ func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (R
 	if plan.dir == dirToMove {
 		if movableErr := w.checkMovable(ctx, plan); movableErr != nil {
 			return Relocation{}, movableErr
+		}
+	}
+	if plan.dir == dirMissing && plan.moveBranch {
+		if lockErr := w.refuseLocked(ctx, plan); lockErr != nil {
+			return Relocation{}, lockErr
 		}
 	}
 	return plan, nil
@@ -290,18 +298,58 @@ func (w *Worktreer) Relocate(ctx context.Context, plan Relocation) error {
 }
 
 func (w *Worktreer) settleWorktreeEntry(ctx context.Context, plan Relocation) error {
-	var args []string
 	switch {
 	case plan.Scratch:
 		return nil
 	case plan.dir == dirMoved:
-		args = []string{"-C", plan.Repo, subWorktree, "repair", plan.ToPath}
+		return w.linkMovedWorktree(ctx, plan)
 	case plan.dir == dirMissing && plan.moveBranch:
-		args = []string{"-C", plan.Repo, subWorktree, "prune"}
-	default:
-		return nil
+		return w.dropGoneWorktreeEntry(ctx, plan)
 	}
-	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
+	return nil
+}
+
+func (w *Worktreer) linkMovedWorktree(ctx context.Context, plan Relocation) error {
+	registered, err := w.registeredWorktree(ctx, plan.Repo, plan.ToPath)
+	if err != nil || registered {
+		return err
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", plan.ToPath, "rev-parse", "--path-format=absolute", "--git-dir").CombinedOutput()
+	if err != nil {
+		return NewFailure(w.messages, clitext.WorktreeRelocateFailed, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, err)
+	}
+	adminDir := filepath.Clean(strings.TrimSpace(string(out)))
+	if relinkErr := relinkAdminGitdir(adminDir, filepath.Join(plan.ToPath, gitEntryName)); relinkErr != nil {
+		return NewFailure(w.messages, clitext.WorktreeRelocateFailed, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamOutput: "", clitext.ParamErr: relinkErr}, relinkErr)
+	}
+	return nil
+}
+
+func relinkAdminGitdir(adminDir, gitEntry string) error {
+	file := filepath.Join(adminDir, adminGitdirName)
+	info, err := os.Stat(file)
+	if err != nil {
+		return err
+	}
+	current, err := os.ReadFile(filepath.Clean(file))
+	if err != nil {
+		return err
+	}
+	link := gitEntry
+	if !filepath.IsAbs(strings.TrimSpace(string(current))) {
+		if link, err = filepath.Rel(adminDir, gitEntry); err != nil {
+			return err
+		}
+	}
+	return atomicfile.Write(file, []byte(link+"\n"), info.Mode().Perm())
+}
+
+func (w *Worktreer) dropGoneWorktreeEntry(ctx context.Context, plan Relocation) error {
+	registered, err := w.registeredWorktree(ctx, plan.Repo, plan.FromPath)
+	if err != nil || !registered {
+		return err
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", plan.Repo, subWorktree, "remove", "--force", plan.FromPath).CombinedOutput()
 	if err != nil {
 		return NewFailure(w.messages, clitext.WorktreeRelocateFailed, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, err)
 	}
@@ -309,7 +357,11 @@ func (w *Worktreer) settleWorktreeEntry(ctx context.Context, plan Relocation) er
 }
 
 func (w *Worktreer) moveDir(ctx context.Context, plan Relocation, source, target string) error {
-	if err := os.MkdirAll(filepath.Dir(target), relocatedDirMode); err != nil {
+	folderMode := os.FileMode(relocatedDirMode)
+	if plan.Scratch {
+		folderMode = scratchDirMode
+	}
+	if err := os.MkdirAll(filepath.Dir(target), folderMode); err != nil {
 		return NewFailure(w.messages, clitext.WorktreeRelocateFailed, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamOutput: "", clitext.ParamErr: err}, err)
 	}
 	if plan.Scratch {

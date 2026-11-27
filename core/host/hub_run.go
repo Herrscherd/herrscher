@@ -67,13 +67,17 @@ func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Me
 		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
 	serveErr := serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick)
-	if text, ok := stateFormatText(cliMessages, options.operatorLanguage(), serveErr); ok {
+	return localizeServeError(messages, cliMessages, options.operatorLanguage(), serveErr)
+}
+
+func localizeServeError(messages *hostMessages, cliMessages *clitext.Messages, lang i18n.Language, serveErr error) error {
+	if text, ok := stateFormatText(cliMessages, lang, serveErr); ok {
 		return localizedHostError{text: text, cause: serveErr}
 	}
 	if settings, ok := errors.AsType[compactorSettingsError](serveErr); ok {
-		return localizeCompactorSettings(messages, cliMessages, options.operatorLanguage(), settings)
+		return localizeCompactorSettings(messages, cliMessages, lang, settings)
 	}
-	return localizeHostError(messages, cliMessages, options.operatorLanguage(), serveErr)
+	return localizeHostError(messages, cliMessages, lang, serveErr)
 }
 
 func localizeCompactorSettings(messages *hostMessages, cliMessages *clitext.Messages, lang i18n.Language, settings compactorSettingsError) error {
@@ -87,6 +91,13 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
 	return options
+}
+
+func holdInstance(ctx context.Context, messages *hostMessages, layout RuntimeLayout, instID string, migrationClaim instanceClaim) (func(), error) {
+	if migrationClaim.held() {
+		return migrationClaim.drop, nil
+	}
+	return claimInstance(ctx, messages, layout, instID)
 }
 
 func operatorLogger(warnings io.Writer) *slog.Logger {
@@ -104,7 +115,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 
 	options = options.withDefaultGateways(gws)
 	announcer := stateAnnouncer{cliMessages: cliMessages, lang: options.operatorLanguage(), log: log, out: options.Warnings}
-	store, err := loadHubState(ctx, messages, announcer, options)
+	store, migrationClaim, err := loadHubState(ctx, messages, announcer, options)
 	if err != nil {
 		return wrapHost(messages, err, "serve.load_state", nil)
 	}
@@ -117,9 +128,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 
 	instID, err := resolveInstanceID(messages, announcer, store, options.InstanceID, options.Owner)
 	if err != nil {
+		migrationClaim.drop()
 		return wrapHost(messages, err, "serve.resolve_instance", nil)
 	}
-	releaseInstance, err := claimInstance(ctx, messages, options.Runtime, instID)
+	releaseInstance, err := holdInstance(ctx, messages, options.Runtime, instID, migrationClaim)
 	if err != nil {
 		return err
 	}

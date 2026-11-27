@@ -35,6 +35,10 @@ const (
 	MigrationNothingDone           = "cli.migration.nothing_done"
 	InstanceGenerated              = "cli.instance.generated"
 	InstanceStoredInvalid          = "cli.instance.stored_invalid"
+	InstanceUnset                  = "cli.instance.unset"
+	MigrationInstanceRunning       = "cli.migration.instance_running"
+	MigrationInstanceInUse         = "cli.migration.instance_in_use"
+	MigrationBackupMissing         = "cli.migration.backup_missing"
 )
 
 func migrationKeys() map[Key][]string {
@@ -69,5 +73,9 @@ func migrationKeys() map[Key][]string {
 		MigrationNothingDone:           {},
 		InstanceGenerated:              {ParamValue},
 		InstanceStoredInvalid:          {ParamPath, ParamValue},
+		InstanceUnset:                  {ParamPath},
+		MigrationInstanceRunning:       {ParamValue, ParamErr},
+		MigrationInstanceInUse:         {ParamValue, ParamRepo, ParamTarget},
+		MigrationBackupMissing:         {ParamPath, ParamFile},
 	}
 }

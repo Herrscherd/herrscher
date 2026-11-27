@@ -87,9 +87,14 @@ type Options struct {
 	ContextLimits  map[string]int
 
 	// InstanceID is the explicit per-daemon namespace (-instance flag /
-	// HERRSCHER_INSTANCE_ID). Empty takes the id from HERRSCHER_OWNER_ID, else
-	// from the state, else generates one at the first start.
+	// HERRSCHER_INSTANCE_ID). Once the state holds an id, that id wins, and a
+	// different value here, or a different id derived from the owner, refuses
+	// the start. On a state without one, empty takes the id from
+	// HERRSCHER_OWNER_ID, else serve generates one at its first start.
 	InstanceID string
+
+	// OwnsState marks an operator registry built under the state lock, standing in for serve: it migrates an outdated state and picks and writes the instance id as serve does.
+	OwnsState bool
 
 	// Declarative config.json defaults. Owner is the per-daemon instance-id
 	// fallback (env HERRSCHER_OWNER_ID takes precedence, resolved by the caller).
@@ -218,21 +223,39 @@ func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) 
 	}
 }
 
-func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, opts Options) (*state.State, error) {
+func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, opts Options) (*state.State, instanceClaim, error) {
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
-		return nil, err
+		return nil, instanceClaim{}, err
 	}
-	if err := migrateHubState(ctx, messages, announcer, store, migrationInputs{optID: opts.InstanceID, ownerID: opts.Owner, defaultGateways: opts.DefaultGateways, configWorkspace: opts.Workspace, forge: forgeCredentials(opts.Forge)}); err != nil {
-		return nil, err
+	claim, err := migrateHubStateClaimed(ctx, messages, announcer, store, hubMigrationInputs(ctx, messages, opts))
+	if err != nil {
+		return nil, instanceClaim{}, err
 	}
+	applyHubDefaults(store, opts)
+	return store, claim, nil
+}
+
+func hubMigrationInputs(ctx context.Context, messages *hostMessages, opts Options) migrationInputs {
+	return migrationInputs{
+		optID:           opts.InstanceID,
+		ownerID:         opts.Owner,
+		defaultGateways: opts.DefaultGateways,
+		configWorkspace: opts.Workspace,
+		forge:           forgeCredentials(opts.Forge),
+		claim: func(instID string) (func(), error) {
+			return claimInstance(ctx, messages, opts.Runtime, instID)
+		},
+	}
+}
+
+func applyHubDefaults(store *state.State, opts Options) {
 	var home *state.HomeRef
 	if opts.Home != nil {
 		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}
 	}
 	store.ApplyDefaults(home, opts.Workspace, opts.Source)
 	seedTerminalHome(store, opts.ForegroundBound)
-	return store, nil
 }
 
 func newHubSupervisor(ctx context.Context, self string, layout RuntimeLayout, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {

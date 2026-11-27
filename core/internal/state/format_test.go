@@ -116,6 +116,26 @@ func TestAMigrationStartedAgainNamesTheFirstCopyAndWritesNoOther(t *testing.T) {
 	}
 }
 
+func TestAMigrationStartedAgainRefusesToCopyThePinnedFileWhenItsCopyIsGone(t *testing.T) {
+	path, _ := copyFixture(t, "format0-bare")
+	first := loadOutdated(t, path)
+	backup, err := first.Backup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(t, first.PinMigration("h7k2m9q4x"))
+	must(t, os.Remove(backup))
+
+	_, err = loadOutdated(t, path).Backup()
+	missing, ok := errors.AsType[*BackupMissingError](err)
+	if !ok || missing.File != backup || missing.Path != path {
+		t.Fatalf("Backup once the copy is gone = %v, want a BackupMissingError naming %s", err, backup)
+	}
+	if copies, globErr := filepath.Glob(path + ".before-format-*"); globErr != nil || len(copies) != 0 {
+		t.Fatalf("copies once the first is gone = %v, want none written from the pinned file", copies)
+	}
+}
+
 func TestMigrateFormatBringsEachOldShapeToTheExpectedFile(t *testing.T) {
 	for _, fixture := range formatFixtures() {
 		t.Run(fixture.name, func(t *testing.T) {

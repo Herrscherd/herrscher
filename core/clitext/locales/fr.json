@@ -6039,7 +6039,7 @@
   {
     "id": "cli.worktree.relocate_locked",
     "description": "Refus de migration : git garde verrouillé le worktree à déplacer",
-    "other": "session {{.Name}} : git garde son worktree {{.Path}} verrouillé (git worktree lock), et git worktree move refuse un worktree verrouillé ; rien n'a bougé. Si aucun autre outil n'a encore besoin de ce verrou, lève-le avec {{.Command}}, puis relance herrscher serve"
+    "other": "session {{.Name}} : git garde son worktree {{.Path}} verrouillé (git worktree lock), et git refuse de déplacer un worktree verrouillé ou de retirer l'entrée d'un worktree disparu ; rien n'a bougé. Si aucun autre outil n'a encore besoin de ce verrou, lève-le avec {{.Command}}, puis relance herrscher serve"
   },
   {
     "id": "cli.worktree.relocate_submodules",
@@ -6059,12 +6059,27 @@
   {
     "id": "cli.worktree.relocate_foreign_repository",
     "description": "Refus de migration : le worktree à déplacer appartient à un autre dépôt que celui où il se trouve",
-    "other": "session {{.Name}} : le worktree {{.Path}} appartient au dépôt {{.Target}}, pas à {{.Repo}} où il se trouve (une copie du dépôt garde les liens de l'original), donc git ne peut pas le déplacer depuis {{.Repo}} ; rien n'a bougé et aucun id n'a été écrit. Si le dossier doit appartenir à {{.Repo}}, rattache-le avec {{.Command}} ; sinon sors le dossier de {{.Repo}}. Puis relance herrscher serve"
+    "other": "session {{.Name}} : le worktree {{.Path}} appartient au dépôt {{.Target}}, pas à {{.Repo}} où il se trouve (une copie du dépôt garde les liens de l'original), donc git ne peut pas le déplacer depuis {{.Repo}} ; rien n'a bougé et aucun id n'a été écrit. Si le dossier doit appartenir à {{.Repo}}, rattache ce seul worktree avec {{.Command}}, qui laisse les autres worktrees des deux dépôts tels quels ; sinon sors le dossier de {{.Repo}}. Puis relance herrscher serve"
   },
   {
     "id": "cli.worktree.relocate_head_gone",
     "description": "Refus de migration : le worktree déplacé est sur une branche qui n'existe plus",
     "other": "session {{.Name}} : son worktree {{.Path}} est sur {{.Tip}}, une branche qui n'existe plus, comme le laisse un renommage de branche arrêté en route ; rien de plus n'a bougé. Si {{.Branch}} porte le travail de la session, fais-y pointer le worktree avec {{.Command}}, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_foreign_unlinked",
+    "description": "Refus de migration : le worktree à déplacer appartient à un autre dépôt, et le dépôt où il se trouve n'a aucune entrée pour lui",
+    "other": "session {{.Name}} : le worktree {{.Path}} appartient au dépôt {{.Target}}, pas à {{.Repo}} où il se trouve, et {{.Repo}} n'a aucune entrée de worktree à laquelle le rattacher, donc git ne peut pas le déplacer depuis {{.Repo}} ; rien n'a bougé et aucun id n'a été écrit. Sors le dossier de {{.Repo}}, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_branches_gone",
+    "description": "Refus de migration : le worktree déplacé est sur une branche qui n'existe plus, et l'autre nom de la branche de session a disparu aussi",
+    "other": "session {{.Name}} : son worktree {{.Path}} est sur {{.Tip}}, une branche qui n'existe plus, et {{.Branch}}, l'autre nom de la branche de session, n'existe pas non plus, donc aucune branche de ce dépôt n'est connue pour porter le travail de la session ; rien de plus n'a bougé. Fais pointer le worktree vers la branche qui porte ce travail avec git symbolic-ref HEAD, ou sors le dossier {{.Path}} du dépôt, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.instance_invalid",
+    "description": "Refus du verbe worktree : l'id d'instance passé par le daemon qui pilote est vide ou invalide",
+    "other": "worktree : --instance {{.Value}} n'est pas un id d'instance valide (lettres minuscules, chiffres et tirets, 16 caractères au plus, sans tiret en tête), et un id vide bâtirait les chemins et branches d'un daemon sans id d'instance ; le daemon qui pilote cet hôte est plus ancien que ce herrscher, donc mets-le à jour, puis réessaie"
   },
   {
     "id": "cli.migration.started",
@@ -6218,6 +6233,26 @@
     "id": "cli.instance.stored_invalid",
     "description": "Refus de démarrer sur un état dont l'id d'instance est mal formé",
     "other": "l'état {{.Path}} enregistre l'id d'instance {{.Value}}, qui n'est pas un id valide (lettres minuscules, chiffres et tirets, 16 caractères au plus, sans tiret en tête), donc les chemins de worktree et noms de branche bâtis dessus pourraient sortir de leurs dossiers ; remets l'id avec lequel ce daemon tournait (le dossier sous .herrscher-sessions/ qui contient ses worktrees le nomme), puis relance herrscher"
+  },
+  {
+    "id": "cli.instance.unset",
+    "description": "Refus d'une commande d'opérateur sur un état sans id d'instance alors qu'aucun n'est configuré",
+    "other": "l'état {{.Path}} n'enregistre pas encore d'id d'instance, et ni HERRSCHER_INSTANCE_ID ni HERRSCHER_OWNER_ID n'en fixent un ; seul herrscher serve choisit et écrit l'id, pour qu'une commande lancée avant ne fige pas un id que serve refuserait ensuite. Lance herrscher serve une fois, ou fixe HERRSCHER_INSTANCE_ID, puis relance cette commande"
+  },
+  {
+    "id": "cli.migration.instance_running",
+    "description": "Refus de migration : un autre daemon de cette machine tient l'id d'instance sous lequel la migration rangerait les sessions",
+    "other": "l'id d'instance {{.Value}} est tenu par un autre daemon herrscher qui tourne sur cette machine ({{.Err}}), et migrer maintenant rangerait les sessions de cet état parmi celles de ce daemon ; rien n'a bougé et aucun id n'a été écrit. Donne à ce daemon son propre id avec HERRSCHER_INSTANCE_ID, ou arrête l'autre daemon s'il sert ce même état, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.migration.instance_in_use",
+    "description": "Refus de migration : des worktrees ou branches de l'id d'instance n'appartiennent à aucune session de cet état",
+    "other": "l'id d'instance {{.Value}} est déjà utilisé dans le dépôt {{.Repo}} : {{.Target}} n'appartiennent à aucune session de cet état, donc un autre daemon a tourné avec cet id ici, et y ranger les sessions de cet état les mêlerait aux siennes ; rien n'a bougé et aucun id n'a été écrit. Donne à ce daemon son propre id avec HERRSCHER_INSTANCE_ID, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.migration.backup_missing",
+    "description": "Refus de migration : la copie de l'ancien fichier que nomme l'état a disparu",
+    "other": "l'état {{.Path}} nomme {{.File}} comme sa copie du fichier d'avant la migration, mais cette copie a disparu, et l'état contient maintenant l'id d'instance écrit par la migration, donc une nouvelle copie ne serait pas l'ancien fichier ; rien de plus n'a bougé. Remets la copie à {{.File}} si tu l'as encore ; sinon retire le champ migration_backup de {{.Path}} pour continuer sans copie de l'ancien fichier. Puis relance herrscher serve"
   },
   {
     "id": "cli.help.cmd.mcp.weight",

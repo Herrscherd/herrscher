@@ -182,6 +182,16 @@ func (s *State) checkMigrationLocked(migration FormatMigration) error {
 
 var errNoInstanceID = errors.New("a format migration needs a pinned instance id")
 
+// BackupMissingError reports that the copy of the old file a pinned migration names is gone.
+type BackupMissingError struct {
+	Path string
+	File string
+}
+
+func (e *BackupMissingError) Error() string {
+	return "state " + e.Path + " names " + e.File + " as its copy of the old file, and that copy is gone"
+}
+
 func (s *State) backupLocked() (string, error) {
 	if s.backupPath != "" || s.original == nil {
 		return s.backupPath, nil
@@ -191,10 +201,11 @@ func (s *State) backupLocked() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if kept {
-			s.backupPath = s.MigrationBackup
-			return s.backupPath, nil
+		if !kept {
+			return "", &BackupMissingError{Path: s.path, File: s.MigrationBackup}
 		}
+		s.backupPath = s.MigrationBackup
+		return s.backupPath, nil
 	}
 	target, err := s.freeBackupPathLocked()
 	if err != nil {

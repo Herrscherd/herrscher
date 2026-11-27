@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -77,16 +79,58 @@ type migrationInputs struct {
 	defaultGateways []string
 	configWorkspace string
 	forge           contracts.ForgeCredentials
+	claim           func(instID string) (func(), error)
+}
+
+type instanceClaim struct {
+	release func()
+}
+
+func (c instanceClaim) held() bool { return c.release != nil }
+
+func (c instanceClaim) drop() {
+	if c.release != nil {
+		c.release()
+	}
 }
 
 func migrateHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, store *state.State, inputs migrationInputs) error {
+	claim, err := migrateHubStateClaimed(ctx, messages, announcer, store, inputs)
+	claim.drop()
+	return err
+}
+
+func migrateHubStateClaimed(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, store *state.State, inputs migrationInputs) (instanceClaim, error) {
 	if !store.Outdated() {
-		return nil
+		return instanceClaim{}, nil
 	}
 	instID, origin, err := chooseInstanceID(messages, store.Path(), store.InstanceID, inputs.optID, inputs.ownerID)
 	if err != nil {
-		return migrationCheckRefusal(announcer.cliMessages, err)
+		return instanceClaim{}, migrationCheckRefusal(announcer.cliMessages, err)
 	}
+	claim, err := claimMigrationInstance(announcer.cliMessages, inputs.claim, instID)
+	if err != nil {
+		return instanceClaim{}, err
+	}
+	if migrateErr := migrateClaimed(ctx, announcer, store, inputs, instID, origin); migrateErr != nil {
+		claim.drop()
+		return instanceClaim{}, migrateErr
+	}
+	return claim, nil
+}
+
+func claimMigrationInstance(cliMessages *clitext.Messages, claim func(string) (func(), error), instID string) (instanceClaim, error) {
+	if claim == nil {
+		return instanceClaim{}, nil
+	}
+	release, err := claim(instID)
+	if err != nil {
+		return instanceClaim{}, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationInstanceRunning, params: clitext.Params{clitext.ParamValue: instID, clitext.ParamErr: err.Error()}, cause: err}
+	}
+	return instanceClaim{release: release}, nil
+}
+
+func migrateClaimed(ctx context.Context, announcer stateAnnouncer, store *state.State, inputs migrationInputs, instID string, origin instanceOrigin) error {
 	migration := state.FormatMigration{InstanceID: instID, DefaultGateways: inputs.defaultGateways, ConfigWorkspace: inputs.configWorkspace}
 	if checkErr := store.CheckMigration(migration); checkErr != nil {
 		return migrationCheckRefusal(announcer.cliMessages, checkErr)
@@ -100,11 +144,17 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	if err != nil {
 		return err
 	}
+	if inUseErr := refuseInstanceInUse(ctx, announcer.cliMessages, worktrees, instID, sessions, plans); inUseErr != nil {
+		return inUseErr
+	}
 	rekeys, err := planCheckpointRekeys(ctx, announcer.cliMessages, sessions)
 	if err != nil {
 		return err
 	}
 	backup, err := store.Backup()
+	if missing, ok := errors.AsType[*state.BackupMissingError](err); ok {
+		return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationBackupMissing, params: clitext.Params{clitext.ParamPath: missing.Path, clitext.ParamFile: missing.File}, cause: err}
+	}
 	if err != nil {
 		return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationBackupFailed, params: clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamErr: err.Error()}, cause: err}
 	}
@@ -117,6 +167,33 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 		return &stateMigrationInterruptedError{messages: announcer.cliMessages, done: announcer.progress.steps, backup: backup, cause: err}
 	}
 	announcer.announce(clitext.MigrationDone, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamTo: state.CurrentFormat})
+	return nil
+}
+
+func refuseInstanceInUse(ctx context.Context, cliMessages *clitext.Messages, worktrees *worktree.Worktreer, instID string, sessions []state.Session, plans map[string]sessionRelocation) error {
+	ownedPaths := make([]string, 0, len(sessions)+len(plans))
+	for idx := range sessions {
+		ownedPaths = append(ownedPaths, sessions[idx].Worktree)
+	}
+	ownedBranches := make([]string, 0, len(plans))
+	repos := make(map[string]bool)
+	for name := range plans {
+		plan, remote := plans[name].plan, plans[name].remote
+		ownedPaths = append(ownedPaths, plan.ToPath)
+		ownedBranches = append(ownedBranches, plan.ToBranch)
+		if !remote && !plan.Scratch && (plan.MovesDir() || plan.DirAtTarget() || plan.RenamesBranch()) {
+			repos[plan.Repo] = true
+		}
+	}
+	for _, repo := range slices.Sorted(maps.Keys(repos)) {
+		foreign, err := worktrees.ForeignInstanceEntries(ctx, repo, ownedPaths, ownedBranches)
+		if err != nil {
+			return &stateMigrationRefusedError{messages: cliMessages, cause: err}
+		}
+		if len(foreign) > 0 {
+			return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationInstanceInUse, params: clitext.Params{clitext.ParamValue: instID, clitext.ParamRepo: repo, clitext.ParamTarget: strings.Join(foreign, ", ")}}
+		}
+	}
 	return nil
 }
 
@@ -314,6 +391,25 @@ type statePendingMigrationError struct {
 
 func (e *statePendingMigrationError) Error() string {
 	return "state " + e.path + " has an old format: run herrscher serve once to migrate it"
+}
+
+type instanceUnsetError struct {
+	path string
+}
+
+func (e *instanceUnsetError) Error() string {
+	return "state " + e.path + " records no instance id and none is configured: run herrscher serve once"
+}
+
+func operatorInstanceID(messages *hostMessages, announcer stateAnnouncer, hostState *state.State, options Options) (string, error) {
+	if options.OwnsState {
+		return resolveInstanceID(messages, announcer, hostState, options.InstanceID, options.Owner)
+	}
+	instID, origin, err := chooseInstanceID(messages, hostState.Path(), hostState.InstanceID, options.InstanceID, options.Owner)
+	if err == nil && origin == instanceGenerated {
+		return "", &instanceUnsetError{path: hostState.Path()}
+	}
+	return instID, err
 }
 
 func resolveInstanceID(messages *hostMessages, announcer stateAnnouncer, hostState *state.State, optID, ownerID string) (string, error) {

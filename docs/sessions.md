@@ -56,7 +56,11 @@ writes a copy of the old file, byte for byte as it was read, next to it as
 renamed). A copy left by an earlier migration is never overwritten: the next one
 is `state.json.before-format-1.2.bak`, then `.3.bak`, and the start of the
 migration names the exact file. If that copy cannot be written, the migration
-refuses before it touches a worktree or a branch. Right after the copy, and
+refuses before it touches a worktree or a branch. A migration started again
+after a stop reuses the copy the state names (`migration_backup`); if that copy
+was deleted in between, it refuses instead of writing the file it now holds,
+which already carries the chosen id, as the old one: put the copy back, or
+remove `migration_backup` to carry on without one. Right after the copy, and
 before any ref, folder or branch moves, it writes the instance id it chose and
 the incarnation of each session into the old file, which keeps format 0: a
 migration stopped after that point starts again with the same id and the same
@@ -70,7 +74,12 @@ writes the new file atomically. Each change is announced on the output of
   anything moves. An id already stored must be a valid id (lowercase letters,
   digits and dashes, at most 16 characters, no leading dash): a state edited
   by hand to hold `../x` is refused, since paths built from it would leave
-  `.herrscher-sessions`. A daemon
+  `.herrscher-sessions`. Only `herrscher serve` picks and writes an id (and
+  `herrscher "<task>"` with no daemon, which holds the state lock and stands in
+  for it): an operator command takes the stored id, or the configured one
+  without writing it, and refuses when there is neither, so a command run
+  before the first `serve` cannot freeze an id that `serve` with an owner
+  would then refuse. A daemon
   never runs without an id any more: the id-less layout, its bare branch names
   and its bare socket names are gone.
 - **Sessions of the id-less layout.** A session whose worktree is
@@ -111,7 +120,11 @@ writes the new file atomically. Each change is announced on the output of
   point under the name replaces the one of the incarnation, as a later rewind
   would; the announce gives the count and the first new index. Refs a session
   filed under a name it had before a rename are left where they are, as are
-  those of closed sessions.
+  those of closed sessions. Format 0 filed checkpoints by name only, so the
+  promise above that a session taking a freed name sees none of the
+  checkpoints of the session that had it starts with the migration: every
+  ref under the name at that point, the earlier holder's included, goes to the
+  session that holds the name when the migration runs.
   Checkpoint refs belong to the repository, not to the worktree folder, so the
   refs of a session whose folder is gone move too, read from the repository the
   folder sat in (the folder above `.herrscher-sessions`), the same way and
@@ -145,6 +158,15 @@ New sessions get the `<id>__<name>` title.
 
 It refuses, writes nothing, and says what to do instead of guessing, when:
 
+- another daemon on this machine holds the instance id: the migration takes
+  the instance lock as soon as it has chosen the id, before the copy and
+  before anything moves, and `serve` keeps it afterwards. Give this daemon its
+  own id with `HERRSCHER_INSTANCE_ID`;
+- a repository already holds, under `.herrscher-sessions/<id>/`, a worktree
+  git lists, or a `session/<id>/` branch, that belongs to no session of this
+  state: another daemon ran with this id there, and moving the sessions in
+  would mix them with its own. Give this daemon its own id with
+  `HERRSCHER_INSTANCE_ID`;
 - the target directory of a move already exists, or the target branch already
   exists;
 - the parent of the target, `.herrscher-sessions/<id>` (or
@@ -155,15 +177,23 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   or choose another id with `HERRSCHER_INSTANCE_ID`;
 - the worktree to move belongs to another repository than the one it sits in,
   as the worktrees of a repository copied with `cp -a` still point at the
-  original. The refusal names both repositories and prints
-  `git -C <repo> worktree repair <folder>`, which links the folder to the
-  repository it sits in; otherwise move the folder out of that repository;
+  original. The refusal names both repositories and prints two `printf`
+  commands that link this one folder to the entry the repository it sits in
+  keeps for it: its `.git` file gets `gitdir: <repo>/.git/worktrees/<id>`, and
+  the `gitdir` file of that entry gets `<folder>/.git`. The other worktrees of
+  both repositories are left as they are, which `git worktree repair` would
+  not do: it rewrites the links of every worktree of the repository. When the
+  repository it sits in keeps no such entry, the refusal says to move the
+  folder out of that repository;
 - a resumed migration finds the worktree at its new place but checked out on
   a branch that no longer exists, as a branch rename stopped halfway leaves
   it. The refusal prints `git -C <folder> symbolic-ref HEAD
   refs/heads/<renamed branch>`; run it if that branch holds the work of the
-  session, then start `serve` again. A worktree found at its new place on any
-  other branch is refused as a worktree on another branch;
+  session, then start `serve` again. When the renamed branch is gone too, no
+  branch is known to hold the work, and the refusal prints no command: point
+  the worktree at the branch that holds it, or move the folder out. A worktree
+  found at its new place on any other branch is refused as a worktree on
+  another branch;
 - a branch `session/<id>` exists (an older session named like the instance id
   left it behind), or a branch below `session/<id>/<name>/`: git cannot create
   `session/<id>/<name>` while it does, since one branch name cannot also be a
@@ -205,7 +235,8 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   folder git calls of dubious ownership, a folder it may not read. The refusal
   names the session, the folder and git's error; make
   `git -C <folder> for-each-ref refs/herrscher/` work (fix the rights, add the
-  folder to `safe.directory`, or run `git -C <repo> worktree repair <folder>`),
+  folder to `safe.directory`, or point the `.git` file of the folder and the
+  `gitdir` file of its entry under `<repo>/.git/worktrees` at each other),
   and start `serve` again.
 - git finds no repository for a session's folder, yet a `.git` entry sits on
   its path: a home under dotfiles kept in `~/.git` with `GIT_CEILING_DIRECTORIES`
@@ -235,13 +266,15 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   delete the entry of the session that should not keep the folder, and start
   `serve` again. The folder, its branch and its work stay with the session
   kept, and the channel of the other is left as it is;
-- the worktree to move is locked (`git worktree lock`): git refuses to move it.
+- the worktree to move is locked (`git worktree lock`): git refuses to move it,
+  and to drop the entry of a gone worktree whose branch is still to rename.
   The refusal prints `git -C <repo> worktree unlock <folder>`; run it if no
   other tool still needs the lock, then start `serve` again;
 - the worktree to move holds submodules: `git worktree move` refuses such a
   worktree. The refusal prints the commands that move it by hand and that the
   next `serve` then finds in place: `mkdir -p`, `mv`,
-  `git -C <repo> worktree repair <new folder>`, `git -C <repo> branch -m`, and
+  the two `printf` commands that link the new folder to its entry in the
+  repository and leave every other worktree alone, `git -C <repo> branch -m`, and
   `git -C <new folder> submodule absorbgitdirs`, which points the `.git` file
   and `core.worktree` of each submodule, nested ones included, back at its git
   folder after the move. Nothing is deinitialized: files the submodules ignore
@@ -256,12 +289,17 @@ run, the session fails to start on the host and the daemon keeps retrying.
 
 A move that fails halfway is put back, and the next start picks the migration up
 where it stopped: a directory or branch already at its new place counts as done.
-A worktree already at its new place first goes through
-`git -C <repo> worktree repair <folder>`, which mends the entry git keeps for it
-if the move stopped after the folder moved. When the folder of a session is
-gone but its branch is still to rename, `git -C <repo> worktree prune` runs
-first, so the stale entry of the gone worktree does not keep holding the
-renamed branch. A session whose recorded folder changes is announced as
+A worktree already at its new place that `git worktree list` does not show
+there (the move stopped after the folder moved) gets the one link git keeps for
+it, the `gitdir` file of its entry under `.git/worktrees`, pointed at the new
+folder, in the same absolute or relative form as before. No other worktree of
+the repository is touched, so `git worktree repair` is never run: it rewrites
+the links of every worktree of the repository. When the folder of a session is
+gone but its branch is still to rename, `git -C <repo> worktree remove <old
+folder>` drops the entry of that one gone worktree first, so it does not keep
+holding the renamed branch. `git worktree prune` is never run either: it would
+also drop the entry of every other worktree whose folder is missing, such as a
+worktree on a drive that is not mounted. A session whose recorded folder changes is announced as
 starting a new conversation, including when an earlier, stopped run already
 moved the folder.
 Run twice, the migration changes nothing the second time. A migration that stops
@@ -273,7 +311,9 @@ on from there.
 A file of a newer format than the build is refused at load, by `serve` and by
 every command, with the file and both formats named. Commands run outside the
 daemon refuse a format 0 file and ask to restart the daemon, since only the
-daemon has the gateways and the lock the migration needs. No command, and no
+daemon has the gateways and the lock the migration needs. `herrscher "<task>"`
+with no daemon running (both the window and `--print`) takes the state lock
+itself, so it migrates the file first, as `serve` would. No command, and no
 load of the file, ever writes a format 0 file back: only the migration does, so
 a command run while `serve` migrates cannot overwrite what the migration wrote.
 That is also what an upgrade with the old daemon still running looks like: the

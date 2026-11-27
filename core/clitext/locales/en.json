@@ -6450,5 +6450,25 @@
     "id": "cli.host.approve.rule_session_added",
     "description": "Reply of approve rule for one session",
     "other": "rule {{.Rule}} added for session {{.Name}} alone"
+  },
+  {
+    "id": "cli.usage.proxy",
+    "description": "Usage line: proxy",
+    "other": "relay one daemon socket over stdin and stdout, for a route over ssh"
+  },
+  {
+    "id": "cli.host.fault.proxy_daemon_absent",
+    "description": "Error: the daemon does not answer on this machine for a proxy channel",
+    "other": "the herrscher daemon does not answer on this machine: start it with herrscher serve"
+  },
+  {
+    "id": "cli.proxy.usage",
+    "description": "Usage line of herrscher proxy",
+    "other": "usage: herrscher proxy <command|events|approval>"
+  },
+  {
+    "id": "cli.host.fault.proxy_unknown_channel",
+    "description": "Error: a proxy channel name is not command, events or approval",
+    "other": "unknown proxy channel: use command, events or approval"
   }
 ]

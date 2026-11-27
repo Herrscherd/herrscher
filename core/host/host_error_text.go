@@ -96,6 +96,8 @@ func hostErrorKeys() []hostErrorKey {
 		{errHandoffQuota, "cli.host.fault.handoff_quota"},
 		{errShellRefused, "cli.host.fault.shell_refused"},
 		{errDaemonEventsUnreachable, "cli.host.fault.daemon_events_unreachable"},
+		{errProxyDaemonAbsent, "cli.host.fault.proxy_daemon_absent"},
+		{errUnknownProxyChannel, "cli.host.fault.proxy_unknown_channel"},
 		{errSocketTaken, "cli.host.fault.socket_taken"},
 		{errInstanceLocked, "cli.host.fault.instance_locked"},
 		{errNoRuntimeLayout, "cli.host.fault.no_runtime_dir"},

@@ -78,6 +78,52 @@ No token reaches a bridge on a remote machine: `remoteEnvBlock` does not carry
 Its approvals go through the asker that the turn attaches (`core/bridge/approval.go`).
 
 
+## Route ssh
+
+`herrscher proxy <command|events|approval>` relays one local socket of the daemon
+over its standard input and output. A client that wants to drive a daemon on
+another machine runs it through ssh, one channel per socket, so no port opens on
+either side:
+
+```bash
+ssh build1 herrscher proxy command    # one request line in, one answer out
+ssh build1 herrscher proxy events     # NDJSON stream of events
+ssh build1 herrscher proxy approval   # the approval socket
+```
+
+The command socket takes the same line as on this machine: a JSON object with
+`argv`, and optionally `token` and `lang`, then one answer line. The events socket
+takes the cursor line that `SubscribeSessionEvents` writes first, the session and
+the sequence number already seen, then streams. The proxy never reads these
+messages: it copies bytes in both directions.
+
+Trust model: the route is trusted as local. The ssh login authenticates the
+client, and the proxy runs as the user that owns the daemon, so it reaches the
+sockets exactly as a process on this machine would. Scopes do not apply on this
+route, since they belong to the network routes. The session tokens stay in the
+daemon: the proxy forwards whatever token the client sends and never creates one.
+
+Ending a channel:
+
+- Closing stdin ends the request side. The daemon sees end of input on its socket.
+- The proxy returns when the daemon closes its side, with status 0.
+- When no daemon listens for the channel, the proxy prints that the daemon does
+  not answer on this machine and exits with status 1. The client learns the
+  daemon is absent from that exit status, not from a socket that hangs.
+
+The `herrscher` command must be on the PATH of the ssh login. A binary placed by
+`host add` lives in `~/.herrscher/bin`, which a login shell does not always
+read. Go code that opens the route calls `host.DialProxy`, which starts
+`ssh <target> herrscher proxy <channel>` and returns a connection whose reads come
+from the daemon and whose writes go to it.
+
+The approval channel names the daemon's approval socket, `herrscher-approval-<instance>`
+in the per-user directory. The daemon does not serve that socket yet, so until the
+approval channel of the backend lands, `herrscher proxy approval` reports that the
+daemon does not answer. Approvals made from the operator CLI (`herrscher approve`)
+work over the command socket meanwhile.
+
+
 ## Plugins on another machine
 
 A plugin category can run in a plugin-host on another machine. Name the category

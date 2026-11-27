@@ -455,13 +455,17 @@ func forwardUnknownVerb(ctx context.Context, layout host.RuntimeLayout, hostMess
 func forwardWithin(ctx context.Context, timeout time.Duration, layout host.RuntimeLayout, hostMessages *host.Messages, argv []string) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	return host.ForwardToDaemon(ctx, hostMessages, layout, host.DefaultStatePath(), configuredInstanceID(), argv)
+}
+
+func configuredInstanceID() string {
 	instance := envx.Get("INSTANCE_ID")
 	if instance == "" {
 		if cfg, err := config.Load(config.DefaultPath()); err == nil {
 			instance = cfg.Instance
 		}
 	}
-	return host.ForwardToDaemon(ctx, hostMessages, layout, host.DefaultStatePath(), instance, argv)
+	return instance
 }
 
 func buildGateways(ctx context.Context, messages *clitext.Messages, lang i18n.Language) ([]host.Deps, error) {

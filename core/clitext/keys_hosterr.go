@@ -77,6 +77,8 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.handoff_busy":                  nil,
 		"cli.host.fault.handoff_quota":                 nil,
 		"cli.host.fault.shell_refused":                 nil,
+		"cli.host.fault.proxy_unknown_channel":         nil,
+		"cli.host.fault.proxy_daemon_absent":           nil,
 		"cli.host.fault.daemon_events_unreachable":     nil,
 		"cli.host.fault.no_runtime_dir":                nil,
 		"cli.host.fault.hub_closed":                    nil,

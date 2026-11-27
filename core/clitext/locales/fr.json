@@ -6450,5 +6450,25 @@
     "id": "cli.host.approve.rule_session_added",
     "description": "Reply of approve rule for one session",
     "other": "règle {{.Rule}} ajoutée pour la seule session {{.Name}}"
+  },
+  {
+    "id": "cli.usage.proxy",
+    "description": "Ligne d'aide : proxy",
+    "other": "relaie une socket du démon sur l'entrée et la sortie standard, pour une route ssh"
+  },
+  {
+    "id": "cli.host.fault.proxy_daemon_absent",
+    "description": "Erreur : le démon ne répond pas sur cette machine pour un canal de proxy",
+    "other": "le démon herrscher ne répond pas sur cette machine : lancez-le avec herrscher serve"
+  },
+  {
+    "id": "cli.proxy.usage",
+    "description": "Ligne d'usage de herrscher proxy",
+    "other": "usage : herrscher proxy <command|events|approval>"
+  },
+  {
+    "id": "cli.host.fault.proxy_unknown_channel",
+    "description": "Erreur : le nom de canal de proxy n'est ni command, ni events, ni approval",
+    "other": "canal de proxy inconnu : utilisez command, events ou approval"
   }
 ]

@@ -68,6 +68,7 @@ func usage(messages *clitext.Messages, lang i18n.Language) error {
 			row("bridge  --cmd '<command>'", clitext.UsageBridge),
 			row("service <install|uninstall|…>", clitext.UsageService),
 			row("commands", clitext.UsageCommands),
+			row("proxy   <command|events|approval>", clitext.UsageProxy),
 		),
 		"",
 		group(

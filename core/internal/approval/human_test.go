@@ -29,6 +29,14 @@ func TestRequiresHumanCatchesEveryWayOfNamingHerrscherAdministration(t *testing.
 		`python3 -c 'import subprocess; subprocess.run(["herrscher", "device", "approve", "X"])'`,
 		`node -e 'require("child_process").execFileSync("herrscher", ["device", "list"])'`,
 		`perl -e 'system("herrscher", "device", "list")'`,
+		`grep "herrscher role" docs/remote.md`,
+		"if true; then herrscher device list; fi",
+		"for x in 1; do herrscher device approve X; done",
+		"! herrscher device list",
+		"echo hi\nherrscher device list",
+		"sh <<EOF\nherrscher device list\nEOF",
+		`echo "herrscher device list" | sh`,
+		"timeout 5 herrscher device list",
 	} {
 		if !RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
 			t.Fatalf("%q must need a person", subject)
@@ -49,10 +57,9 @@ func TestRequiresHumanLeavesOrdinaryCommandsToTheRules(t *testing.T) {
 		"ls $DIR && cat devices.txt",
 		`echo "$HOME/device"`,
 		"echo $(date) > device.log",
+		"echo $X herring fischer",
 		"echo ls | sh",
 		"echo cm9sZQ== | base64 -d",
-		`grep "herrscher role" docs/remote.md`,
-		"echo $X herring fischer",
 	} {
 		if RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
 			t.Fatalf("%q must stay under the rules", subject)

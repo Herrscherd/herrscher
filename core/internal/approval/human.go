@@ -1,20 +1,19 @@
 package approval
 
-import (
-	"regexp"
-	"strings"
-)
+import "strings"
 
-// RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, which only a person may
-// decide: no rule, no remembered answer and no mode lets them through. It is a text barrier: it reads the command
-// after removing quoting and punctuation, and it does not see a script written to a file and run afterwards, a file
-// downloaded and run, or an encoding it does not name.
+// RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, or names them with a
+// command that can reach them, which only a person may decide: no rule, no remembered answer and no mode lets them
+// through. It is a text barrier. It splits the command on every punctuation mark and every blank, so it sees the
+// name wherever the shell puts it, and it over-blocks on purpose: a command that names herrscher with device or
+// role needs a person even when it only reads. It does not see a script written to a file and run afterwards, a
+// file downloaded and run, or an encoding it does not name.
 func RequiresHuman(req Request) bool {
 	if CanonicalTool(req.Tool) != toolBash {
 		return false
 	}
 	words := strings.Fields(normalizeShell(req.Subject))
-	if programHerrscher(req.Subject) && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
+	if hasWord(words, "herrscher") && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
 		return true
 	}
 	if (strings.ContainsAny(req.Subject, "$`") || hasWord(words, "eval")) && assemblesHerrscher(words) {
@@ -24,31 +23,13 @@ func RequiresHuman(req Request) bool {
 }
 
 func normalizeShell(command string) string {
-	spaced := strings.NewReplacer(`\n`, " ", `\t`, " ").Replace(command)
+	unquoted := strings.NewReplacer(`\n`, " ", `\t`, " ", `\`, "", `"`, "", `'`, "", "`", "").Replace(command)
 	return strings.ToLower(strings.Map(func(char rune) rune {
-		if strings.ContainsRune("[]{}(),;:&|<>=\"'`\\/.", char) {
+		if strings.ContainsRune("[]{}(),;:&|<>=/.!", char) {
 			return ' '
 		}
 		return char
-	}, spaced))
-}
-
-func programPositionPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`(?:^|[;&|(` + "`" + `{])\s*(?:\S*/)?herrscher\b`),
-		regexp.MustCompile(`(?:\b(?:env|sudo|exec|xargs|nohup|time|command|eval)\b|\s-[ce]\b)[^;&|` + "`" + `]*?[\s\[,(](?:\S*/)?herrscher\b`),
-		regexp.MustCompile(`[\[,(]\s*(?:\S*/)?herrscher\b`),
-	}
-}
-
-func programHerrscher(command string) bool {
-	position := strings.NewReplacer(`\n`, " ", `\t`, " ", `\`, "", `"`, "", `'`, "").Replace(command)
-	for _, pattern := range programPositionPatterns() {
-		if pattern.MatchString(strings.ToLower(position)) {
-			return true
-		}
-	}
-	return false
+	}, unquoted))
 }
 
 func hasWord(words []string, want string) bool {

@@ -9,8 +9,8 @@ the host code at master `c358a168`.
 ## Verdict
 
 A GitHub gateway is feasible on the current port for output, but it cannot be
-enabled yet. Three prerequisites block it, and two of them are host behaviour
-that the port does not control:
+enabled yet. Two prerequisites block it, both host behaviour that the port
+does not control:
 
 1. **Automatic attachment (blocking).** A session with no stored gateway list
    and a channel (a legacy session) is bound to every non-terminal gateway
@@ -107,8 +107,7 @@ prerequisite 2).
   update in `contracts.Issue`, and `Issues` has no revision. So a poller cannot
   tell that an issue changed, without reading it again. The `IssueQuery` filter
   by label exists (`IssueQuery.Labels`). There is no filter by mention, and no
-  filter by date. A `herrscher-contracts` change (v0.52.0) is reported in
-  progress to add these filters; this study has not verified that change.
+  filter by date. Adding them is a change to `herrscher-contracts`.
 
 ## Risks
 

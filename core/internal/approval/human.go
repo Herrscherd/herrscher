@@ -5,14 +5,6 @@ import (
 	"strings"
 )
 
-var programPositions = []*regexp.Regexp{
-	regexp.MustCompile("(?:^|[;&|(`{])\\s*(?:\\S*/)?herrscher\\b"),
-	regexp.MustCompile("(?:\\b(?:env|sudo|exec|xargs|nohup|time|command|eval)\\b|\\s-[ce]\\b)[^;&|`]*?[\\s\\[,(](?:\\S*/)?herrscher\\b"),
-	regexp.MustCompile("[\\[,(]\\s*(?:\\S*/)?herrscher\\b"),
-}
-
-var interpreterDecoders = []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"}
-
 // RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, which only a person may
 // decide: no rule, no remembered answer and no mode lets them through. It is a text barrier: it reads the command
 // after removing quoting and punctuation, and it does not see a script written to a file and run afterwards, a file
@@ -41,9 +33,17 @@ func normalizeShell(command string) string {
 	}, spaced))
 }
 
+func programPositionPatterns() []*regexp.Regexp {
+	return []*regexp.Regexp{
+		regexp.MustCompile(`(?:^|[;&|(` + "`" + `{])\s*(?:\S*/)?herrscher\b`),
+		regexp.MustCompile(`(?:\b(?:env|sudo|exec|xargs|nohup|time|command|eval)\b|\s-[ce]\b)[^;&|` + "`" + `]*?[\s\[,(](?:\S*/)?herrscher\b`),
+		regexp.MustCompile(`[\[,(]\s*(?:\S*/)?herrscher\b`),
+	}
+}
+
 func programHerrscher(command string) bool {
 	position := strings.NewReplacer(`\n`, " ", `\t`, " ", `\`, "", `"`, "", `'`, "").Replace(command)
-	for _, pattern := range programPositions {
+	for _, pattern := range programPositionPatterns() {
 		if pattern.MatchString(strings.ToLower(position)) {
 			return true
 		}
@@ -64,13 +64,13 @@ func assemblesHerrscher(words []string) bool {
 	const name = "herrscher"
 	reachable := make([]bool, len(name)+1)
 	reachable[len(name)] = true
-	for at := len(name) - 1; at >= 0; at-- {
+	for offset := len(name) - 1; offset >= 0; offset-- {
 		for _, word := range words {
 			if word == "" || strings.Contains(word, "$") {
 				continue
 			}
-			if strings.HasPrefix(name[at:], word) && reachable[at+len(word)] {
-				reachable[at] = true
+			if strings.HasPrefix(name[offset:], word) && reachable[offset+len(word)] {
+				reachable[offset] = true
 				break
 			}
 		}
@@ -86,7 +86,7 @@ func runsUnreadable(raw string, words []string) bool {
 	if !runs {
 		return false
 	}
-	for _, decoder := range interpreterDecoders {
+	for _, decoder := range []string{"base64", "xxd", "gunzip", "zcat", "openssl", "uudecode", `\x`, "$'"} {
 		if strings.Contains(raw, decoder) {
 			return true
 		}

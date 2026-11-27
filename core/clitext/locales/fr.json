@@ -6272,36 +6272,6 @@
     "other": "règle {{.Rule}} ajoutée pour la seule session {{.Name}}"
   },
   {
-    "id": "cli.usage.start.init",
-    "description": "Ligne d'aide : composer la pile de plugins et les secrets",
-    "other": "compose la pile de plugins (options, ou la configuration sur un terminal)"
-  },
-  {
-    "id": "cli.usage.env.init",
-    "description": "Ligne de variables : `herrscher setup route` règle la route",
-    "other": "     `herrscher setup route` règle ces trois réglages, inutile de les écrire à la main"
-  },
-  {
-    "id": "cli.manage.flag.init_no_build",
-    "description": "Flag help: the --no-build flag of herrscher init",
-    "other": "écrit plugins.go sans lancer go get ni la compilation"
-  },
-  {
-    "id": "cli.manage.flag.init_no_trial",
-    "description": "Flag help: the --no-trial flag of herrscher init",
-    "other": "ne pas envoyer la courte question au backend choisi à la fin"
-  },
-  {
-    "id": "cli.manage.flag.init_yes",
-    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
-    "other": "passe l'assistant interactif ; utilise les options et les valeurs par défaut"
-  },
-  {
-    "id": "cli.manage.init.wrote_no_build",
-    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
-    "other": "plugins.go écrit (--no-build) ; lance `go mod tidy && go build` dans l'hôte pour appliquer"
-  },
-  {
     "id": "cli.host.device.paired",
     "description": "Reply of a host command, paired",
     "other": "code d'appairage {{.Code}}, valable dix minutes. Saisissez-le sur l'appareil, puis lancez `device approve` avec le même code une fois que `device list` affiche l'empreinte que l'appareil affiche. L'appareil recevra le rôle `{{.Role}}`."

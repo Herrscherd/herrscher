@@ -166,8 +166,8 @@ func TestAWrongFingerprintSignsNothingAndCountsAsAnAttempt(t *testing.T) {
 	if !errors.Is(err, devices.ErrFingerprintMismatch) {
 		t.Fatalf("wrong fingerprint = %v, want ErrFingerprintMismatch", err)
 	}
-	if len(st.DeviceRegistry().Devices) != 0 || devicesDirExists(st) {
-		t.Fatal("a wrong fingerprint must not sign, nor create the authority")
+	if len(st.DeviceRegistry().Devices) != 0 {
+		t.Fatal("a wrong fingerprint must not register a device")
 	}
 	if st.DeviceRegistry().Pairing.Failures != 1 {
 		t.Fatal("a wrong fingerprint must be saved as one attempt")

@@ -148,8 +148,8 @@ authenticate, and the signed certificate is not handed to anyone yet.
   as the device record, so a device is never registered without its role. If the
   save fails, the daemon's memory goes back to what was saved. `device deny <code>`
   closes the window without granting anything.
-- **Authority.** The authority is an ECDSA P-256 key, created the first time a
-  device is approved. P-256 rather than Ed25519 because the Secure Enclave and the
+- **Authority.** The authority is an ECDSA P-256 key, created at the first approval attempt that
+  carries a fingerprint, before any signature. P-256 rather than Ed25519 because the Secure Enclave and the
   platform keystores of phones sign with P-256 keys, and the Go TLS stack accepts
   P-256 for client certificates. Its files live in a `devices` subdirectory of the
   state directory, created with mode 0700 and holding nothing else. The state

@@ -31,7 +31,7 @@ func principalOf(ctx context.Context) authz.Principal {
 	if raw == "" {
 		return authz.Principal{}
 	}
-	if raw == authz.LocalPrincipal || strings.HasPrefix(raw, authz.SessionPrefix) {
+	if authz.Reserved(raw) {
 		return authz.Principal{ID: "unverified:" + raw}
 	}
 	return authz.Principal{ID: raw}
@@ -122,6 +122,7 @@ func notASessionArgs() map[string]bool {
 		"approve rule session":  true,
 		"schedule add name":     true,
 		"schedule rm name":      true,
+		"device pair name":      true,
 		"schedule run name":     true,
 		"schedule pause name":   true,
 		"schedule resume name":  true,

@@ -6272,36 +6272,6 @@
     "other": "rule {{.Rule}} added for session {{.Name}} alone"
   },
   {
-    "id": "cli.usage.start.init",
-    "description": "Usage line: compose the plugin stack and the secrets",
-    "other": "compose the plugin stack (flags, or the setup on a terminal)"
-  },
-  {
-    "id": "cli.usage.env.init",
-    "description": "Environment line: `herrscher setup route` sets the route",
-    "other": "     `herrscher setup route` sets these three, no need to write them by hand"
-  },
-  {
-    "id": "cli.manage.flag.init_no_build",
-    "description": "Flag help: the --no-build flag of herrscher init",
-    "other": "write plugins.go but skip go get/build"
-  },
-  {
-    "id": "cli.manage.flag.init_no_trial",
-    "description": "Flag help: the --no-trial flag of herrscher init",
-    "other": "skip the short prompt sent to the chosen backend at the end"
-  },
-  {
-    "id": "cli.manage.flag.init_yes",
-    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
-    "other": "skip the interactive wizard; use flags/defaults"
-  },
-  {
-    "id": "cli.manage.init.wrote_no_build",
-    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
-    "other": "wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply"
-  },
-  {
     "id": "cli.host.device.paired",
     "description": "Reply of a host command, paired",
     "other": "pairing code {{.Code}}, valid for ten minutes. Type it on the device, then run `device approve` with the same code once `device list` shows the fingerprint the device shows. The device is granted `{{.Role}}`."

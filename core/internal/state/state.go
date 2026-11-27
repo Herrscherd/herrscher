@@ -211,7 +211,12 @@ type RoleAssignment struct {
 }
 
 // NewState returns an empty state bound to path (not yet written).
-func NewState(path string) *State { return &State{path: path, write: atomicfile.Write} }
+func NewState(path string) *State { return NewStateWith(path, atomicfile.Write) }
+
+// NewStateWith returns an empty state bound to path whose file writes go through write.
+func NewStateWith(path string, write func(name string, data []byte, perm os.FileMode) error) *State {
+	return &State{path: path, write: write}
+}
 
 // ApplyDefaults seeds declarative config.json values into the in-memory state
 // for any field not already set, WITHOUT persisting. This keeps config.json the

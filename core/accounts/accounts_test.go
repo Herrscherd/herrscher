@@ -286,8 +286,11 @@ func TestSetDefaultWritesPrivatelyPastAStrayStagingName(t *testing.T) {
 		t.Fatalf("SetDefault blocked by a stray staging name: %v", err)
 	}
 	info, err := os.Stat(filepath.Join(store.Root, defaultsFileName))
-	if err != nil || info.Mode().Perm() != fileMode {
-		t.Fatalf("defaults mode = %v, %v; want %v", info.Mode().Perm(), err, fileMode)
+	if err != nil {
+		t.Fatalf("stat defaults: %v", err)
+	}
+	if info.Mode().Perm() != fileMode {
+		t.Fatalf("defaults mode = %v; want %v", info.Mode().Perm(), fileMode)
 	}
 	if got, err := store.Default("claude"); err != nil || got != "work" {
 		t.Fatalf("Default = %q, %v; want work", got, err)

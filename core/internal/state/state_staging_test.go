@@ -19,8 +19,11 @@ func TestSaveWritesPrivatelyPastAStrayStagingName(t *testing.T) {
 		t.Fatalf("Save blocked by a stray staging name: %v", err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != privateFileMode {
-		t.Fatalf("state mode = %v, %v; want %v", info.Mode().Perm(), err, privateFileMode)
+	if err != nil {
+		t.Fatalf("stat state: %v", err)
+	}
+	if info.Mode().Perm() != privateFileMode {
+		t.Fatalf("state mode = %v; want %v", info.Mode().Perm(), privateFileMode)
 	}
 	reloaded, err := LoadState(path)
 	if err != nil {

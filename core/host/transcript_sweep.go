@@ -6,5 +6,5 @@ import (
 )
 
 func sweepTranscriptStaging(partDir string) {
-	logCleanup(atomicfile.SweepDir(state.TranscriptsDir(partDir), ".jsonl"))
+	logCleanup(atomicfile.SweepDir(state.TranscriptsDir(partDir), state.TranscriptSuffix))
 }

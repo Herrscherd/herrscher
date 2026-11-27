@@ -56,8 +56,11 @@ func TranscriptsDir(dir string) string {
 // TranscriptPath returns the transcript path for session name under dir
 // (dir/transcripts/<name>.jsonl), beside participants/<name>.log.
 func TranscriptPath(dir, name string) string {
-	return filepath.Join(TranscriptsDir(dir), name+".jsonl")
+	return filepath.Join(TranscriptsDir(dir), name+TranscriptSuffix)
 }
+
+// TranscriptSuffix is the file name suffix of every session transcript.
+const TranscriptSuffix = ".jsonl"
 
 const (
 	transcriptMaxBytes  = 4 << 20

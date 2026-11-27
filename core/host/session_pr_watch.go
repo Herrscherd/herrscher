@@ -37,6 +37,7 @@ type prWatcher struct {
 	follows  map[string]*sessionFollow
 	groups   map[prGroupKey]*prGroup
 	refusals map[string]*prRefusal
+	ci       *ciLoop
 }
 
 type prGroupKey struct {
@@ -52,6 +53,7 @@ type sessionFollow struct {
 
 type prGroup struct {
 	key      prGroupKey
+	forge    contracts.Forge
 	saveMu   sync.Mutex
 	last     contracts.PullRequest
 	hasLast  bool
@@ -66,9 +68,10 @@ type prRefusal struct {
 	retry  obs.Backoff
 }
 
-func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials) *prWatcher {
+func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, seed func(session, task string) bool) *prWatcher {
 	return &prWatcher{
 		prs:      newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit),
+		ci:       &ciLoop{messages: messages, lang: lang, store: store, seed: seed, forgeLimit: sessionPRForgeLimit},
 		store:    store,
 		clock:    prwatch.SystemClock(),
 		limit:    &prwatch.Limit{},
@@ -261,7 +264,7 @@ func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name s
 		return nil, err
 	}
 	groupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	group := &prGroup{key: key, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
+	group := &prGroup{key: key, forge: target.forge, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
 	watch.Save = w.save(group)
 	w.groups[key] = group
 	w.watches.Add(1)
@@ -322,6 +325,7 @@ func (w *prWatcher) save(group *prGroup) func(context.Context, contracts.PullReq
 			if err := w.saveMember(ctx, name, group.key.number, pull); err != nil && first == nil {
 				first = err
 			}
+			w.ci.observe(ctx, name, group.forge, pull)
 		}
 		return first
 	}

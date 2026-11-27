@@ -116,6 +116,9 @@ type Session struct {
 	PullRequestMerge        contracts.MergeState       `json:"pullRequestMerge,omitempty"`
 	PullRequestChecks       contracts.ChecksState      `json:"pullRequestChecks,omitempty"`
 	PullRequestLatestReview contracts.ReviewID         `json:"pullRequestLatestReview,omitempty"`
+	CINudgePullRequest      int                        `json:"ciNudgePullRequest,omitempty"`
+	CINudgeAttempts         int                        `json:"ciNudgeAttempts,omitempty"`
+	CINudgeHead             string                     `json:"ciNudgeHead,omitempty"`
 
 	// ApprovalRules are the rules that bind this session alone, on top of the daemon's.
 	ApprovalRules []string `json:"approvalRules,omitempty"`

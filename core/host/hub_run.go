@@ -208,7 +208,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge))
+	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.Seed)
 	prWatchStopped := make(chan struct{})
 	go func() {
 		defer close(prWatchStopped)

@@ -219,6 +219,40 @@ number with the state `unknown`. The session info that the TUI and the gateways
 receive carries no pull request for such a session, so they show nothing until
 `session pr status` stores the state, draft flag and URL.
 
+## CI loop of a session
+
+While a session has a pull request, the host follows its checks (the same watch
+that records the state). When the checks of the head commit turn red, the host
+hands the failing check to the agent of the session as a message: the check name,
+its page, its attempt number, and the tail of the log of the failing job. The
+log is capped at 16 KiB, the largest tail the forge port takes for a job log is
+1 MiB. The message is delivered like a scheduled task, so it waits for the current
+turn. The agent fixes the failure and commits; any push goes through the usual
+approval, because the host never pushes for the agent.
+
+The loop stops by itself:
+
+- at most 3 fix attempts per pull request, counted on the session. When the
+  checks are still red after the third, the agent gets one message saying to stop
+  and report to the user, and the host sends nothing more for that commit;
+- a draft pull request, or a check that waits for a person (`action required`),
+  is never sent to the agent: it waits for a human;
+- pending checks, and a head commit with no check yet, consume no attempt and
+  send nothing. Checks that the forge has not reported are treated the same way;
+- a new head commit after a nudge gets its own nudge, within the budget. The same
+  head commit is never nudged twice;
+- a message that no live session accepts consumes no attempt.
+
+The log is data from the forge, not instructions. It sits between `<ci-log>` and
+`</ci-log>` in the message, and any occurrence of `ci-log` inside it is rewritten
+to `ci_log` so it cannot close the block. When the forge gives no readable log,
+the message says so and carries no block. The token never reaches the message.
+
+Known limits: the port does not tell apart a review that requests changes from
+one that does not, so that case is not a human stop, and the loop does not know
+which checks are required. The check listing reads at most five pages. A failing
+check beyond them is not found, and the loop waits.
+
 ## Repositories to clone
 
 When you create a session, the choice of repositories lists the workspace

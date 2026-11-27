@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func TestProcessGoneAcceptsAZombie(t *testing.T) {
+func TestProcessGoneHelperCountsAZombieAsGone(t *testing.T) {
 	if _, err := os.Stat("/proc/self/stat"); err != nil {
 		t.Skip("process states are read from /proc")
 	}

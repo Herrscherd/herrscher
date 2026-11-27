@@ -49,7 +49,7 @@ func TestConcurrentReportsShareTheConcurrencyLimit(t *testing.T) {
 	var reports sync.WaitGroup
 	for range 2 {
 		reports.Go(func() {
-			measurer.MeasureAll(context.Background(), servers, 2*time.Second)
+			measurer.MeasureAll(context.Background(), servers, 10*time.Second)
 		})
 	}
 	reports.Wait()

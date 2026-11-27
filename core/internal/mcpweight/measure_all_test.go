@@ -53,6 +53,38 @@ func TestMeasureAllReportsBlockedServersAsBudgetExceededWithinTheBudget(t *testi
 	}
 }
 
+func TestMeasureAllReleasesTheSlotOfEveryExitedServer(t *testing.T) {
+	servers := make([]agent.MCPServer, 0, 3*Concurrency)
+	for range 3 * Concurrency {
+		servers = append(servers, fakeServer("exit"))
+	}
+	assertEveryServerEndsWithCause(t, servers, CauseExited)
+}
+
+func TestMeasureAllReleasesTheSlotOfEveryServerThatFailsToStart(t *testing.T) {
+	servers := make([]agent.MCPServer, 0, 3*Concurrency)
+	for range 3 * Concurrency {
+		servers = append(servers, agent.MCPServer{Name: "gone", Command: missingCommand})
+	}
+	assertEveryServerEndsWithCause(t, servers, CauseStart)
+}
+
+func assertEveryServerEndsWithCause(t *testing.T, servers []agent.MCPServer, want Cause) {
+	t.Helper()
+	const budget = 20 * time.Second
+	started := time.Now()
+	results := NewMeasurer().MeasureAll(context.Background(), servers, budget)
+	elapsed := time.Since(started)
+	for index, result := range results {
+		if result.Measured || result.Cause != want {
+			t.Fatalf("result %d = %+v, want cause %q: a server that fails must hand its slot to the next one", index, result, want)
+		}
+	}
+	if elapsed > budget/2 {
+		t.Fatalf("MeasureAll took %s, want the failing servers to free their slots well within the budget of %s", elapsed, budget)
+	}
+}
+
 func TestMeasureAllReportsInTheOrderGiven(t *testing.T) {
 	servers := []agent.MCPServer{fakeServer("two-pages"), fakeServer("rejecting"), fakeServer("exit"), fakeServer("garbage")}
 	results := NewMeasurer().MeasureAll(context.Background(), servers, DefaultBudget)

@@ -35,7 +35,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys(), healthKeys(), spendKeys(), compactionKeys(), toolKeys(), setupKeys(), connectKeys(), forgeKeys(), sessionPRKeys(), selfToolsKeys(), migrationKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys(), healthKeys(), spendKeys(), compactionKeys(), toolKeys(), setupKeys(), connectKeys(), forgeKeys(), sessionPRKeys(), mcpKeys(), selfToolsKeys(), migrationKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)

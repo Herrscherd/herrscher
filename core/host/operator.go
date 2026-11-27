@@ -13,11 +13,11 @@ func forwardedLocally() map[string]bool {
 }
 
 func daemonOnly() map[string]bool {
-	return map[string]bool{"approve ask": true}
+	return map[string]bool{"approve ask": true, nsMCP + " " + verbWeight: true}
 }
 
 func daemonOwned() [][]string {
-	return [][]string{{nsSession}, {"host"}, {nsApprove}, {"role"}}
+	return [][]string{{nsSession}, {"host"}, {nsApprove}, {"role"}, {nsMCP}}
 }
 
 func forwarderFor(messages *hostMessages, layout RuntimeLayout) seedCommandForwarder {

@@ -6119,6 +6119,116 @@
     "other": "l'état {{.Path}} enregistre l'id d'instance {{.Value}}, qui n'est pas un id valide (lettres minuscules, chiffres et tirets, 16 caractères au plus, sans tiret en tête), donc les chemins de worktree et noms de branche bâtis dessus pourraient sortir de leurs dossiers ; remets l'id avec lequel ce daemon tournait (le dossier sous .herrscher-sessions/ qui contient ses worktrees le nomme), puis relance herrscher"
   },
   {
+    "id": "cli.help.cmd.mcp.weight",
+    "description": "Aide de la commande mcp weight",
+    "other": "estime le coût en jetons des définitions d'outils de chaque serveur MCP d'un agent"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.agent",
+    "description": "Aide du paramètre --agent de la commande mcp weight",
+    "other": "l'agent dont le mcp.json est mesuré"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.deep",
+    "description": "Aide du paramètre --deep de la commande mcp weight",
+    "other": "démarre chaque serveur stdio pour lister ses outils ; sans lui, les serveurs sont seulement décrits"
+  },
+  {
+    "id": "cli.mcp.weight.header",
+    "description": "En-tête du rapport mcp weight, Agent est le nom de l'agent",
+    "other": "Poids des outils MCP pour {{.Agent}}"
+  },
+  {
+    "id": "cli.mcp.weight.none",
+    "description": "Rapport mcp weight quand le mcp.json de l'agent n'a aucun serveur",
+    "other": "aucun serveur MCP dans le mcp.json de cet agent"
+  },
+  {
+    "id": "cli.mcp.weight.measured",
+    "description": "Un serveur mesuré du rapport mcp weight, Tools Bytes Tokens sont des nombres",
+    "other": "{{.Name}} ({{.Transport}}) : {{.Tools}} outils, {{.Bytes}} octets, environ {{.Tokens}} jetons (estimation)"
+  },
+  {
+    "id": "cli.mcp.weight.failed",
+    "description": "Un serveur du rapport mcp weight non mesuré, Reason est la cause",
+    "other": "{{.Name}} ({{.Transport}}) : non mesuré, {{.Reason}}"
+  },
+  {
+    "id": "cli.mcp.weight.stopped",
+    "description": "Un serveur mesuré dont l'arrêt a échoué : ses outils sont gardés, Reason dit pourquoi",
+    "other": "{{.Name}} : mesuré, mais {{.Reason}}"
+  },
+  {
+    "id": "cli.mcp.weight.stderr",
+    "description": "La fin de la sortie d'erreur d'un serveur, sous la ligne du rapport d'un serveur en échec ou mal arrêté ; Stderr est déjà entre guillemets et vient d'un tiers",
+    "other": "sortie d'erreur du serveur : {{.Stderr}}"
+  },
+  {
+    "id": "cli.mcp.weight.estimate",
+    "description": "Pied du rapport mcp weight qui dit que les octets sont bruts et que les jetons sont estimés",
+    "other": "Les octets sont la taille brute des définitions d'outils envoyées par le serveur. Les jetons sont estimés à environ 4 octets par jeton, le modèle ne les compte pas."
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_stdio",
+    "description": "Cause d'un serveur non mesuré : son transport n'est pas stdio",
+    "other": "le transport n'est pas stdio, le serveur n'est donc pas démarré"
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_started",
+    "description": "Cause d'un serveur stdio non mesuré sans --deep",
+    "other": "le serveur stdio n'a pas été démarré, relancer avec --deep"
+  },
+  {
+    "id": "cli.mcp.weight.cause.start",
+    "description": "Cause d'un serveur qui n'a pas pu démarrer",
+    "other": "le serveur n'a pas pu démarrer"
+  },
+  {
+    "id": "cli.mcp.weight.cause.exited",
+    "description": "Cause d'un serveur arrêté avant de répondre",
+    "other": "le serveur s'est arrêté avant de répondre"
+  },
+  {
+    "id": "cli.mcp.weight.cause.timeout",
+    "description": "Cause d'un serveur qui n'a pas répondu à temps",
+    "other": "le serveur n'a pas répondu à temps"
+  },
+  {
+    "id": "cli.mcp.weight.cause.budget",
+    "description": "Cause d'un serveur coupé par le budget de mesure de tout le rapport",
+    "other": "le budget de mesure est épuisé avant la réponse du serveur"
+  },
+  {
+    "id": "cli.mcp.weight.cause.canceled",
+    "description": "Cause d'une mesure annulée par son appelant avant la réponse du serveur",
+    "other": "la mesure a été annulée avant la réponse du serveur"
+  },
+  {
+    "id": "cli.mcp.weight.cause.protocol",
+    "description": "Cause d'un serveur dont la réponse sort de l'échange MCP",
+    "other": "le serveur a répondu hors de l'échange MCP"
+  },
+  {
+    "id": "cli.mcp.weight.cause.rejected",
+    "description": "Cause d'un serveur qui a refusé tools/list",
+    "other": "le serveur a refusé tools/list"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_large",
+    "description": "Cause d'un serveur qui a envoyé un message au-delà de la limite",
+    "other": "le serveur a envoyé plus de données que la limite de taille ne le permet"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_many_pages",
+    "description": "Cause d'un serveur qui a paginé tools/list au-delà de la limite",
+    "other": "tools/list a renvoyé des pages au-delà de la limite"
+  },
+  {
+    "id": "cli.mcp.weight.cause.stop",
+    "description": "Cause d'un serveur qui ne s'est pas arrêté proprement",
+    "other": "le serveur ne s'est pas arrêté proprement"
+  },
+  {
     "id": "cli.setup.module.telegram",
     "description": "Description of the Telegram gateway module",
     "other": "bot Telegram, conversations privées et groupes"

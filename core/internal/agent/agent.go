@@ -398,10 +398,11 @@ func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)
 	}
-	codexConfig, err := renderCodexMCP(mcp, worktreePath)
+	servers, err := parseCodexMCPServers(mcp)
 	if err != nil {
 		return err
 	}
+	codexConfig := renderCodexMCP(servers, worktreePath)
 	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, fileMode); err != nil {
 		return fmt.Errorf("write config.toml: %w", err)
 	}
@@ -458,4 +459,9 @@ func EnsureGitExcludes(ctx context.Context, worktree string) error {
 		return fmt.Errorf("close local git exclude: %w", err)
 	}
 	return nil
+}
+
+// MCPConfigPath is the mcp.json of the agent, the file the MCP tool weight command reads.
+func (a Agent) MCPConfigPath() string {
+	return filepath.Join(a.Home, mcpFile)
 }

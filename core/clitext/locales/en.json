@@ -6119,6 +6119,116 @@
     "other": "state {{.Path}} records the instance id {{.Value}}, which is not a valid id (lowercase letters, digits and dashes, 16 characters at most, not starting with a dash), so worktree paths and branch names built from it could leave their folders; put back the id this daemon ran with (the folder under .herrscher-sessions/ that holds its worktrees names it), then run herrscher again"
   },
   {
+    "id": "cli.help.cmd.mcp.weight",
+    "description": "Help of the command mcp weight",
+    "other": "estimate the token cost of the tool definitions of each MCP server of an agent"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.agent",
+    "description": "Help of the --agent param of the command mcp weight",
+    "other": "the agent whose mcp.json is measured"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.deep",
+    "description": "Help of the --deep param of the command mcp weight",
+    "other": "start each stdio server to list its tools; without it, servers are only described"
+  },
+  {
+    "id": "cli.mcp.weight.header",
+    "description": "Header of the mcp weight report, Agent is the agent name",
+    "other": "MCP tool weight for {{.Agent}}"
+  },
+  {
+    "id": "cli.mcp.weight.none",
+    "description": "Mcp weight report when the agent's mcp.json has no server",
+    "other": "no MCP server in this agent's mcp.json"
+  },
+  {
+    "id": "cli.mcp.weight.measured",
+    "description": "One measured server of the mcp weight report, Tools Bytes Tokens are numbers",
+    "other": "{{.Name}} ({{.Transport}}): {{.Tools}} tools, {{.Bytes}} bytes, about {{.Tokens}} tokens (estimate)"
+  },
+  {
+    "id": "cli.mcp.weight.failed",
+    "description": "One server of the mcp weight report that was not measured, Reason is the cause",
+    "other": "{{.Name}} ({{.Transport}}): not measured, {{.Reason}}"
+  },
+  {
+    "id": "cli.mcp.weight.stopped",
+    "description": "A measured server whose stop failed: its tools are kept, Reason says why",
+    "other": "{{.Name}}: measured, but {{.Reason}}"
+  },
+  {
+    "id": "cli.mcp.weight.stderr",
+    "description": "The tail of a server's own stderr, shown under the report line of a server that failed or did not stop cleanly; Stderr is already quoted and is third-party data",
+    "other": "stderr: {{.Stderr}}"
+  },
+  {
+    "id": "cli.mcp.weight.estimate",
+    "description": "Footer of the mcp weight report explaining that bytes are raw and tokens are estimated",
+    "other": "Bytes are the raw size of the tool definitions the server sends. Tokens are an estimate at about 4 bytes per token, the model does not count them."
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_stdio",
+    "description": "Cause of a server not measured: its transport is not stdio",
+    "other": "the transport is not stdio, so the server is not started"
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_started",
+    "description": "Cause of a stdio server not measured without --deep",
+    "other": "the stdio server was not started, run again with --deep"
+  },
+  {
+    "id": "cli.mcp.weight.cause.start",
+    "description": "Cause of a server that could not be started",
+    "other": "the server could not be started"
+  },
+  {
+    "id": "cli.mcp.weight.cause.exited",
+    "description": "Cause of a server that exited before answering",
+    "other": "the server exited before answering"
+  },
+  {
+    "id": "cli.mcp.weight.cause.timeout",
+    "description": "Cause of a server that did not answer in time",
+    "other": "the server did not answer in time"
+  },
+  {
+    "id": "cli.mcp.weight.cause.budget",
+    "description": "Cause of a server the measure budget of the whole report cut short",
+    "other": "the measure budget ran out before the server answered"
+  },
+  {
+    "id": "cli.mcp.weight.cause.canceled",
+    "description": "Cause of a measure canceled by its caller before the server answered",
+    "other": "the measure was canceled before the server answered"
+  },
+  {
+    "id": "cli.mcp.weight.cause.protocol",
+    "description": "Cause of a server whose answer breaks the MCP exchange",
+    "other": "the server answered outside the MCP exchange"
+  },
+  {
+    "id": "cli.mcp.weight.cause.rejected",
+    "description": "Cause of a server that refused tools/list",
+    "other": "the server refused tools/list"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_large",
+    "description": "Cause of a server that sent a message over the size limit",
+    "other": "the server sent more data than the size limit allows"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_many_pages",
+    "description": "Cause of a server that kept paging tools/list past the limit",
+    "other": "tools/list kept returning pages past the page limit"
+  },
+  {
+    "id": "cli.mcp.weight.cause.stop",
+    "description": "Cause of a server that did not stop cleanly",
+    "other": "the server did not stop cleanly"
+  },
+  {
     "id": "cli.setup.module.telegram",
     "description": "Description of the Telegram gateway module",
     "other": "Telegram bot, private chats and groups"

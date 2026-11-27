@@ -15,6 +15,7 @@ import (
 
 const (
 	mcpVerb              = "mcp"
+	mcpWeightSubcommand  = "weight"
 	selfToolsScope       = "SELF_TOOLS_EXPOSE"
 	selfToolsCallTimeout = host.SelfToolsCallWait
 )
@@ -42,6 +43,9 @@ func (d sessionDaemon) Dispatch(ctx context.Context, argv []string) (string, err
 }
 
 func runMCP(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
+	if len(args) > 0 && args[0] == mcpWeightSubcommand {
+		return runMCPWeight(ctx, layout, messages, hostMessages, args)
+	}
 	lang := clitext.ClientLanguage()
 	if len(args) > 0 {
 		return renderError(messages, lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: mcpVerb, clitext.ParamName: args[0]})

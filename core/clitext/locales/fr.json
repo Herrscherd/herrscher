@@ -5947,14 +5947,14 @@
     "other": "{{.Name}} ({{.Transport}}) : non mesuré, {{.Reason}}"
   },
   {
-    "id": "cli.mcp.weight.failed_detail",
-    "description": "Un serveur du rapport mcp weight non mesuré, avec le détail de l'échec",
-    "other": "{{.Name}} ({{.Transport}}) : non mesuré, {{.Reason}} : {{.Detail}}"
+    "id": "cli.mcp.weight.stopped",
+    "description": "Un serveur mesuré dont l'arrêt a échoué : ses outils sont gardés, Reason dit pourquoi",
+    "other": "{{.Name}} : mesuré, mais {{.Reason}}"
   },
   {
-    "id": "cli.mcp.weight.stopped",
-    "description": "Un serveur mesuré dont l'arrêt a échoué : ses outils sont gardés, Reason et Detail disent pourquoi",
-    "other": "{{.Name}} : mesuré, mais {{.Reason}} : {{.Detail}}"
+    "id": "cli.mcp.weight.stderr",
+    "description": "La fin de la sortie d'erreur d'un serveur, sous la ligne du rapport d'un serveur en échec ou mal arrêté ; Stderr est déjà entre guillemets et vient d'un tiers",
+    "other": "sortie d'erreur du serveur : {{.Stderr}}"
   },
   {
     "id": "cli.mcp.weight.estimate",

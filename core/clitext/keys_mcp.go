@@ -9,8 +9,8 @@ const (
 	ToolWeightNone            = "cli.mcp.weight.none"
 	ToolWeightMeasured        = "cli.mcp.weight.measured"
 	ToolWeightFailed          = "cli.mcp.weight.failed"
-	ToolWeightFailedDetail    = "cli.mcp.weight.failed_detail"
 	ToolWeightStopped         = "cli.mcp.weight.stopped"
+	ToolWeightStderr          = "cli.mcp.weight.stderr"
 	ToolWeightEstimate        = "cli.mcp.weight.estimate"
 	ToolWeightCauseNotStdio   = "cli.mcp.weight.cause.not_stdio"
 	ToolWeightCauseNotStarted = "cli.mcp.weight.cause.not_started"
@@ -35,8 +35,8 @@ func mcpKeys() map[Key][]string {
 		ToolWeightNone:            nil,
 		ToolWeightMeasured:        {ParamName, ParamTransport, ParamTools, ParamBytes, ParamTokens},
 		ToolWeightFailed:          {ParamName, ParamTransport, ParamReason},
-		ToolWeightFailedDetail:    {ParamName, ParamTransport, ParamReason, ParamDetail},
-		ToolWeightStopped:         {ParamName, ParamReason, ParamDetail},
+		ToolWeightStopped:         {ParamName, ParamReason},
+		ToolWeightStderr:          {ParamStderr},
 		ToolWeightEstimate:        nil,
 		ToolWeightCauseNotStdio:   nil,
 		ToolWeightCauseNotStarted: nil,

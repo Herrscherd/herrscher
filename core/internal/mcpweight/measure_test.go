@@ -82,13 +82,16 @@ func TestMeasureReportsEarlyExitAsExited(t *testing.T) {
 	}
 }
 
-func TestMeasureKeepsTheServerStderrTailInTheDetail(t *testing.T) {
+func TestMeasureKeepsTheServerStderrTailApartFromTheErrorText(t *testing.T) {
 	result := Measure(context.Background(), fakeServer("stderr-exit"), DefaultTimeout)
 	if result.Measured || result.Cause != CauseExited {
 		t.Fatalf("Measure = %+v, want an exited server", result)
 	}
-	if want := `stderr: "missing token"`; !strings.Contains(result.Detail, want) {
-		t.Fatalf("Detail = %q, want it to contain %q", result.Detail, want)
+	if result.Stderr != "missing token" {
+		t.Fatalf("Stderr = %q, want the server's own stderr tail", result.Stderr)
+	}
+	if strings.Contains(result.Detail, "missing token") {
+		t.Fatalf("Detail = %q, the server's stderr must not be mixed into the error text", result.Detail)
 	}
 }
 

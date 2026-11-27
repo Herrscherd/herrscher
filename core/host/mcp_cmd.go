@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -89,16 +90,12 @@ func mcpWeightLine(text *clitext.Translator, result mcpweight.Result) string {
 	if result.Measured {
 		return mcpMeasuredLine(text, result)
 	}
-	params := clitext.Params{
+	line := text.Text(clitext.ToolWeightFailed, clitext.Params{
 		clitext.ParamName:      result.Name,
 		clitext.ParamTransport: result.Transport,
 		clitext.ParamReason:    text.Text(mcpWeightCauseKey(result.Cause), nil),
-	}
-	if result.Detail == "" {
-		return text.Text(clitext.ToolWeightFailed, params)
-	}
-	params[clitext.ParamDetail] = result.Detail
-	return text.Text(clitext.ToolWeightFailedDetail, params)
+	})
+	return withServerStderr(text, line, result.Stderr)
 }
 
 func mcpMeasuredLine(text *clitext.Translator, result mcpweight.Result) string {
@@ -115,9 +112,15 @@ func mcpMeasuredLine(text *clitext.Translator, result mcpweight.Result) string {
 	stopped := text.Text(clitext.ToolWeightStopped, clitext.Params{
 		clitext.ParamName:   result.Name,
 		clitext.ParamReason: text.Text(mcpWeightCauseKey(result.Cause), nil),
-		clitext.ParamDetail: result.Detail,
 	})
-	return line + "\n" + stopped
+	return withServerStderr(text, line+"\n"+stopped, result.Stderr)
+}
+
+func withServerStderr(text *clitext.Translator, line, stderr string) string {
+	if stderr == "" {
+		return line
+	}
+	return line + "\n" + text.Text(clitext.ToolWeightStderr, clitext.Params{clitext.ParamStderr: strconv.Quote(stderr)})
 }
 
 func mcpWeightCauseKey(cause mcpweight.Cause) clitext.Key {

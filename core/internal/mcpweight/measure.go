@@ -8,7 +8,6 @@ import (
 	"maps"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -77,7 +76,7 @@ var (
 	errBudgetExceeded      = errors.New("the measure budget of all the servers is spent")
 )
 
-// Result is the weight of one server's tool definitions, or the reason it has none. Cause is set when the server was not measured, and also when it was measured but did not stop cleanly, in which case Measured stays true.
+// Result is the weight of one server's tool definitions, or the reason it has none. Cause is set when the server was not measured, and also when it was measured but did not stop cleanly, in which case Measured stays true. Detail is the Go error text, a machine field for --json only, and Stderr is the tail of the server's own stderr, which is data from a third party.
 type Result struct {
 	Name      string `json:"name"`
 	Transport string `json:"transport"`
@@ -87,6 +86,7 @@ type Result struct {
 	Tokens    int    `json:"tokens"`
 	Cause     Cause  `json:"cause,omitempty"`
 	Detail    string `json:"detail,omitempty"`
+	Stderr    string `json:"stderr,omitempty"`
 }
 
 type failure struct {
@@ -120,13 +120,15 @@ func Measure(ctx context.Context, server agent.MCPServer, timeout time.Duration)
 	outcome := serve(ctx, server, timeout)
 	if outcome.err != nil {
 		result.Cause = causeOf(outcome.err)
-		result.Detail = detail(outcome.err, outcome.stderr)
+		result.Detail = outcome.err.Error()
+		result.Stderr = outcome.stderr
 		return result
 	}
 	fillWeight(&result, outcome.tools)
 	if outcome.stop != nil {
 		result.Cause = CauseStop
-		result.Detail = detail(outcome.stop, outcome.stderr)
+		result.Detail = outcome.stop.Error()
+		result.Stderr = outcome.stderr
 	}
 	return result
 }
@@ -190,13 +192,6 @@ func fillWeight(result *Result, tools []json.RawMessage) {
 	result.Tools = len(tools)
 	result.Bytes = definitions.Len()
 	result.Tokens = contextwindow.EstimateTokens(definitions.String())
-}
-
-func detail(err error, stderr string) string {
-	if stderr == "" {
-		return err.Error()
-	}
-	return err.Error() + "; stderr: " + strconv.Quote(stderr)
 }
 
 func causeOf(err error) Cause {

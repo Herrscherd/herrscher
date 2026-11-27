@@ -179,6 +179,7 @@ const (
 	ParamCommand    = "Command"
 	ParamRepo       = "Repo"
 	ParamReason     = "Reason"
+	ParamStderr     = "Stderr"
 	ParamTransport  = "Transport"
 	ParamTools      = "Tools"
 	ParamBytes      = "Bytes"

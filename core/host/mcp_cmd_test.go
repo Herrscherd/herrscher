@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/mcpweight"
@@ -154,19 +155,46 @@ func TestMCPWeightTextReportRendersEachLineKind(t *testing.T) {
 		{Name: "remote", Transport: "http", Cause: mcpweight.CauseNotStdio},
 		{Name: "stopper", Transport: agent.TransportStdio, Measured: true, Tools: 1, Cause: mcpweight.CauseStop, Detail: "EOF"},
 		{Name: "waiting", Transport: agent.TransportStdio, Cause: mcpweight.CauseCanceled, Detail: "context canceled"},
+		{Name: "dying", Transport: agent.TransportStdio, Cause: mcpweight.CauseExited, Stderr: "missing token"},
 	}
 	out := renderMCPWeight(clitext.NewMessages(), testLanguage()(), "text", results)
 	wants := []string{
 		"fast (stdio): 2 tools, 40 bytes, about 10 tokens (estimate)",
-		"slow (stdio): not measured, the server did not answer in time: no answer",
+		"slow (stdio): not measured, the server did not answer in time\n",
 		"remote (http): not measured, the transport is not stdio, so the server is not started",
-		"stopper: measured, but the server did not stop cleanly: EOF",
-		"waiting (stdio): not measured, the measure was canceled before the server answered: context canceled",
+		"stopper: measured, but the server did not stop cleanly\n",
+		"waiting (stdio): not measured, the measure was canceled before the server answered\n",
+		"dying (stdio): not measured, the server exited before answering\nstderr: \"missing token\"",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {
 			t.Errorf("text report misses %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestMCPWeightTextReportNeverShowsTheGoErrorText(t *testing.T) {
+	results := []mcpweight.Result{
+		{Name: "late", Transport: agent.TransportStdio, Cause: mcpweight.CauseBudget, Detail: "the measure budget of all the servers is spent"},
+		{Name: "stopper", Transport: agent.TransportStdio, Measured: true, Tools: 1, Cause: mcpweight.CauseStop, Detail: "close pipe: file already closed"},
+	}
+	out := renderMCPWeight(clitext.NewMessages(), testLanguage()(), "text", results)
+	for _, leaked := range []string{"the measure budget of all the servers is spent", "file already closed", "stderr"} {
+		if strings.Contains(out, leaked) {
+			t.Errorf("text report shows %q, the Go error text must stay out of the rendering:\n%s", leaked, out)
+		}
+	}
+}
+
+func TestMCPWeightTextReportLocalizesABudgetCauseInFrench(t *testing.T) {
+	results := []mcpweight.Result{{Name: "late", Transport: agent.TransportStdio, Cause: mcpweight.CauseBudget, Detail: "the measure budget of all the servers is spent"}}
+	out := renderMCPWeight(clitext.NewMessages(), fixedLanguage(i18n.French)(), "text", results)
+	want := "late (stdio) : non mesuré, le budget de mesure est épuisé avant la réponse du serveur"
+	if !strings.Contains(out, want) {
+		t.Fatalf("fr report misses %q:\n%s", want, out)
+	}
+	if strings.Contains(out, "budget of all") {
+		t.Fatalf("fr report carries the English error text:\n%s", out)
 	}
 }
 

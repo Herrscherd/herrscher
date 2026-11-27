@@ -5947,14 +5947,14 @@
     "other": "{{.Name}} ({{.Transport}}): not measured, {{.Reason}}"
   },
   {
-    "id": "cli.mcp.weight.failed_detail",
-    "description": "One server of the mcp weight report that was not measured, with the detail of the failure",
-    "other": "{{.Name}} ({{.Transport}}): not measured, {{.Reason}}: {{.Detail}}"
+    "id": "cli.mcp.weight.stopped",
+    "description": "A measured server whose stop failed: its tools are kept, Reason says why",
+    "other": "{{.Name}}: measured, but {{.Reason}}"
   },
   {
-    "id": "cli.mcp.weight.stopped",
-    "description": "A measured server whose stop failed: its tools are kept, Reason and Detail say why",
-    "other": "{{.Name}}: measured, but {{.Reason}}: {{.Detail}}"
+    "id": "cli.mcp.weight.stderr",
+    "description": "The tail of a server's own stderr, shown under the report line of a server that failed or did not stop cleanly; Stderr is already quoted and is third-party data",
+    "other": "stderr: {{.Stderr}}"
   },
   {
     "id": "cli.mcp.weight.estimate",

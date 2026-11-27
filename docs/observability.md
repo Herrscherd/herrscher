@@ -330,7 +330,9 @@ MCP server, the size of its tool definitions: the number of tools, the size in b
 their raw JSON as the server sent it, and an estimated token count. These numbers are the
 weight of what the server advertises, not what the model sees in its context. `--json`
 prints the same results as a list of objects with `name`, `transport`, `measured`,
-`tools`, `bytes`, `tokens`, `cause` and `detail`.
+`tools`, `bytes`, `tokens`, `cause`, `detail` and `stderr`. `detail` is the Go error text,
+a machine field that the text report never shows; `stderr` is the tail of the server's own
+stderr, which is data from a third party.
 
 The file is parsed once, strictly: an empty server name, or a server that runs as a local
 process (no `type`, or `stdio`) without a `command`, refuses the whole report with an
@@ -347,8 +349,9 @@ the number of definitions across all pages. The byte count is the sum of the raw
 of each definition as the server sent it, not re-serialized. Each server is started:
 
 - in a fresh scratch directory under the system temporary directory, removed afterwards;
-- with the environment of the command running `mcp weight`, plus the `env` declared
-  for that server in `mcp.json`;
+- with the whole environment of the daemon process, not that of the client running
+  `mcp weight`: the variables the daemon was started with, tokens included, are passed to
+  the server unfiltered, plus the `env` declared for that server in `mcp.json`;
 - with every `{{WORKTREE}}` in its `command`, `args` and `env` values replaced by the
   scratch directory path.
 
@@ -356,8 +359,9 @@ The whole exchange with one server is bounded by a 15 second timeout, from the s
 to the last answer. The definitions of all its pages together may not exceed 16 MiB,
 and no single message may exceed 4 MiB. A server that exceeds the timeout, exits early,
 refuses a request, answers outside the protocol, or exceeds a size limit is reported
-with its cause and its error detail, which ends with the last 1 KiB the server wrote to
-its stderr, as `stderr: "..."`. When the caller cancels the measure, the cause is
+with its cause. The text report shows the localized cause, then, on the line below, the
+last 1 KiB the server wrote to its stderr, quoted under the label `stderr`. When the caller
+cancels the measure, the cause is
 `canceled`, not `timeout`. Messages the server sends with a method of their own
 (requests to the client, notifications) are skipped, and an answer is matched by its id
 alone. No server is dropped from the report.
@@ -366,7 +370,8 @@ The servers of a report are measured under one budget of 40 seconds shared by al
 Each stdio server takes one of four slots before it starts, and the slots belong to the
 daemon, not to the report: two `mcp weight --deep` requests at the same time share the same
 four, so the daemon never runs more than four measured servers together, whatever the
-number of clients. A server still running when the budget is spent is stopped as on timeout.
+number of clients. A server still running when the budget is spent is stopped and reported
+with the cause `budget`, not `timeout`.
 A server still waiting for a slot when the budget is spent, or when the caller cancels, is
 not started and is reported with the cause `budget` or `canceled`. Each started server keeps
 its own 15 second timeout inside that budget. The report lists the servers sorted by name,

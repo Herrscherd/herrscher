@@ -1,0 +1,116 @@
+package agent
+
+import (
+	"bytes"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+)
+
+const testSecret = "sekret-token-value"
+
+func directoryWith(t *testing.T, environ []string) (*Store, *Directory, *bytes.Buffer, *time.Time) {
+	t.Helper()
+	store := NewStore(t.TempDir())
+	logs := &bytes.Buffer{}
+	clock := time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC)
+	dir := NewDirectory(store, environ, slog.New(slog.NewTextHandler(logs, nil)))
+	dir.now = func() time.Time { return clock }
+	return store, dir, logs, &clock
+}
+
+func TestAgentVoicesSortedWithOwnTokenAndChannelsOfTheGateway(t *testing.T) {
+	store, dir, _, _ := directoryWith(t, []string{"DISCORD_BOT_TOKEN_RIN=" + testSecret})
+	for _, name := range []string{"rin", "anna"} {
+		if _, err := store.Create(CreateSpec{Name: name}); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+	}
+	if err := store.SetReply("rin", contracts.ReplyInChannels); err != nil {
+		t.Fatalf("set reply: %v", err)
+	}
+	if err := store.SetChannels("rin", []Channel{{"discord", "111"}, {"telegram", "-9"}}); err != nil {
+		t.Fatalf("set channels: %v", err)
+	}
+	voices := dir.AgentVoices("discord")
+	if len(voices) != 2 || voices[0].Agent != "anna" || voices[1].Agent != "rin" {
+		t.Fatalf("voices = %+v; want anna then rin", voices)
+	}
+	if voices[0].Token.Valid() {
+		t.Fatal("anna has no token in the environment and must speak as the gateway's bot")
+	}
+	if voices[1].Token.Secret() != testSecret || voices[1].Reply != contracts.ReplyInChannels {
+		t.Fatalf("rin = %+v; want its token and the channels rule", voices[1])
+	}
+	if got := voices[1].Channels; len(got) != 1 || got[0] != "111" {
+		t.Fatalf("channels on discord = %v; want [111]", got)
+	}
+	if !dir.HasToken("discord", "rin") || dir.HasToken("telegram", "rin") {
+		t.Fatal("HasToken must follow the gateway kind of the key")
+	}
+}
+
+func TestAgentVoicesRereadsRulesAfterItsTTL(t *testing.T) {
+	store, dir, _, clock := directoryWith(t, nil)
+	if _, err := store.Create(CreateSpec{Name: "rin"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyOnMention {
+		t.Fatalf("reply = %v; want mention", got)
+	}
+	if err := store.SetReply("rin", contracts.ReplyNever); err != nil {
+		t.Fatalf("set reply: %v", err)
+	}
+	*clock = clock.Add(voiceCacheTTL - time.Second)
+	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyOnMention {
+		t.Fatalf("reply within the cache = %v; want the cached mention", got)
+	}
+	*clock = clock.Add(2 * time.Second)
+	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyNever {
+		t.Fatalf("reply after the TTL = %v; want never", got)
+	}
+}
+
+func TestSharedTokenKeyGivesNoTokenAndLogsOnce(t *testing.T) {
+	store, dir, logs, _ := directoryWith(t, []string{"DISCORD_BOT_TOKEN_MY_AGENT=" + testSecret})
+	for _, name := range []string{"my-agent", "my_agent"} {
+		if _, err := store.Create(CreateSpec{Name: name}); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+	}
+	for range 2 {
+		for _, voice := range dir.AgentVoices("discord") {
+			if voice.Token.Valid() {
+				t.Fatalf("%s got a token although its key is shared", voice.Agent)
+			}
+		}
+	}
+	if n := strings.Count(logs.String(), "agents share one bot token key"); n != 1 {
+		t.Fatalf("clash logged %d times; want once", n)
+	}
+	if strings.Contains(logs.String(), testSecret) {
+		t.Fatal("the token value leaked into the log")
+	}
+}
+
+func TestUnreadableReplyRuleIsTreatedAsNever(t *testing.T) {
+	store, dir, logs, _ := directoryWith(t, nil)
+	a, err := store.Create(CreateSpec{Name: "rin"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(a.Home, replyFile), []byte("always\n"), fileMode); err != nil {
+		t.Fatalf("write reply: %v", err)
+	}
+	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyNever {
+		t.Fatalf("reply = %v; want never for an unknown rule", got)
+	}
+	if !strings.Contains(logs.String(), "treated as never") {
+		t.Fatalf("the bad rule was not logged: %q", logs.String())
+	}
+}

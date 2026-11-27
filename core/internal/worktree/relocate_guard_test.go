@@ -61,8 +61,8 @@ func TestPlanRefusesAWorktreeOfACopiedRepositoryAndItsRepairCommandLetsTheMoveTh
 		t.Fatalf("refusal names %s as the repository of the worktree, want %s", failure, original)
 	}
 	runShell(t, refusalCommand(t, err, clitext.WorktreeRelocateForeignRepository))
-	if err := planTrappedAlpha(t, from); err != nil {
-		t.Fatalf("plan once the worktree is linked to the copy: %v", err)
+	if planErr := planTrappedAlpha(t, from); planErr != nil {
+		t.Fatalf("plan once the worktree is linked to the copy: %v", planErr)
 	}
 }
 
@@ -80,8 +80,8 @@ func TestRelocatingTheBranchOfAGoneWorktreeLeavesNoStaleEntryHoldingIt(t *testin
 	if !plan.RenamesBranch() || plan.DirAtTarget() {
 		t.Fatalf("plan = %+v, want only the branch renamed", plan)
 	}
-	if err := w.Relocate(t.Context(), plan); err != nil {
-		t.Fatal(err)
+	if relocateErr := w.Relocate(t.Context(), plan); relocateErr != nil {
+		t.Fatal(relocateErr)
 	}
 	gitIn(t, repo, "worktree", "add", w.Path(repo, "alpha"), "session/inst/alpha")
 }
@@ -101,8 +101,8 @@ func TestAResumedRelocationRepairsAWorktreeMovedWithoutItsGitEntry(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Relocate(t.Context(), plan); err != nil {
-		t.Fatal(err)
+	if relocateErr := w.Relocate(t.Context(), plan); relocateErr != nil {
+		t.Fatal(relocateErr)
 	}
 	registered, err := w.registeredWorktree(t.Context(), repo, to)
 	if err != nil || !registered {
@@ -130,8 +130,8 @@ func TestAResumedRelocationRefusesAWorktreeLeftOnABranchThatIsGone(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Relocate(t.Context(), plan); err != nil {
-		t.Fatal(err)
+	if relocateErr := w.Relocate(t.Context(), plan); relocateErr != nil {
+		t.Fatal(relocateErr)
 	}
 	if got := gitIn(t, to, "symbolic-ref", "--short", "HEAD"); got != "session/inst/alpha" {
 		t.Fatalf("worktree is on %q, want session/inst/alpha", got)

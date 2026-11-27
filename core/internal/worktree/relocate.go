@@ -135,6 +135,8 @@ func (w *Worktreer) checkPlacedWorktree(ctx context.Context, plan Relocation) er
 			return err
 		}
 		return w.checkMovedBranch(ctx, plan)
+	case dirMissing:
+		return nil
 	}
 	return nil
 }

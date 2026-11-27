@@ -224,7 +224,7 @@ func hostKeys() map[Key][]string {
 		HostScheduleStatusPaused:    nil,
 		HostErrWorktree:             {ParamErr},
 		HostErrWorkspaceTaken:       {ParamName, ParamOwner, ParamPath},
-		HostErrWorkspaceShared:      {ParamName, ParamOwner, ParamPath, ParamFile},
+		HostErrWorkspaceShared:      {ParamName, ParamOwner, ParamPath, ParamFrom, ParamFile},
 		HostErrProvisionAgent:       {ParamAgent, ParamErr},
 		HostErrCreateChannel:        {ParamErr},
 		HostErrCreateForumPost:      {ParamErr},

@@ -138,3 +138,27 @@ func TestMigrationRefusesAStoredInstanceIDThatWouldLeaveTheSessionsFolder(t *tes
 		t.Fatalf("a folder was made outside .herrscher-sessions: %v", statErr)
 	}
 }
+
+func TestAResumedMigrationStillSaysTheMovedSessionStartsANewConversation(t *testing.T) {
+	repo, from := bareSessionRepo(t, "alpha")
+	scratch := readOnlyScratchSession(t, repo)
+	path := writeFormat0State(t, []map[string]any{
+		{"name": "alpha", "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": from, "dir": from, "resumeToken": "conv-1", "gateways": []string{"chat"}},
+		{"name": "beta", "channelID": "c2", "type": "channel", "cmd": "claude", "worktree": scratch, "scratch": true, "dir": scratch, "gateways": []string{"chat"}},
+	}, nil)
+	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}})
+	if _, ok := errors.AsType[*stateMigrationInterruptedError](err); !ok {
+		t.Fatalf("migration with a scratch folder it cannot move = %v, want it stopped partway", err)
+	}
+	if chmodErr := os.Chmod(filepath.Join(repo, ".herrscher-scratch"), 0o700); chmodErr != nil {
+		t.Fatal(chmodErr)
+	}
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
+		t.Fatalf("second run of the stopped migration: %v", err)
+	}
+	moved := filepath.Join(repo, ".herrscher-sessions", "inst", "alpha")
+	if !strings.Contains(out.String(), "session alpha now works in "+moved) || !strings.Contains(out.String(), "new conversation") {
+		t.Fatalf("the resumed migration does not tell alpha starts a new conversation in %s:\n%s", moved, out)
+	}
+}

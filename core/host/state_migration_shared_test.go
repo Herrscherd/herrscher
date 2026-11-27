@@ -41,6 +41,14 @@ func TestMigrationRefusesTwoSessionsWhoseFoldersAreTheSameFileOnDisk(t *testing.
 	if refusal, ok := errors.AsType[*stateMigrationRefusedError](err); !ok || refusal.key != clitext.MigrationSharedWorktree {
 		t.Fatalf("migration of two sessions on one folder reached by a link = %v, want a %s refusal", err, clitext.MigrationSharedWorktree)
 	}
+	for _, lang := range []i18n.Language{i18n.English, i18n.French} {
+		text, _ := stateFormatText(clitext.NewMessages(), lang, err)
+		for _, recorded := range []string{from, link} {
+			if !strings.Contains(text, recorded) {
+				t.Errorf("%s refusal %q does not name the recorded folder %q", lang, text, recorded)
+			}
+		}
+	}
 	if branch := gitOutput(t, repo, "branch", "--list", "session/inst/*"); branch != "" {
 		t.Fatalf("a branch was renamed: %q", branch)
 	}

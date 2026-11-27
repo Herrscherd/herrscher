@@ -3205,7 +3205,7 @@
   {
     "id": "cli.host.err.workspace_shared",
     "description": "Reply of a host command, err the folder of the session to close is also the folder of another session",
-    "other": "impossible de fermer la session {{.Name}} : son dossier {{.Path}} est aussi le dossier de la session {{.Owner}}, et le supprimer effacerait le dossier où {{.Owner}} travaille ; rien n'a été arrêté ni supprimé. Garde le dossier à l'une des deux : herrscher arrêté, copie {{.File}} de côté, retire l'entrée de l'autre session de sa liste sessions, puis relance herrscher serve"
+    "other": "impossible de fermer la session {{.Name}} : les sessions {{.Name}} et {{.Owner}} enregistrent le même dossier : {{.Path}} et {{.From}}, et le supprimer effacerait le dossier où {{.Owner}} travaille ; rien n'a été arrêté ni supprimé. Garde le dossier à l'une des deux : herrscher arrêté, copie {{.File}} de côté, retire l'entrée de l'autre session de sa liste sessions, puis relance herrscher serve"
   },
   {
     "id": "cli.host.err.provision_agent",
@@ -6052,6 +6052,21 @@
     "other": "session {{.Name}} : la branche {{.Branch}} existe, et git ne peut pas créer {{.Target}} tant qu'elle existe, puisqu'un nom de branche ne peut pas être aussi un dossier de noms de branches ; rien n'a bougé et aucun id n'a été écrit. Renomme-la avec {{.Command}}, ou choisis un autre id d'instance avec HERRSCHER_INSTANCE_ID, puis relance herrscher serve"
   },
   {
+    "id": "cli.worktree.relocate_instance_folder",
+    "description": "Refus de migration : le dossier de l'id d'instance contient déjà quelque chose que l'instance ne possède pas",
+    "other": "session {{.Name}} : {{.Path}}, le dossier que l'id d'instance {{.Value}} donne aux sessions de ce dépôt, existe déjà en tant que worktree git, entrée .git ou autre chose qu'un dossier, et y déplacer la session y rangerait son travail, que la suppression de ce worktree effacerait ; rien n'a bougé et aucun id n'a été écrit. Écarte {{.Path}}, ou donne un autre id à HERRSCHER_INSTANCE_ID, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_foreign_repository",
+    "description": "Refus de migration : le worktree à déplacer appartient à un autre dépôt que celui où il se trouve",
+    "other": "session {{.Name}} : le worktree {{.Path}} appartient au dépôt {{.Target}}, pas à {{.Repo}} où il se trouve (une copie du dépôt garde les liens de l'original), donc git ne peut pas le déplacer depuis {{.Repo}} ; rien n'a bougé et aucun id n'a été écrit. Si le dossier doit appartenir à {{.Repo}}, rattache-le avec {{.Command}} ; sinon sors le dossier de {{.Repo}}. Puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_head_gone",
+    "description": "Refus de migration : le worktree déplacé est sur une branche qui n'existe plus",
+    "other": "session {{.Name}} : son worktree {{.Path}} est sur {{.Tip}}, une branche qui n'existe plus, comme le laisse un renommage de branche arrêté en route ; rien de plus n'a bougé. Si {{.Branch}} porte le travail de la session, fais-y pointer le worktree avec {{.Command}}, puis relance herrscher serve"
+  },
+  {
     "id": "cli.migration.started",
     "description": "Annonce du début d'une migration de l'état",
     "other": "herrscher : migration de l'état {{.Path}} du format {{.From}} au format {{.To}} ; l'ancien fichier est gardé dans {{.File}}"
@@ -6182,7 +6197,7 @@
   {
     "id": "cli.migration.shared_worktree",
     "description": "Refus de migration : deux sessions enregistrent le même dossier",
-    "other": "les sessions {{.Name}} et {{.Target}} enregistrent toutes deux le dossier {{.Path}} (une ancienne version a donné à une nouvelle session le dossier d'une session renommée depuis ce nom), et un dossier ne peut pas aller à deux endroits ; rien n'a bougé. Aucune des deux ne peut être fermée avant la migration, et en fermer une supprimerait le dossier où l'autre travaille encore. Garde-en une : herrscher arrêté, copie {{.File}} de côté, retire l'entrée de l'autre session de sa liste sessions, puis relance herrscher serve. Le dossier, sa branche et son travail restent à la session gardée ; le salon de l'autre reste tel quel"
+    "other": "les sessions {{.Name}} et {{.Target}} enregistrent le même dossier : {{.From}} et {{.Path}}, et un dossier ne peut pas aller à deux endroits ; rien n'a bougé. Aucune des deux ne peut être fermée avant la migration, et en fermer une supprimerait le dossier où l'autre travaille encore. Garde-en une : herrscher arrêté, copie {{.File}} de côté, retire l'entrée de l'autre session de sa liste sessions, puis relance herrscher serve. Le dossier, sa branche et son travail restent à la session gardée ; le salon de l'autre reste tel quel"
   },
   {
     "id": "cli.migration.interrupted",

@@ -56,8 +56,8 @@ func (h *Handler) refuseSharedFolder(sess state.Session) error {
 	if !shared {
 		return nil
 	}
-	english := fmt.Sprintf("close session %q: %v: %s is also the folder of session %q", sess.Name, ErrWorkspaceShared, sess.Worktree, holder.Name)
-	params := clitext.Params{clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamOwner: strconv.Quote(holder.Name), clitext.ParamPath: strconv.Quote(sess.Worktree), clitext.ParamFile: h.st.Path()}
+	english := fmt.Sprintf("close session %q: %v: %s is also the folder %s of session %q", sess.Name, ErrWorkspaceShared, sess.Worktree, holder.Worktree, holder.Name)
+	params := clitext.Params{clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamOwner: strconv.Quote(holder.Name), clitext.ParamPath: strconv.Quote(sess.Worktree), clitext.ParamFrom: strconv.Quote(holder.Worktree), clitext.ParamFile: h.st.Path()}
 	return localize(h.messages, h.currentLanguage(), english, clitext.HostErrWorkspaceShared, params, ErrWorkspaceShared)
 }
 

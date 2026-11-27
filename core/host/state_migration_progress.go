@@ -99,6 +99,7 @@ func refuseSharedWorktrees(cliMessages *clitext.Messages, statePath string, sess
 			return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationSharedWorktree, params: clitext.Params{
 				clitext.ParamName:   sessions[earlier].Name,
 				clitext.ParamTarget: sessions[later].Name,
+				clitext.ParamFrom:   filepath.Clean(sessions[earlier].Worktree),
 				clitext.ParamPath:   filepath.Clean(sessions[later].Worktree),
 				clitext.ParamFile:   statePath,
 			}}

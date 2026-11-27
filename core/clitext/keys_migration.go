@@ -64,7 +64,7 @@ func migrationKeys() map[Key][]string {
 		MigrationCheckpointInspect:     {ParamName, ParamPath, ParamErr, ParamCommand, ParamTrust, ParamRecovery},
 		MigrationCheckpointHidden:      {ParamName, ParamPath, ParamRepo, ParamErr},
 		MigrationCheckpointMove:        {ParamName, ParamPath, ParamErr},
-		MigrationSharedWorktree:        {ParamName, ParamTarget, ParamPath, ParamFile},
+		MigrationSharedWorktree:        {ParamName, ParamTarget, ParamFrom, ParamPath, ParamFile},
 		MigrationInterrupted:           {ParamErr, ParamDetail, ParamFile},
 		MigrationNothingDone:           {},
 		InstanceGenerated:              {ParamValue},

@@ -211,7 +211,7 @@ func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announ
 		}
 		moved := state.Relocation{Worktree: plan.ToPath, Dir: retargetDir(sess.Dir, plan.FromPath, plan.ToPath)}
 		relocated[sess.Name] = moved
-		if sess.ResumeToken != "" && (planned.remote || plan.MovesDir()) {
+		if sess.ResumeToken != "" && moved.Dir != sess.Dir {
 			statePointers = append(statePointers, migrationStep{key: clitext.MigrationConversationReset, params: clitext.Params{clitext.ParamName: sess.Name, clitext.ParamPath: moved.Dir}})
 		}
 	}

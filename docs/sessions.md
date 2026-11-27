@@ -109,8 +109,9 @@ writes the new file atomically. Each change is announced on the output of
   [Rollback](#rollback)), every checkpoint still to move is filed after the
   last index the incarnation holds, in its order, so none is lost, and an undo
   point under the name replaces the one of the incarnation, as a later rewind
-  would; the announce gives the count and the first new index. Refs a session filed under a name it had before a rename are left
-  where they are, as are those of closed sessions.
+  would; the announce gives the count and the first new index. Refs a session
+  filed under a name it had before a rename are left where they are, as are
+  those of closed sessions.
   Checkpoint refs belong to the repository, not to the worktree folder, so the
   refs of a session whose folder is gone move too, read from the repository the
   folder sat in (the folder above `.herrscher-sessions`), the same way and
@@ -146,6 +147,23 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
 
 - the target directory of a move already exists, or the target branch already
   exists;
+- the parent of the target, `.herrscher-sessions/<id>` (or
+  `.herrscher-scratch/<id>`), already exists as something else than a plain
+  folder of sessions: a file or link, a folder with a `.git` entry, or a
+  worktree git lists. Moving sessions inside such a worktree would put their
+  work where removing that worktree deletes it. Move the folder out of the way,
+  or choose another id with `HERRSCHER_INSTANCE_ID`;
+- the worktree to move belongs to another repository than the one it sits in,
+  as the worktrees of a repository copied with `cp -a` still point at the
+  original. The refusal names both repositories and prints
+  `git -C <repo> worktree repair <folder>`, which links the folder to the
+  repository it sits in; otherwise move the folder out of that repository;
+- a resumed migration finds the worktree at its new place but checked out on
+  a branch that no longer exists, as a branch rename stopped halfway leaves
+  it. The refusal prints `git -C <folder> symbolic-ref HEAD
+  refs/heads/<renamed branch>`; run it if that branch holds the work of the
+  session, then start `serve` again. A worktree found at its new place on any
+  other branch is refused as a worktree on another branch;
 - a branch `session/<id>` exists (an older session named like the instance id
   left it behind), or a branch below `session/<id>/<name>/`: git cannot create
   `session/<id>/<name>` while it does, since one branch name cannot also be a
@@ -209,13 +227,14 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
 - two sessions of the same host record the same folder, of either layout,
   which an older build left behind when a session was renamed and a new
   session took the old name (folders compare as the same file on disk when
-  both exist, and without case on macOS and Windows). One folder cannot move to two places. Neither session can be closed
-  before the migration (commands refuse a format 0 file), and closing one would
-  remove the folder the other still works in, so the refusal names both and the
-  state file: with herrscher stopped, copy the file aside, delete the entry of
-  the session that should not keep the folder, and start `serve` again. The
-  folder, its branch and its work stay with the session kept, and the channel
-  of the other is left as it is;
+  both exist, and without case on macOS and Windows). One folder cannot move
+  to two places. Neither session can be closed before the migration (commands
+  refuse a format 0 file), and closing one would remove the folder the other
+  still works in, so the refusal names both sessions, the folder each one
+  records, and the state file: with herrscher stopped, copy the file aside,
+  delete the entry of the session that should not keep the folder, and start
+  `serve` again. The folder, its branch and its work stay with the session
+  kept, and the channel of the other is left as it is;
 - the worktree to move is locked (`git worktree lock`): git refuses to move it.
   The refusal prints `git -C <repo> worktree unlock <folder>`; run it if no
   other tool still needs the lock, then start `serve` again;
@@ -237,6 +256,14 @@ run, the session fails to start on the host and the daemon keeps retrying.
 
 A move that fails halfway is put back, and the next start picks the migration up
 where it stopped: a directory or branch already at its new place counts as done.
+A worktree already at its new place first goes through
+`git -C <repo> worktree repair <folder>`, which mends the entry git keeps for it
+if the move stopped after the folder moved. When the folder of a session is
+gone but its branch is still to rename, `git -C <repo> worktree prune` runs
+first, so the stale entry of the gone worktree does not keep holding the
+renamed branch. A session whose recorded folder changes is announced as
+starting a new conversation, including when an earlier, stopped run already
+moved the folder.
 Run twice, the migration changes nothing the second time. A migration that stops
 once it has moved something says so: the refusal gives the cause, lists every
 ref move, folder move and branch rename already done and kept, names the copy of
@@ -257,9 +284,10 @@ run `herrscher serve`.
 
 Closing a session whose folder is also the recorded folder of another session
 of the same host is refused, forced or not, since removing it would delete the
-folder the other one works in. The refusal names both sessions and the state
-file: with herrscher stopped, copy the file aside, delete the entry of the
-session that should not keep the folder, and start `serve` again.
+folder the other one works in. The refusal names both sessions, the folder
+each one records, and the state file: with herrscher stopped, copy the file
+aside, delete the entry of the session that should not keep the folder, and
+start `serve` again.
 
 ### Rollback
 

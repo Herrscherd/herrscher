@@ -87,6 +87,9 @@ func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (R
 	if err != nil {
 		return Relocation{}, err
 	}
+	if folderErr := w.checkInstanceFolderOnDisk(plan); folderErr != nil {
+		return Relocation{}, folderErr
+	}
 	plan.dir, err = w.planDirMove(plan)
 	if err != nil {
 		return Relocation{}, err
@@ -102,10 +105,8 @@ func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (R
 		plan.dir, plan.moveBranch = dirMissing, false
 		return plan, nil
 	}
-	if plan.dir == dirToMove {
-		if branchErr := w.checkOnBranch(ctx, plan.FromPath, plan.FromBranch); branchErr != nil {
-			return Relocation{}, branchErr
-		}
+	if checkErr := w.checkPlacedWorktree(ctx, plan); checkErr != nil {
+		return Relocation{}, checkErr
 	}
 	plan.moveBranch, err = w.planBranchRename(ctx, plan, sess)
 	if err != nil {
@@ -117,6 +118,25 @@ func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (R
 		}
 	}
 	return plan, nil
+}
+
+func (w *Worktreer) checkPlacedWorktree(ctx context.Context, plan Relocation) error {
+	switch plan.dir {
+	case dirToMove:
+		if err := w.checkSameRepository(ctx, plan, plan.FromPath); err != nil {
+			return err
+		}
+		if err := w.checkInstanceFolderUnregistered(ctx, plan); err != nil {
+			return err
+		}
+		return w.checkOnBranch(ctx, plan.FromPath, plan.FromBranch)
+	case dirMoved:
+		if err := w.checkSameRepository(ctx, plan, plan.ToPath); err != nil {
+			return err
+		}
+		return w.checkMovedBranch(ctx, plan)
+	}
+	return nil
 }
 
 func (w *Worktreer) planDirMove(plan Relocation) (dirPlan, error) {
@@ -245,6 +265,9 @@ func (w *Worktreer) refuseBlockingBranch(ctx context.Context, plan Relocation) e
 
 // Relocate carries out a planned relocation: the directory first, then the branch, putting the directory back when the branch cannot follow.
 func (w *Worktreer) Relocate(ctx context.Context, plan Relocation) error {
+	if err := w.settleWorktreeEntry(ctx, plan); err != nil {
+		return err
+	}
 	if plan.MovesDir() {
 		if err := w.moveDir(ctx, plan, plan.FromPath, plan.ToPath); err != nil {
 			return err
@@ -262,6 +285,25 @@ func (w *Worktreer) Relocate(ctx context.Context, plan Relocation) error {
 		return errors.Join(renameErr, w.moveDir(context.WithoutCancel(ctx), plan, plan.ToPath, plan.FromPath))
 	}
 	return renameErr
+}
+
+func (w *Worktreer) settleWorktreeEntry(ctx context.Context, plan Relocation) error {
+	var args []string
+	switch {
+	case plan.Scratch:
+		return nil
+	case plan.dir == dirMoved:
+		args = []string{"-C", plan.Repo, subWorktree, "repair", plan.ToPath}
+	case plan.dir == dirMissing && plan.moveBranch:
+		args = []string{"-C", plan.Repo, subWorktree, "prune"}
+	default:
+		return nil
+	}
+	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
+	if err != nil {
+		return NewFailure(w.messages, clitext.WorktreeRelocateFailed, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, err)
+	}
+	return nil
 }
 
 func (w *Worktreer) moveDir(ctx context.Context, plan Relocation, source, target string) error {

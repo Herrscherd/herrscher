@@ -3205,7 +3205,7 @@
   {
     "id": "cli.host.err.workspace_shared",
     "description": "Reply of a host command, err the folder of the session to close is also the folder of another session",
-    "other": "cannot close session {{.Name}}: its folder {{.Path}} is also the folder of session {{.Owner}}, and removing it would delete the folder {{.Owner}} works in; nothing was stopped or removed. Keep the folder with one of them: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then start herrscher serve again"
+    "other": "cannot close session {{.Name}}: sessions {{.Name}} and {{.Owner}} record the same folder: {{.Path}} and {{.From}}, and removing it would delete the folder {{.Owner}} works in; nothing was stopped or removed. Keep the folder with one of them: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then start herrscher serve again"
   },
   {
     "id": "cli.host.err.provision_agent",
@@ -6052,6 +6052,21 @@
     "other": "session {{.Name}}: branch {{.Branch}} exists, and git cannot create {{.Target}} while it does, since one branch name cannot also be a folder of branch names; nothing was moved and no id was written. Rename it with {{.Command}}, or choose another instance id with HERRSCHER_INSTANCE_ID, then run herrscher serve again"
   },
   {
+    "id": "cli.worktree.relocate_instance_folder",
+    "description": "State migration refusal: the folder of the instance id already holds something the instance does not own",
+    "other": "session {{.Name}}: {{.Path}}, the folder the instance id {{.Value}} gives the sessions of this repository, already exists as a git worktree, a .git entry or something that is not a folder, and moving the session inside it would put its work in there, where removing that worktree would delete it; nothing was moved and no id was written. Move {{.Path}} out of the way, or set HERRSCHER_INSTANCE_ID to another id, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_foreign_repository",
+    "description": "State migration refusal: the worktree to move belongs to another repository than the one it sits in",
+    "other": "session {{.Name}}: the worktree {{.Path}} belongs to the repository {{.Target}}, not to {{.Repo}} it sits in (a copy of the repository keeps the links of the original), so git cannot move it from {{.Repo}}; nothing was moved and no id was written. If the folder should belong to {{.Repo}}, link it there with {{.Command}}; otherwise move the folder out of {{.Repo}}. Then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_head_gone",
+    "description": "State migration refusal: the moved worktree is checked out on a branch that no longer exists",
+    "other": "session {{.Name}}: its worktree {{.Path}} is checked out on {{.Tip}}, a branch that no longer exists, as a branch rename stopped halfway leaves it; nothing more was moved. If {{.Branch}} holds the work of the session, point the worktree at it with {{.Command}}, then run herrscher serve again"
+  },
+  {
     "id": "cli.migration.started",
     "description": "Notice that a state migration starts",
     "other": "herrscher: migrating state {{.Path}} from format {{.From}} to format {{.To}}; the old file is kept in {{.File}}"
@@ -6182,7 +6197,7 @@
   {
     "id": "cli.migration.shared_worktree",
     "description": "State migration refusal: two sessions record the same folder",
-    "other": "sessions {{.Name}} and {{.Target}} both record the folder {{.Path}} (an older build gave a new session the folder of a session renamed away from that name), and one folder cannot move to two places; nothing was moved. Neither session can be closed before the migration, and closing one would remove the folder the other still works in. Keep one: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then run herrscher serve again. The folder, its branch and its work stay with the session you keep; the channel of the other one is left as it is"
+    "other": "sessions {{.Name}} and {{.Target}} record the same folder: {{.From}} and {{.Path}}, and one folder cannot move to two places; nothing was moved. Neither session can be closed before the migration, and closing one would remove the folder the other still works in. Keep one: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then run herrscher serve again. The folder, its branch and its work stay with the session you keep; the channel of the other one is left as it is"
   },
   {
     "id": "cli.migration.interrupted",

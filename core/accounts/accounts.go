@@ -224,7 +224,11 @@ func (s Store) Resolve(session, vendor string) (string, string, error) {
 }
 
 func (s Store) loadDefaults() (map[string]string, error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, defaultsFileName))
+	path := filepath.Join(s.Root, defaultsFileName)
+	if err := atomicfile.Sweep(path); err != nil {
+		return nil, fmt.Errorf("sweep account defaults: %w", err)
+	}
+	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return make(map[string]string), nil
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/forgecreds"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
@@ -245,9 +246,16 @@ func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) 
 }
 
 func loadHubState(opts Options) (*state.State, error) {
+	if err := atomicfile.Sweep(opts.StatePath); err != nil {
+		return nil, err
+	}
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
 		return nil, err
+	}
+	partDir := filepath.Dir(opts.StatePath)
+	for _, sess := range store.SnapshotSessions() {
+		logCleanup(atomicfile.Sweep(state.TranscriptPath(partDir, sess.Name)))
 	}
 	var home *state.HomeRef
 	if opts.Home != nil {

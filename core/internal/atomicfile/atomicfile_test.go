@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -32,12 +33,42 @@ func TestWriteRenameFailureLeavesNoStagedFile(t *testing.T) {
 	if err := os.Mkdir(path, 0o755); err != nil {
 		t.Fatalf("block the target with a directory: %v", err)
 	}
-	if err := Write(path, []byte("new\n"), 0o600); err == nil {
-		t.Fatal("Write onto a directory returned no error")
+	err := Write(path, []byte("new\n"), 0o600)
+	if err == nil || !strings.Contains(err.Error(), path) {
+		t.Fatalf("Write onto a directory error = %v; want an error naming %q", err, path)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 || entries[0].Name() != "state" {
 		t.Fatalf("entries = %v, %v; want only the blocking directory", entries, err)
+	}
+}
+
+func TestSweepRemovesStaleStagingFilesOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	stale := filepath.Join(dir, ".state.json.4242517")
+	kept := []string{"state.json", "state.json.bak", ".state.json.keep", ".state.json.tmp", ".state.jsonx.42", "other.json.1"}
+	for _, name := range append([]string{filepath.Base(stale)}, kept...) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Sweep(path); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale staging file survived the sweep: %v", err)
+	}
+	for _, name := range kept {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("Sweep removed %s, which is not a staging file of state.json: %v", name, err)
+		}
+	}
+}
+
+func TestSweepOfAMissingDirectoryIsNotAnError(t *testing.T) {
+	if err := Sweep(filepath.Join(t.TempDir(), "absent", "state.json")); err != nil {
+		t.Fatalf("Sweep of a missing directory: %v", err)
 	}
 }
 

@@ -313,6 +313,7 @@ func editEnv(cliMessages *clitext.Messages, lang languageSource, path, key strin
 	}
 	release := edits.hold(path)
 	defer release()
+	logCleanup(atomicfile.Sweep(path))
 	doc, err := readEnvDocument(path)
 	if err != nil {
 		return "", err

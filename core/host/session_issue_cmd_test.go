@@ -52,7 +52,8 @@ func issueNumbered(t *testing.T, number int, title string) contracts.Issue {
 
 func pullRequestNumbered(t *testing.T, number int) contracts.Issue {
 	t.Helper()
-	issue := issueNumbered(t, number, "pr")
+	issue := issueNumbered(t, number, "Pull request")
+	issue.URL = fmt.Sprintf("https://github.com/acme/widget/pull/%d", number)
 	issue.IsPullRequest = true
 	return issue
 }

@@ -2,11 +2,13 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
@@ -15,6 +17,7 @@ import (
 type fakeCreator struct {
 	spec   contracts.CreateSession
 	vendor string
+	model  string
 	err    error
 }
 
@@ -23,9 +26,10 @@ func (f *fakeCreator) Create(_ context.Context, s contracts.CreateSession) (cont
 	return contracts.DataResult(s.Name), f.err
 }
 
-func (f *fakeCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, vendor string) (contracts.Result, error) {
+func (f *fakeCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, vendor, model string) (contracts.Result, error) {
 	f.spec = s
 	f.vendor = vendor
+	f.model = model
 	return contracts.DataResult(s.Name), f.err
 }
 
@@ -1001,7 +1005,7 @@ type nthFailCreator struct {
 	last   contracts.CreateSession
 }
 
-func (c *nthFailCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, _ string) (contracts.Result, error) {
+func (c *nthFailCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, _, _ string) (contracts.Result, error) {
 	c.n++
 	c.last = s
 	if c.n == c.failAt {
@@ -1159,4 +1163,161 @@ func fakeWTCOf(t *testing.T, wt any) *fakeWTC {
 		t.Fatalf("worktree client is %T, want *fakeWTC", wt)
 	}
 	return f
+}
+
+func newRoleCoordinator(cr *fakeCreator, target agent.Agent, lead state.Session, seeded *[]string) *coordinator {
+	return newCoordinator(newHostMessages(),
+		cr,
+		fakeAgents{profiles: map[string]agent.Agent{target.Name: target}},
+		&fakeWTC{clean: true},
+		fakeSessions{list: []state.Session{lead}},
+		&fakeCloser{},
+		func(sess, task string) bool {
+			*seeded = append(*seeded, sess+"|"+task)
+			return true
+		},
+	)
+}
+
+func TestDelegateAsRoleStartsWorkerOnRoleModel(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newRoleCoordinator(cr,
+		agent.Agent{Name: "scripter", Backend: "codex", WorkerModels: map[string]string{"research": "gpt-mini"}},
+		state.Session{Name: "lead", Project: "proj", Worktree: "/wt/lead", Vendor: "claude", Cmd: "claude --model opus"},
+		&seeded)
+
+	worker, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter/research", Task: "lis le code",
+	})
+	if err != nil {
+		t.Fatalf("delegate as role: %v", err)
+	}
+	if worker != "lead-scripter" {
+		t.Fatalf("worker = %q, want lead-scripter", worker)
+	}
+	if cr.model != "gpt-mini" {
+		t.Fatalf("worker model = %q, want the role model gpt-mini", cr.model)
+	}
+	if cr.vendor != "codex" {
+		t.Fatalf("worker vendor = %q, want the agent backend codex", cr.vendor)
+	}
+	if cr.spec.Cmd != "" {
+		t.Fatalf("worker inherited the lead command %q, a role must route by model", cr.spec.Cmd)
+	}
+	if cr.spec.Agent != "scripter" || cr.spec.Parent != "lead" {
+		t.Fatalf("worker agent/parent = %q/%q, want scripter/lead", cr.spec.Agent, cr.spec.Parent)
+	}
+	if len(seeded) != 1 || seeded[0] != "lead-scripter|lis le code" {
+		t.Fatalf("task not seeded to the role worker: %v", seeded)
+	}
+}
+
+func TestDelegateAsRoleWithoutBackendUsesLeadVendor(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newRoleCoordinator(cr,
+		agent.Agent{Name: "scripter", WorkerModels: map[string]string{"summary": "gpt-mini"}},
+		state.Session{Name: "lead", Project: "proj", Worktree: "/wt/lead", Vendor: "codex"},
+		&seeded)
+
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter/summary", Task: "résume",
+	}); err != nil {
+		t.Fatalf("delegate as role: %v", err)
+	}
+	if cr.vendor != "codex" || cr.model != "gpt-mini" {
+		t.Fatalf("worker vendor/model = %q/%q, want codex/gpt-mini", cr.vendor, cr.model)
+	}
+}
+
+func TestDelegateWithoutRoleKeepsCurrentRouting(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	parentCmd := "claude --model opus"
+	c := newRoleCoordinator(cr,
+		agent.Agent{Name: "scripter", WorkerModels: map[string]string{"research": "gpt-mini"}},
+		state.Session{Name: "lead", Project: "proj", Worktree: "/wt/lead", Vendor: "claude", Cmd: parentCmd},
+		&seeded)
+
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter", Task: "écris",
+	}); err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	if cr.model != "" {
+		t.Fatalf("delegate without a role set model %q, want none", cr.model)
+	}
+	if cr.vendor != "claude" || cr.spec.Cmd != parentCmd {
+		t.Fatalf("delegate without a role = vendor %q cmd %q, want the lead target", cr.vendor, cr.spec.Cmd)
+	}
+}
+
+func TestDelegateUnknownRoleRefusedBeforeCreating(t *testing.T) {
+	for _, target := range []agent.Agent{
+		{Name: "scripter", Backend: "codex"},
+		{Name: "scripter", Backend: "codex", WorkerModels: map[string]string{"summary": "gpt-mini"}},
+	} {
+		cr := &fakeCreator{}
+		var seeded []string
+		c := newRoleCoordinator(cr, target,
+			state.Session{Name: "lead", Project: "proj", Worktree: "/wt/lead", Vendor: "claude"},
+			&seeded)
+
+		_, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+			FromSession: "lead", ToAgent: "scripter/research", Task: "lis",
+		})
+		if err == nil {
+			t.Fatalf("role research of %v must be refused", target.WorkerModels)
+		}
+		if cr.spec.Name != "" || len(seeded) != 0 {
+			t.Fatalf("refused role must create nothing: spec %q seeded %v", cr.spec.Name, seeded)
+		}
+		if !strings.Contains(err.Error(), `role "research" is not configured for agent "scripter"`) {
+			t.Fatalf("English error does not name the role: %v", err)
+		}
+		if got := errorTextIn(newHostMessages(), i18n.French, err); !strings.Contains(got, "le rôle research n'est pas configuré pour l'agent scripter") {
+			t.Fatalf("French error does not name the role: %q", got)
+		}
+	}
+}
+
+func TestDelegateRoleSpawnFailureNamesRoleAndModelInBothLanguages(t *testing.T) {
+	cr := &fakeCreator{err: errors.New("créations refusées")}
+	var seeded []string
+	c := newRoleCoordinator(cr,
+		agent.Agent{Name: "scripter", Backend: "codex", WorkerModels: map[string]string{"research": "gpt-mini"}},
+		state.Session{Name: "lead", Project: "proj", Worktree: "/wt/lead", Vendor: "claude"},
+		&seeded)
+
+	_, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter/research", Task: "lis",
+	})
+	if err == nil {
+		t.Fatal("a failed create must fail the delegation")
+	}
+	if got := errorTextIn(newHostMessages(), i18n.English, err); !strings.Contains(got, "delegate as scripter/research (model gpt-mini)") {
+		t.Fatalf("English error does not name the role and model: %q", got)
+	}
+	if got := errorTextIn(newHostMessages(), i18n.French, err); !strings.Contains(got, "délégation en scripter/research (modèle gpt-mini)") {
+		t.Fatalf("French error does not name the role and model: %q", got)
+	}
+}
+
+func TestModelErrorsRenderInFrench(t *testing.T) {
+	messages := newHostMessages()
+	mismatch := &modelBackendMismatchError{Model: "gpt-mini", Owner: "codex", Requested: "claude"}
+	if got := errorTextIn(messages, i18n.French, mismatch); !strings.Contains(got, "le modèle « gpt-mini » appartient au backend « codex »") {
+		t.Fatalf("French mismatch error = %q", got)
+	}
+	if got := errorTextIn(messages, i18n.English, mismatch); got != mismatch.Error() {
+		t.Fatalf("English mismatch error = %q, want %q", got, mismatch.Error())
+	}
+	unknown := &unknownModelError{Model: "nope", Policy: "gateway-only"}
+	if got := errorTextIn(messages, i18n.French, unknown); !strings.Contains(got, "modèle inconnu « nope »") {
+		t.Fatalf("French unknown model error = %q", got)
+	}
+	if got := errorTextIn(messages, i18n.English, unknown); got != unknown.Error() {
+		t.Fatalf("English unknown model error = %q, want %q", got, unknown.Error())
+	}
 }

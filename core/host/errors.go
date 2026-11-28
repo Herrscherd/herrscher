@@ -146,6 +146,10 @@ func (e *unknownModelError) Error() string {
 	return fmt.Sprintf("unknown model %q (not offered under route policy %q)", e.Model, e.Policy)
 }
 
+func (e *unknownModelError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "model.unknown", map[string]any{modelParam: e.Model, "Policy": e.Policy})
+}
+
 type noTurnInFlightError struct {
 	Session string
 }
@@ -226,6 +230,23 @@ type modelBackendMismatchError struct {
 
 func (e *modelBackendMismatchError) Error() string {
 	return fmt.Sprintf("model %q belongs to backend %q, but backend %q was requested; pick a model offered by %q or switch the vendor", e.Model, e.Owner, e.Requested, e.Requested)
+}
+
+func (e *modelBackendMismatchError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "model.backend_mismatch", map[string]any{modelParam: e.Model, "Owner": e.Owner, "Requested": e.Requested})
+}
+
+type unknownWorkerRoleError struct {
+	Agent string
+	Role  string
+}
+
+func (e *unknownWorkerRoleError) Error() string {
+	return fmt.Sprintf("role %q is not configured for agent %q", e.Role, e.Agent)
+}
+
+func (e *unknownWorkerRoleError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "delegate.unknown_role", map[string]any{"Agent": e.Agent, roleParam: e.Role})
 }
 
 type noRoleError struct {

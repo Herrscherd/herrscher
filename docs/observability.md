@@ -267,6 +267,9 @@ When a session names no model, the first of these that fits applies:
 4. the global default, from `HERRSCHER_DEFAULT_MODEL`;
 5. the backend's own default, when none of the above is set.
 
+A worker started by a role delegation (see `docs/sessions.md`) passes its role's
+model as its own `--model`, so that model is the first item here.
+
 A fallback that belongs to another vendor than the one requested is skipped, and
 logged unless it is the global default. An explicit `--model` that the catalog
 refuses is an error.

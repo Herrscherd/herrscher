@@ -21,6 +21,14 @@ func NewRoster(root string) contracts.RosterProvider {
 	return storeRoster{store: agent.NewStore(root)}
 }
 
+func (r storeRoster) WorkerModels(name string) map[string]string {
+	found, ok := r.store.Get(name)
+	if !ok {
+		return nil
+	}
+	return found.WorkerModels
+}
+
 func (r storeRoster) Agents() []contracts.AgentInfo {
 	list, err := r.store.List()
 	if err != nil {

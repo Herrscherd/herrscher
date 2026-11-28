@@ -5,6 +5,7 @@ const (
 	CmdHelpToolWeight         = "cli.help.cmd.mcp.weight"
 	CmdParamToolWeightAgent   = "cli.help.param.mcp.weight.agent"
 	CmdParamToolWeightDeep    = "cli.help.param.mcp.weight.deep"
+	CmdParamToolWeightRole    = "cli.help.param.mcp.weight.role"
 	ToolWeightHeader          = "cli.mcp.weight.header"
 	ToolWeightNone            = "cli.mcp.weight.none"
 	ToolWeightMeasured        = "cli.mcp.weight.measured"
@@ -12,6 +13,9 @@ const (
 	ToolWeightStopped         = "cli.mcp.weight.stopped"
 	ToolWeightStderr          = "cli.mcp.weight.stderr"
 	ToolWeightEstimate        = "cli.mcp.weight.estimate"
+	ToolWeightProfile         = "cli.mcp.weight.profile"
+	ToolWeightProfileNone     = "cli.mcp.weight.profile.none"
+	ToolWeightNoProfile       = "cli.mcp.weight.no_profile"
 	ToolWeightCauseNotStdio   = "cli.mcp.weight.cause.not_stdio"
 	ToolWeightCauseNotStarted = "cli.mcp.weight.cause.not_started"
 	ToolWeightCauseStart      = "cli.mcp.weight.cause.start"
@@ -31,6 +35,7 @@ func mcpKeys() map[Key][]string {
 		CmdHelpToolWeight:         nil,
 		CmdParamToolWeightAgent:   nil,
 		CmdParamToolWeightDeep:    nil,
+		CmdParamToolWeightRole:    nil,
 		ToolWeightHeader:          {ParamAgent},
 		ToolWeightNone:            nil,
 		ToolWeightMeasured:        {ParamName, ParamTransport, ParamTools, ParamBytes, ParamTokens},
@@ -38,6 +43,9 @@ func mcpKeys() map[Key][]string {
 		ToolWeightStopped:         {ParamName, ParamReason},
 		ToolWeightStderr:          {ParamStderr},
 		ToolWeightEstimate:        nil,
+		ToolWeightProfile:         {ParamRole, ParamKept, ParamDropped},
+		ToolWeightProfileNone:     nil,
+		ToolWeightNoProfile:       {ParamRole},
 		ToolWeightCauseNotStdio:   nil,
 		ToolWeightCauseNotStarted: nil,
 		ToolWeightCauseStart:      nil,

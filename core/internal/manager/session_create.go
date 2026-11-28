@@ -61,7 +61,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+req.name)
-	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
+	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared) + h.mcpProfileLine(h.noticeLanguage(req.lang), place.mcp)
 	if req.admin != nil {
 		h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
 	} else {

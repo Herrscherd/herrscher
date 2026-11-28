@@ -107,8 +107,10 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 			Complete: expected > 0 && reportedCount >= expected,
 		}, true
 	}
-	if sess, ok := c.findSession(name); ok && sess.Parent != "" {
-		return CoordinationView{Role: roleWorker, Lead: sess.Parent}, true
+	if sess, ok := c.findSession(name); ok {
+		if role := agent.DelegationRole(sess.Parent); role != "" {
+			return CoordinationView{Role: role, Lead: sess.Parent}, true
+		}
 	}
 	return CoordinationView{}, false
 }

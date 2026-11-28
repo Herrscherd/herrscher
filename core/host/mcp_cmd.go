@@ -3,6 +3,8 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"strconv"
 	"strings"
 
@@ -11,11 +13,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/mcpweight"
 )
 
 const (
 	paramMCPDeep = "deep"
+	paramMCPRole = "role"
 	nsMCP        = "mcp"
 	verbWeight   = "weight"
 )
@@ -29,6 +33,7 @@ func isReadOnlyCommand(args []string) bool {
 
 type mcpWeightRequest struct {
 	agent  string
+	role   string
 	deep   bool
 	asJSON bool
 }
@@ -38,8 +43,9 @@ func mcpWeightVerb(cliMessages *clitext.Messages, lang languageSource, agents ag
 		Help(clitext.CmdHelpToolWeight).
 		ValueParam(paramAgent, clitext.CmdParamToolWeightAgent, true).
 		Param(paramMCPDeep, clitext.CmdParamToolWeightDeep, false).
+		ValueParam(paramMCPRole, clitext.CmdParamToolWeightRole, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			req := mcpWeightRequest{agent: in.Get(paramAgent), deep: in.Bool(paramMCPDeep), asJSON: in.JSON}
+			req := mcpWeightRequest{agent: in.Get(paramAgent), role: in.Get(paramMCPRole), deep: in.Bool(paramMCPDeep), asJSON: in.JSON}
 			return cli.Data(mcpWeightReport(ctx, cliMessages, lang(), agents, measurer, req))
 		})
 }
@@ -49,16 +55,67 @@ func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i1
 	if !ok {
 		return "", &UnknownError{Kind: kindAgent, Name: req.agent}
 	}
-	servers, err := mcpweight.ReadServers(found.MCPConfigPath())
+	servers, selection, err := weightServers(found, req.role)
 	if err != nil {
-		return "", err
+		return "", localizedMCPProfileError(cliMessages, lang, req.agent, err)
 	}
 	results := mcpWeigh(ctx, measurer, servers, req.deep)
 	if req.asJSON {
 		body, encodeErr := json.Marshal(results)
 		return string(body), encodeErr
 	}
-	return renderMCPWeight(cliMessages, lang, req.agent, results), nil
+	return renderMCPWeight(cliMessages, lang, req.agent, results) + mcpProfileNote(cliMessages, lang, selection), nil
+}
+
+func weightServers(found agent.Agent, role string) ([]agent.MCPServer, agent.MCPSelection, error) {
+	if role == "" {
+		servers, err := mcpweight.ReadServers(found.MCPConfigPath())
+		return servers, agent.MCPSelection{}, err
+	}
+	selection, err := found.SelectMCP(role)
+	if errors.Is(err, fs.ErrNotExist) {
+		servers, readErr := mcpweight.ReadServers(found.MCPConfigPath())
+		return servers, agent.MCPSelection{}, readErr
+	}
+	if err != nil {
+		return nil, agent.MCPSelection{}, err
+	}
+	servers, err := agent.ParseMCPServers(selection.Document)
+	return servers, selection, err
+}
+
+func localizedMCPProfileError(cliMessages *clitext.Messages, lang i18n.Language, agentName string, err error) error {
+	key, params, ok := manager.MCPProfileProblem(err, agentName)
+	if !ok {
+		return err
+	}
+	text, textErr := cliMessages.Text(i18n.Resolve(lang), key, params)
+	if textErr != nil {
+		return err
+	}
+	return localizedHostError{text: text, cause: err}
+}
+
+func mcpProfileNote(cliMessages *clitext.Messages, lang i18n.Language, selection agent.MCPSelection) string {
+	if selection.Role == "" {
+		return ""
+	}
+	text := replyText(cliMessages, lang)
+	if !selection.Applied {
+		return "\n" + text.Text(clitext.ToolWeightNoProfile, clitext.Params{clitext.ParamRole: selection.Role})
+	}
+	return "\n" + text.Text(clitext.ToolWeightProfile, clitext.Params{
+		clitext.ParamRole:    selection.Role,
+		clitext.ParamKept:    joinOrNone(text, selection.Kept),
+		clitext.ParamDropped: joinOrNone(text, selection.Dropped),
+	})
+}
+
+func joinOrNone(text *clitext.Translator, names []string) string {
+	if len(names) == 0 {
+		return text.Text(clitext.ToolWeightProfileNone, nil)
+	}
+	return strings.Join(names, ", ")
 }
 
 func mcpWeigh(ctx context.Context, measurer *mcpweight.Measurer, servers []agent.MCPServer, deep bool) []mcpweight.Result {

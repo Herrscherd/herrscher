@@ -1,5 +1,7 @@
 package host
 
+import "github.com/Herrscherd/herrscher/core/internal/agent"
+
 const (
 	paramName       = "name"
 	paramLang       = "lang"
@@ -19,7 +21,7 @@ const (
 	kindTerminal    = "terminal"
 	roleSession     = "session"
 	roleLead        = "lead"
-	roleWorker      = "worker"
+	roleWorker      = agent.RoleWorker
 	keySession      = "session"
 	keySchedule     = "schedule"
 	keyStatus       = "status"

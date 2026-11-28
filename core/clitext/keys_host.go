@@ -107,6 +107,10 @@ const (
 	HostScheduleStatusPaused    = "cli.host.schedule.status_paused"
 	HostErrWorktree             = "cli.host.err.worktree"
 	HostErrProvisionAgent       = "cli.host.err.provision_agent"
+	HostErrMCPProfileServer     = "cli.host.err.mcp_profile_server"
+	HostErrMCPProfileRole       = "cli.host.err.mcp_profile_role"
+	HostErrMCPProfileNull       = "cli.host.err.mcp_profile_null"
+	HostErrMCPRole              = "cli.host.err.mcp_role"
 	HostErrCreateChannel        = "cli.host.err.create_channel"
 	HostErrCreateForumPost      = "cli.host.err.create_forum_post"
 	HostErrPersist              = "cli.host.err.persist"
@@ -222,6 +226,10 @@ func hostKeys() map[Key][]string {
 		HostScheduleStatusPaused:    nil,
 		HostErrWorktree:             {ParamErr},
 		HostErrProvisionAgent:       {ParamAgent, ParamErr},
+		HostErrMCPProfileServer:     {ParamAgent, ParamRole, ParamServer},
+		HostErrMCPProfileRole:       {ParamAgent, ParamRole, ParamAccepted},
+		HostErrMCPProfileNull:       {ParamAgent, ParamRole},
+		HostErrMCPRole:              {ParamRole, ParamAccepted},
 		HostErrCreateChannel:        {ParamErr},
 		HostErrCreateForumPost:      {ParamErr},
 		HostErrPersist:              {ParamErr},

@@ -3198,6 +3198,46 @@
     "other": "worktree: {{.Err}}"
   },
   {
+    "id": "cli.help.param.mcp.weight.role",
+    "description": "Help text of the mcp weight --role flag",
+    "other": "Role whose MCP profile to measure"
+  },
+  {
+    "id": "cli.mcp.weight.profile",
+    "description": "Note of the mcp weight report on the servers a role keeps",
+    "other": "Profile of role {{.Role}}: loaded {{.Kept}}, left out {{.Dropped}}."
+  },
+  {
+    "id": "cli.mcp.weight.profile.none",
+    "description": "Word standing for an empty server list in the mcp weight profile note",
+    "other": "none"
+  },
+  {
+    "id": "cli.mcp.weight.no_profile",
+    "description": "Note of the mcp weight report when the role has no profile",
+    "other": "No profile for role {{.Role}}: every server is loaded."
+  },
+  {
+    "id": "cli.host.err.mcp_profile_server",
+    "description": "Reply of a host command, the MCP profile of a role names a server mcp.json does not declare",
+    "other": "the MCP profile of role \"{{.Role}}\" of agent \"{{.Agent}}\" names server \"{{.Server}}\", which its mcp.json does not declare"
+  },
+  {
+    "id": "cli.host.err.mcp_profile_role",
+    "description": "Reply of a host command, the MCP profile file of an agent names a role that is not assignable",
+    "other": "the MCP profile file of agent \"{{.Agent}}\" names role \"{{.Role}}\", which is not assignable (accepted roles: {{.Accepted}})"
+  },
+  {
+    "id": "cli.host.err.mcp_profile_null",
+    "description": "Reply of a host command, the MCP profile of a role is null instead of a list of server names",
+    "other": "the MCP profile file of agent \"{{.Agent}}\" gives role \"{{.Role}}\" a null entry, want a list of server names"
+  },
+  {
+    "id": "cli.host.err.mcp_role",
+    "description": "Reply of a host command, the role asked for is not assignable",
+    "other": "role not assignable: \"{{.Role}}\" (accepted roles: {{.Accepted}})"
+  },
+  {
     "id": "cli.host.err.provision_agent",
     "description": "Reply of a host command, err provision agent",
     "other": "provision agent \"{{.Agent}}\": {{.Err}}"

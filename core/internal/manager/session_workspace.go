@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 )
@@ -27,6 +28,7 @@ type placement struct {
 	repo    string
 	project string
 	space   workspace
+	mcp     agent.MCPSelection
 }
 
 func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *createRequest) (placement, error) {
@@ -49,9 +51,11 @@ func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *
 		return placement{}, err
 	}
 	if req.runtime.agent != "" {
-		if provisionErr := h.provisionAgent(ctx, req, worktrees, repo, &space); provisionErr != nil {
+		selection, provisionErr := h.provisionAgent(ctx, req, worktrees, repo, &space)
+		if provisionErr != nil {
 			return placement{}, provisionErr
 		}
+		return placement{wt: worktrees, repo: repo, project: project, space: space, mcp: selection}, nil
 	}
 	return placement{wt: worktrees, repo: repo, project: project, space: space}, nil
 }
@@ -107,10 +111,10 @@ func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo
 	return workspace{path: path, reused: reused}, nil
 }
 
-func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktrees Worktrees, repo string, space *workspace) error {
+func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktrees Worktrees, repo string, space *workspace) (agent.MCPSelection, error) {
 	agentName := req.runtime.agent
 	if req.shared {
-		return &SharedAgentError{Agent: agentName}
+		return agent.MCPSelection{}, &SharedAgentError{Agent: agentName}
 	}
 	if space.path == "" {
 		if _, statErr := os.Stat(worktrees.ScratchPath(repo, req.name)); statErr == nil {
@@ -118,14 +122,14 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 		}
 		path, err := worktrees.Scratch(repo, req.name)
 		if err != nil {
-			return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+			return agent.MCPSelection{}, localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 		}
 		space.path, space.scratch = path, true
 	}
 	agentSpec, found := h.agents.Get(agentName)
 	if !found {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
-		return &UnknownAgentError{Name: agentName}
+		return agent.MCPSelection{}, &UnknownAgentError{Name: agentName}
 	}
 	if req.runtime.vendor == "" {
 		req.runtime.vendor = agentSpec.Backend
@@ -133,11 +137,32 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	if !req.runtime.explicit && agentSpec.Cmd != "" {
 		req.runtime.cmd = agentSpec.Cmd
 	}
+	agentSpec.Role = agent.DelegationRole(req.options.parent)
+	selection, err := agentSpec.SelectMCP(agentSpec.Role)
+	if err != nil {
+		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
+		return agent.MCPSelection{}, h.provisionFailure(agentName, err)
+	}
+	h.logMCPSelection(req.name, selection)
 	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
-		return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+		return agent.MCPSelection{}, h.provisionFailure(agentName, err)
 	}
-	return nil
+	return selection, nil
+}
+
+func (h *Handler) provisionFailure(agentName string, err error) error {
+	if key, params, ok := MCPProfileProblem(err, agentName); ok {
+		return h.keyed(key, params, err)
+	}
+	return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+}
+
+func (h *Handler) logMCPSelection(session string, selection agent.MCPSelection) {
+	if !selection.Applied {
+		return
+	}
+	h.log.Info("mcp profile applied", "session", session, "role", selection.Role, "kept", selection.Kept, "dropped", selection.Dropped)
 }
 
 func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, repo, name string, space workspace) {

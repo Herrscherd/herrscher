@@ -2083,6 +2083,11 @@
     "other": "nom d'hôte non standard, à enregistrer à la main"
   },
   {
+    "id": "cli.discover.dropped",
+    "description": "Réponse de host discover, candidats écartés au-delà de la limite du réseau local",
+    "other": "{{.Count}} candidat(s) en plus ignoré(s), la limite du réseau local est atteinte"
+  },
+  {
     "id": "cli.help.param.host.add.name",
     "description": "Help of the --name param of the command host add",
     "other": "nom de l'hôte (unique ; `local` est réservé) ; accepte aussi un argument nu"

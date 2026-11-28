@@ -9,6 +9,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -102,19 +103,35 @@ type Candidate struct {
 }
 
 // Source is one way of finding candidates, kept behind an interface so that the
-// network and the files it reads can be replaced by fakes in tests.
+// network and the files it reads can be replaced by fakes in tests. Find returns
+// once its own bound elapses or ctx ends, whichever comes first, and leaves no
+// goroutine running. A Find that cannot stop before its bound says so in its godoc.
 type Source interface {
 	// Name is the short label of the source, shown when the source is unavailable.
 	Name() string
-	// Find returns the candidates the source sees now, and stops when ctx ends.
+	// Find returns the candidates the source sees, or an OverflowError with the
+	// candidates it kept when it dropped some, or another error when it failed.
 	Find(ctx context.Context) ([]Candidate, error)
 }
 
-// Report is the outcome of one discovery: the candidates found, sorted, and the
-// names of the sources that could not be read.
+// OverflowError reports that a source dropped candidates beyond its own limit. The
+// candidates it kept are valid: Discover merges them and counts the dropped ones.
+type OverflowError struct {
+	Dropped int
+}
+
+// Error describes the overflow for logs; the operator reads the count instead.
+func (e OverflowError) Error() string {
+	return fmt.Sprintf("%d candidates dropped beyond the source limit", e.Dropped)
+}
+
+// Report is the outcome of one discovery: the candidates found, sorted, the names
+// of the sources that could not be read, and how many candidates were dropped
+// beyond the limit of their source.
 type Report struct {
 	Candidates  []Candidate `json:"candidates"`
 	Unavailable []string    `json:"unavailable,omitempty"`
+	Dropped     int         `json:"dropped,omitempty"`
 }
 
 type sourceOutcome struct {
@@ -146,7 +163,10 @@ func Discover(ctx context.Context, sources []Source) Report {
 
 	var report Report
 	for _, outcome := range outcomes {
-		if outcome.err != nil {
+		var overflow OverflowError
+		if errors.As(outcome.err, &overflow) {
+			report.Dropped += overflow.Dropped
+		} else if outcome.err != nil {
 			report.Unavailable = append(report.Unavailable, outcome.name)
 			continue
 		}
@@ -176,13 +196,9 @@ func compareCandidates(left, right Candidate) int {
 
 func plainText(text string) string {
 	return strings.Map(func(char rune) rune {
-		if unicode.IsControl(char) || isBidiControl(char) {
+		if unicode.IsControl(char) || unicode.In(char, unicode.Cf, unicode.Zl, unicode.Zp) {
 			return -1
 		}
 		return char
 	}, text)
-}
-
-func isBidiControl(char rune) bool {
-	return char >= 0x202A && char <= 0x202E || char >= 0x2066 && char <= 0x2069
 }

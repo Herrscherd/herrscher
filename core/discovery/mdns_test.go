@@ -1,8 +1,12 @@
 package discovery
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/mdns"
 )
@@ -74,5 +78,52 @@ func TestAnEntryFromTheNetworkCannotInjectControls(t *testing.T) {
 	}
 	if candidate.Name != "a]0;pwn" || candidate.Address != "192.0.2.12" {
 		t.Fatalf("got name %q, address %q", candidate.Name, candidate.Address)
+	}
+}
+
+func TestTheLANSourceKeepsAtMostMaxLANCandidatesAndCountsTheRest(t *testing.T) {
+	const extra = 10
+	entries := make(chan *mdns.ServiceEntry, maxLANCandidates+extra)
+	for index := range maxLANCandidates + extra {
+		entries <- &mdns.ServiceEntry{
+			Name:   fmt.Sprintf("herrscher-%d._herrscher._tcp.local.", index),
+			AddrV4: net.IPv4(192, 0, 2, 1),
+		}
+	}
+	close(entries)
+	result := collectEntries(entries)
+	if len(result.found) != maxLANCandidates {
+		t.Fatalf("kept %d candidates, want %d", len(result.found), maxLANCandidates)
+	}
+	if result.dropped != extra {
+		t.Fatalf("dropped %d, want %d", result.dropped, extra)
+	}
+}
+
+func TestAnAlreadyCancelledBrowseReturnsAtOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	_, err := MDNSSource{Window: time.Minute}.Find(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("a cancelled browse ran for %v", elapsed)
+	}
+}
+
+func TestABrowseEndsAtTheDeadlineOfItsContextEvenWithALongerWindow(t *testing.T) {
+	const deadline = 100 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+	started := time.Now()
+	_, err := MDNSSource{Window: time.Minute}.Find(ctx)
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Skipf("multicast is not available here: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("the browse ran %v past a %v deadline", elapsed, deadline)
 	}
 }

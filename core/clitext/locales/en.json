@@ -2083,6 +2083,11 @@
     "other": "not a plain host name, register it by hand"
   },
   {
+    "id": "cli.discover.dropped",
+    "description": "Reply of host discover, candidates dropped beyond the local network limit",
+    "other": "{{.Count}} more candidate(s) ignored, the local network limit is reached"
+  },
+  {
     "id": "cli.help.param.host.add.name",
     "description": "Help of the --name param of the command host add",
     "other": "host name (unique; `local` is reserved); also takes a bare argument"

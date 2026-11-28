@@ -11,6 +11,7 @@ const (
 	DiscoverFingerprintUnknown = "cli.discover.fingerprint_unknown"
 	DiscoverSourceUnavailable  = "cli.discover.source_unavailable"
 	DiscoverAddUnsafe          = "cli.discover.add_unsafe"
+	DiscoverDropped            = "cli.discover.dropped"
 )
 
 // Params of the discover replies, named as the catalog fields that carry them.
@@ -32,5 +33,6 @@ func discoverKeys() map[Key][]string {
 		DiscoverFingerprintUnknown: nil,
 		DiscoverSourceUnavailable:  {ParamSource},
 		DiscoverAddUnsafe:          nil,
+		DiscoverDropped:            {ParamCount},
 	}
 }

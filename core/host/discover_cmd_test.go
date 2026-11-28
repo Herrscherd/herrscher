@@ -13,7 +13,10 @@ import (
 )
 
 func hostileNetworkNames() []string {
-	return []string{"x`id`", "$(id)", "a;id", "a|id", "a&id", "a id", "a'b", "-oProxyCommand=id", "a\x1b]0;pwn\x07"}
+	return []string{
+		"x`id`", "$(id)", "a;id", "a|id", "a&id", "a id", "a'b", "-oProxyCommand=id", "a\x1b]0;pwn\x07",
+		"a[1]", "[", "[-x", "a[", "]", "x]", "[::1", "[1.2.3.4]", "[fe80::1%eth0]", "[::1]x", "u@[::1]@x",
+	}
 }
 
 func TestTheDiscoveryProposesAnAddCommandForEachCandidate(t *testing.T) {
@@ -26,9 +29,9 @@ func TestTheDiscoveryProposesAnAddCommandForEachCandidate(t *testing.T) {
 	for _, want := range []string{
 		"nothing is written",
 		"build1 at build1, route ssh, unverified, fingerprint unknown",
-		"add it with: herrscher host add build1 --ssh build1 --workspace <path>",
+		"add it with: herrscher host add build1 --ssh build1 --workspace PATH_TO_WORKSPACE",
 		"herrscher-0123456789abcdef at 192.0.2.10, route lan, unverified, fingerprint 0123456789abcdef",
-		"add it with: herrscher host add <name> --ssh <user>@192.0.2.10 --workspace <path>",
+		"add it with: herrscher host add NAME --ssh USER@192.0.2.10 --workspace PATH_TO_WORKSPACE",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("reply lacks %q:\n%s", want, text)
@@ -75,7 +78,7 @@ func TestTheAddCommandRefusesANetworkNameThatIsNotAPlainHostName(t *testing.T) {
 func TestTheAddCommandKeepsPlainHostNames(t *testing.T) {
 	candidate := discovery.Candidate{Name: "build-1.example_net", Address: "fd7a:115c::1", Route: discovery.RouteSSH, SSHTarget: "build-1.example_net"}
 	command, ok := addCommand(candidate)
-	if !ok || command != "herrscher host add build-1.example_net --ssh build-1.example_net --workspace <path>" {
+	if !ok || command != "herrscher host add build-1.example_net --ssh build-1.example_net --workspace PATH_TO_WORKSPACE" {
 		t.Fatalf("got %q, ok %v", command, ok)
 	}
 }
@@ -92,5 +95,26 @@ func TestAHostileSSHAliasNeverPutsAControlOnTheTerminal(t *testing.T) {
 	}
 	if strings.Contains(text, "herrscher host add a") {
 		t.Fatalf("a hostile alias was proposed as a command:\n%s", text)
+	}
+}
+
+func TestTheHostTokenAcceptsPlainNamesAndWholeIPv6Literals(t *testing.T) {
+	for _, token := range []string{"build1", "build-1.example_net", "fd7a:115c::1", "[::1]", "user@[::1]", "user@build1"} {
+		if !isHostToken(token) {
+			t.Errorf("%q is a host token", token)
+		}
+	}
+	for _, token := range []string{"a[1]", "[", "[-x", "[1.2.3.4]", "[::1", "::1]", "[fe80::1%eth0]", "a]", "@[::1]", "-x", "[::1]x", "a[::1]", "[]", "user@-x[::1]"} {
+		if isHostToken(token) {
+			t.Errorf("%q is not a host token", token)
+		}
+	}
+}
+
+func TestTheDiscoveryReportsTheCandidatesDroppedBeyondTheLimit(t *testing.T) {
+	report := discovery.Report{Dropped: 44}
+	text := formatDiscovery(replyText(clitext.NewMessages(), i18n.English), report)
+	if !strings.Contains(text, "44 more candidate(s) ignored") {
+		t.Fatalf("the dropped count is not reported:\n%s", text)
 	}
 }

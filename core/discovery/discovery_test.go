@@ -122,3 +122,38 @@ func TestPlainTextRemovesWhatATerminalWouldObey(t *testing.T) {
 		t.Fatalf("plainText(%q) = %q", hostile, got)
 	}
 }
+
+func TestPlainTextRemovesEveryFormatAndSeparatorRune(t *testing.T) {
+	for _, char := range []rune{
+		'\u200b', '\u200e', '\u200f', '\u061c', '\u2028', '\u2029', '\ufeff', '\u00ad', '\u2060', '\U000e0001',
+		'\x1b', '\x07', '\u0085', '\u202e', '\u2067',
+	} {
+		text := "a" + string(char) + "b"
+		if got := plainText(text); got != "ab" {
+			t.Errorf("%U: plainText(%q) = %q, want %q", char, text, got, "ab")
+		}
+	}
+}
+
+func TestPlainTextKeepsPrintableText(t *testing.T) {
+	const text = "héllo wörld 日本-1.example"
+	if got := plainText(text); got != text {
+		t.Fatalf("plainText(%q) = %q", text, got)
+	}
+}
+
+func TestAnOverflowingSourceKeepsItsCandidatesAndCountsTheDropped(t *testing.T) {
+	peer := Candidate{Name: "build1", Address: "192.0.2.5", Route: RouteLAN}
+	report := Discover(context.Background(), []Source{
+		fakeSource{name: "dns-sd", found: []Candidate{peer}, err: OverflowError{Dropped: 44}},
+	})
+	if report.Dropped != 44 {
+		t.Fatalf("dropped %d, want 44", report.Dropped)
+	}
+	if !slices.Equal(report.Candidates, []Candidate{peer}) {
+		t.Fatalf("the kept candidates were lost: %+v", report.Candidates)
+	}
+	if len(report.Unavailable) != 0 {
+		t.Fatalf("an overflow is not an unavailable source: %v", report.Unavailable)
+	}
+}

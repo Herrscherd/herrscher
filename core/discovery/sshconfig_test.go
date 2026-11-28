@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,5 +66,23 @@ func TestTheSSHConfigSourceReadsTheFile(t *testing.T) {
 	}
 	if len(found) != 4 {
 		t.Fatalf("got %d candidates, want 4", len(found))
+	}
+}
+
+func TestAnSSHConfigThatIsNotARegularFileIsUnavailable(t *testing.T) {
+	_, err := SSHConfig{Path: t.TempDir()}.Find(context.Background())
+	if !errors.Is(err, ErrSSHConfigNotRegular) {
+		t.Fatalf("got %v, want ErrSSHConfigNotRegular", err)
+	}
+}
+
+func TestAnOversizedSSHConfigIsUnavailable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(path, make([]byte, sshConfigMaxBytes+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := SSHConfig{Path: path}.Find(context.Background())
+	if !errors.Is(err, ErrSSHConfigTooLarge) {
+		t.Fatalf("got %v, want ErrSSHConfigTooLarge", err)
 	}
 }

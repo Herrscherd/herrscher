@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"syscall"
 )
 
 const (
@@ -25,7 +24,8 @@ var ErrTailscaleStatus = errors.New("tailscale refused its status request")
 
 // Tailscale lists the online peers of the tailnet through the local API of
 // tailscaled. Without Tailscale on the machine, the socket is missing and the
-// source is empty, not failed.
+// source is empty, not failed. A socket that refuses connections, left behind by a
+// tailscaled that stopped, makes the source unavailable.
 type Tailscale struct {
 	Socket string
 }
@@ -71,7 +71,7 @@ func (source Tailscale) status(ctx context.Context) ([]byte, error) {
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		if isSocketAbsent(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
@@ -81,10 +81,6 @@ func (source Tailscale) status(ctx context.Context) ([]byte, error) {
 	}
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, tailscaleMaxBody))
 	return body, errors.Join(readErr, response.Body.Close())
-}
-
-func isSocketAbsent(err error) bool {
-	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
 }
 
 type tailscalePeer struct {

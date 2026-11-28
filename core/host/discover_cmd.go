@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,8 +16,10 @@ import (
 )
 
 const (
-	addHintPlaceholder = "<name>"
-	hostTokenSymbols   = ".-_@:[]"
+	addHintName      = "NAME"
+	addHintUser      = "USER"
+	addHintWorkspace = "PATH_TO_WORKSPACE"
+	hostTokenSymbols = ".-_@:"
 )
 
 func hostDiscoverVerb(cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
@@ -64,6 +67,9 @@ func formatDiscovery(translator *clitext.Translator, report discovery.Report) st
 	for _, source := range report.Unavailable {
 		fmt.Fprintf(&body, "\n%s", translator.Text(clitext.DiscoverSourceUnavailable, clitext.Params{clitext.ParamSource: source}))
 	}
+	if report.Dropped > 0 {
+		fmt.Fprintf(&body, "\n%s", translator.Text(clitext.DiscoverDropped, clitext.Params{clitext.ParamCount: report.Dropped}))
+	}
 	return body.String()
 }
 
@@ -83,7 +89,7 @@ func fingerprintText(translator *clitext.Translator, fingerprint discovery.Finge
 }
 
 func addCommand(candidate discovery.Candidate) (string, bool) {
-	name := addHintPlaceholder
+	name := addHintName
 	if candidate.Route != discovery.RouteLAN {
 		if !isHostToken(candidate.Name) {
 			return "", false
@@ -95,26 +101,44 @@ func addCommand(candidate discovery.Candidate) (string, bool) {
 		if !isHostToken(candidate.Address) {
 			return "", false
 		}
-		target = "<user>@" + candidate.Address
+		target = addHintUser + "@" + candidate.Address
 	} else if !isHostToken(target) {
 		return "", false
 	}
-	return fmt.Sprintf("herrscher host add %s --ssh %s --workspace <path>", name, target), true
+	return fmt.Sprintf("herrscher host add %s --ssh %s --workspace %s", name, target, addHintWorkspace), true
 }
 
 func isHostToken(text string) bool {
-	if text == "" {
-		return false
-	}
-	for index, char := range text {
-		if index == 0 && !isASCIIAlphaNumeric(char) && char != '[' {
+	if before, bracketed, found := strings.Cut(text, "["); found {
+		user, hasAt := strings.CutSuffix(before, "@")
+		if before != "" && (!hasAt || !isPlainHostName(user)) {
 			return false
 		}
+		return isBracketedIPv6("[" + bracketed)
+	}
+	return isPlainHostName(text)
+}
+
+func isPlainHostName(text string) bool {
+	if text == "" || !isASCIIAlphaNumeric(rune(text[0])) {
+		return false
+	}
+	for _, char := range text {
 		if !isASCIIAlphaNumeric(char) && !strings.ContainsRune(hostTokenSymbols, char) {
 			return false
 		}
 	}
 	return true
+}
+
+func isBracketedIPv6(text string) bool {
+	literal, opened := strings.CutPrefix(text, "[")
+	literal, closed := strings.CutSuffix(literal, "]")
+	if !opened || !closed {
+		return false
+	}
+	address, err := netip.ParseAddr(literal)
+	return err == nil && address.Is6() && address.Zone() == ""
 }
 
 func isASCIIAlphaNumeric(char rune) bool {

@@ -180,9 +180,12 @@ authenticate, and the signed certificate is not handed to anyone yet.
     `zsh`, `dash`, `ksh`, `fish`, `eval`, `source`, `python`, `python3`, `perl`,
     `node`, `deno`, `bun`, `ruby`, `php`, `lua`, `tclsh`), and it holds a decoder
     or an encoding (`base64`, `base32`, `xxd`, `od`, `uudecode`, `zcat`, `gunzip`,
-    `openssl`, `rev`, `tr`, `printf` with a backslash, `echo -e`, `$'`). The
-    interpreter counts when it is the command word directly after a `|` or `|&`
-    (an opening `(`, a `$` or a backtick before it does not change that), or when it
+    `openssl`, `rev`, `tr`, `base64_decode`, `printf` with a backslash, `echo -e`,
+    `$'`). The interpreter counts when it is the command word after a `|` or `|&`,
+    once the wrappers `xargs`, `env`, `nice`, `nohup`, `timeout` (with its duration),
+    `stdbuf`, `command`, `exec`, `sudo`, `doas` and `busybox` are skipped together
+    with their options and their `VAR=value` assignments; an opening `(`, a `$` or a
+    backtick before it does not change that. It also counts when it
     takes inline code: a short option group holding `c` or `e` (`-c`, `-lc`, `-ec`,
     `-e`), `--eval` or `--eval=...`, `php -r`, a `-` followed by a `<<` or `<<<`
     heredoc, or a `<<`, `<<<` or `<(` directly after it. A `;`, `&`, `&&`, `||` or
@@ -191,9 +194,8 @@ authenticate, and the signed certificate is not handed to anyone yet.
   The check does not see a payload that spells none of those letters and passes
   through no decoder in the list above. That covers a script written to a file and
   run by a later command, even after a `;` or a `&&` (`echo ... | base64 -d > /tmp/x;
-  bash /tmp/x`), a stream fed to a wrapper such as `xargs sh` or `env sh` rather than
-  to the interpreter itself, a file downloaded and then run, and an encoding that is
-  not in the list. The real boundary is the user account: an agent's shell
+  bash /tmp/x`), a file downloaded and then run, and an encoding that is not in the
+  list. The real boundary is the user account: an agent's shell
   reaches the operator socket as `local`, and a process of the same uid can do
   what the daemon can.
 - **Certificates.** A client certificate is valid for thirty days and states that

@@ -2,6 +2,7 @@ package approval
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -50,7 +51,7 @@ func namesHerrscherByGlob(command string) bool {
 
 func tokenize(command string) []string {
 	spaced := strings.NewReplacer("<<", " << ", "<(", " <( ", "||", " || ", "&&", " && ", "|&", " | ", "|", " | ", "&", " & ", ";", " ; ", "\n", " ; ", "(", " ( ", ")", " ) ", "`", " ` ", `"`, " ", "'", " ").Replace(command)
-	return strings.Fields(strings.ToLower(spaced))
+	return strings.Fields(spaced)
 }
 
 func runsDecodedCode(command string) bool {
@@ -58,31 +59,82 @@ func runsDecodedCode(command string) bool {
 	return runsInterpreter(tokens) && hasDecoder(command, tokens)
 }
 
+var wrapperValueOptions = map[string][]string{
+	"xargs":   {"-d", "-E", "-I", "-L", "-n", "-P", "-s", "-a", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--arg-file"},
+	"env":     {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"},
+	"nice":    {"-n", "--adjustment"},
+	"timeout": {"-s", "-k", "--signal", "--kill-after"},
+	"stdbuf":  {"-i", "-o", "-e", "--input", "--output", "--error"},
+	"exec":    {"-a"},
+	"sudo":    {"-u", "-g", "-C", "-D", "-p", "-r", "-t", "-U", "-T"},
+	"doas":    {"-u", "-C"},
+	"command": nil,
+	"nohup":   nil,
+	"busybox": nil,
+}
+
 func runsInterpreter(tokens []string) bool {
-	pipedInto := false
 	for idx, token := range tokens {
-		switch token {
-		case "(", ")", "`", "$":
-			continue
-		case "|":
-			pipedInto = true
-			continue
-		case ";", "&", "&&", "||":
-			pipedInto = false
-			continue
-		}
-		if isInterpreter(token) && (pipedInto || takesInlineCode(tokens, idx)) {
+		if token == "|" && isInterpreter(tokenAt(tokens, pipedCommand(tokens, idx+1))) {
 			return true
 		}
-		pipedInto = false
+		if isInterpreter(token) && takesInlineCode(tokens, idx) {
+			return true
+		}
 	}
 	return false
 }
 
+func pipedCommand(tokens []string, idx int) int {
+	for idx < len(tokens) {
+		token := tokens[idx]
+		if token == "(" || token == ")" || token == "`" || token == "$" || isAssignment(token) {
+			idx++
+			continue
+		}
+		name := commandName(token)
+		valueOptions, isWrapper := wrapperValueOptions[name]
+		if !isWrapper {
+			return idx
+		}
+		idx = skipWrapperArguments(tokens, idx+1, valueOptions, name == "timeout")
+	}
+	return idx
+}
+
+func skipWrapperArguments(tokens []string, idx int, valueOptions []string, takesDuration bool) int {
+	for idx < len(tokens) && strings.HasPrefix(tokens[idx], "-") {
+		option := tokens[idx]
+		idx++
+		if slices.Contains(valueOptions, option) {
+			idx++
+		}
+	}
+	if takesDuration {
+		idx++
+	}
+	return idx
+}
+
+func isAssignment(token string) bool {
+	name, _, found := strings.Cut(token, "=")
+	if !found || name == "" {
+		return false
+	}
+	for idx, char := range name {
+		isLetter := char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char == '_'
+		isDigit := char >= '0' && char <= '9'
+		if !isLetter && (idx == 0 || !isDigit) {
+			return false
+		}
+	}
+	return true
+}
+
 func takesInlineCode(tokens []string, idx int) bool {
 	args := argumentsAfter(tokens, idx)
-	next := tokenAt(args, 0)
-	if path.Base(tokens[idx]) == "php" && next == "-r" {
+	next := strings.ToLower(tokenAt(args, 0))
+	if commandName(tokens[idx]) == "php" && next == "-r" {
 		return true
 	}
 	if isInlineCodeOption(next) {
@@ -119,8 +171,12 @@ func isInlineCodeOption(token string) bool {
 	return strings.Trim(letters, "abcdefghijklmnopqrstuvwxyz") == "" && strings.ContainsAny(letters, "ce")
 }
 
+func commandName(token string) string {
+	return strings.ToLower(path.Base(token))
+}
+
 func isInterpreter(token string) bool {
-	name := path.Base(token)
+	name := commandName(token)
 	switch name {
 	case "sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "source", "python", "python2", "python3",
 		"perl", "node", "deno", "bun", "ruby", "php", "lua", "tclsh":
@@ -132,7 +188,7 @@ func isInterpreter(token string) bool {
 
 func isDecoder(name string) bool {
 	switch name {
-	case "base64", "base32", "xxd", "od", "uudecode", "zcat", "gunzip", "openssl", "rev", "tr":
+	case "base64", "base64_decode", "base32", "xxd", "od", "uudecode", "zcat", "gunzip", "openssl", "rev", "tr":
 		return true
 	}
 	return false
@@ -140,14 +196,14 @@ func isDecoder(name string) bool {
 
 func hasDecoder(command string, tokens []string) bool {
 	for idx, token := range tokens {
-		name := path.Base(token)
+		name := commandName(token)
 		if isDecoder(name) {
 			return true
 		}
 		if name == "printf" && strings.Contains(command, `\`) {
 			return true
 		}
-		if name == "echo" && idx+1 < len(tokens) && tokens[idx+1] == "-e" {
+		if name == "echo" && idx+1 < len(tokens) && strings.ToLower(tokens[idx+1]) == "-e" {
 			return true
 		}
 	}

@@ -59,18 +59,28 @@ func runsDecodedCode(command string) bool {
 	return runsInterpreter(tokens) && hasDecoder(command, tokens)
 }
 
-var wrapperValueOptions = map[string][]string{
-	"xargs":   {"-d", "-E", "-I", "-L", "-n", "-P", "-s", "-a", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--arg-file"},
-	"env":     {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"},
-	"nice":    {"-n", "--adjustment"},
-	"timeout": {"-s", "-k", "--signal", "--kill-after"},
-	"stdbuf":  {"-i", "-o", "-e", "--input", "--output", "--error"},
-	"exec":    {"-a"},
-	"sudo":    {"-u", "-g", "-C", "-D", "-p", "-r", "-t", "-U", "-T"},
-	"doas":    {"-u", "-C"},
-	"command": nil,
-	"nohup":   nil,
-	"busybox": nil,
+func wrapperValueOptions(name string) ([]string, bool) {
+	switch name {
+	case "xargs":
+		return []string{"-d", "-E", "-I", "-L", "-n", "-P", "-s", "-a", "--delimiter", "--max-args", "--max-procs", "--max-lines", "--max-chars", "--arg-file"}, true
+	case "env":
+		return []string{"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}, true
+	case "nice":
+		return []string{"-n", "--adjustment"}, true
+	case "timeout":
+		return []string{"-s", "-k", "--signal", "--kill-after"}, true
+	case "stdbuf":
+		return []string{"-i", "-o", "-e", "--input", "--output", "--error"}, true
+	case "exec":
+		return []string{"-a"}, true
+	case "sudo":
+		return []string{"-u", "-g", "-C", "-D", "-p", "-r", "-t", "-U", "-T"}, true
+	case "doas":
+		return []string{"-u", "-C"}, true
+	case "command", "nohup", "busybox":
+		return nil, true
+	}
+	return nil, false
 }
 
 func runsInterpreter(tokens []string) bool {
@@ -93,7 +103,7 @@ func pipedCommand(tokens []string, idx int) int {
 			continue
 		}
 		name := commandName(token)
-		valueOptions, isWrapper := wrapperValueOptions[name]
+		valueOptions, isWrapper := wrapperValueOptions(name)
 		if !isWrapper {
 			return idx
 		}
@@ -203,7 +213,7 @@ func hasDecoder(command string, tokens []string) bool {
 		if name == "printf" && strings.Contains(command, `\`) {
 			return true
 		}
-		if name == "echo" && idx+1 < len(tokens) && strings.ToLower(tokens[idx+1]) == "-e" {
+		if name == "echo" && idx+1 < len(tokens) && strings.EqualFold(tokens[idx+1], "-e") {
 			return true
 		}
 	}

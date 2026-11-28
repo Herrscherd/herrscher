@@ -68,11 +68,13 @@ type prRefusal struct {
 	retry  obs.Backoff
 }
 
-func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, seed func(session, task string) bool) *prWatcher {
+func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, notices *sessionNotices, reviews *reviewLoop) *prWatcher {
+	prs := newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit, notices)
+	prs.reviews = reviews
 	return &prWatcher{
-		prs:      newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit),
+		prs:      prs,
 		store:    store,
-		reviews:  newReviewLoop(messages, lang, store, seed),
+		reviews:  reviews,
 		clock:    prwatch.SystemClock(),
 		limit:    &prwatch.Limit{},
 		policy:   prWatchPolicy(),
@@ -364,7 +366,7 @@ func (w *prWatcher) saveMember(ctx context.Context, name string, number int, pul
 	}
 	defer release()
 	record := state.NewPullRequestRecord(number, pull)
-	if err := w.store.RefreshPullRequest(name, record); err != nil {
+	if err := w.prs.recordPullRequest(name, record); err != nil {
 		slog.Warn("session pull request state not saved", "session", name, "err", err)
 		return err
 	}

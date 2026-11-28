@@ -198,6 +198,46 @@ pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in
 output or errors.
 
+When the pull request of a session is merged or closed, the host announces it once
+in the session, and the announcement is kept in the state file so a restart does not
+repeat it. It names the command that closes the session:
+`herrscher session end --name <session>`. The host never closes a session or deletes
+a branch on its own: the operator, or a steward session, runs that command, and an
+agent session cannot.
+
+`herrscher session end --name <session>` closes the session, removes its worktree
+through the same path as `session close`, and deletes its branches. It refuses, before
+it changes anything, when the pull request is still open, when the session has no
+pull request, when its worktree is on a detached HEAD, when the worktree has
+uncommitted changes, and when some commits are not on any remote branch. The remote
+branch is deleted only when the pull request was merged, and only if it still exists
+on the remote (GitHub often deletes it already). The local branch is deleted with
+`git branch -d`, so git keeps it when it is not merged, and the command says so, except in the
+squash case described below.
+
+A pull request merged by squash is not an ancestor of the default branch, so `git branch -d`
+refuses its local branch. When it is merged and HEAD is still the head the pull request was
+merged from, the unpushed check does not refuse, and the local branch is removed only when
+the forge confirms that it still holds that head: `git ls-remote origin refs/pull/<number>/head`
+must return exactly HEAD. The removal then runs `git update-ref -d` with HEAD as the expected
+value, so git refuses it if the branch moved after the check. Uncommitted changes still refuse.
+
+When the forge ref differs from HEAD, is absent, or cannot be read, the local branch is not
+forced: `git branch -d` is tried instead. If that fails too, the local branch is kept and the
+command says so, with the reason that its state could not be verified safely.
+The same happens when the branch moved between the check and the removal. The host never
+rolls back silently.
+
+Before any local removal, forced or not, the command reads `git worktree list --porcelain`. When
+a worktree still has the branch checked out, nothing is removed, even in the squash case, since
+`git update-ref -d` does not refuse a checked out branch, unlike `git branch -d`. The command
+keeps the branch and names the path of the worktree that holds it.
+
+When the session is closed but the remote branch cannot be deleted (for instance when the
+network fails), `session end` still reports the session as closed, says that the remote branch
+could not be deleted, and prints the command to run by hand: `git push origin --delete <branch>`.
+The command exits without an error, since the session itself was closed.
+
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one
 opened from the command line. Before it commits or pushes anything, the panel checks
@@ -344,6 +384,71 @@ connected to.
   cloned anonymously. The herrscher token never goes to GitLab, and a GitLab
   entry is never cloned from `github.com`, even when a GitHub repository has the
   same path.
+
+## Open sessions from issues
+
+herrscher can open a session for an issue of a connected repository. The
+trigger is off until you list a repository under `issueTriggers` in
+`config.json`, keyed by `host/namespace/name`:
+
+```json
+{
+  "issueTriggers": {
+    "github.com/Herrscherd/herrscher": {
+      "labels": ["herrscher"],
+      "mentions": ["akayashuu"],
+      "period": "10m",
+      "agent": "builder"
+    }
+  }
+}
+```
+
+- `labels` opens a session for each issue that carries one of the labels.
+- `mentions` opens a session for each issue that mentions one of the accounts.
+- `period` is how often the repository is read. It defaults to `10m` and must be
+  at least `1m`.
+- `agent` is the agent the sessions run as. It is optional.
+
+A trigger needs at least one label or one mention. The settings are checked when
+herrscher loads the configuration, and an invalid one stops the start.
+
+The rules that apply to every trigger:
+
+- Only issues whose author is an owner, a member or a collaborator of the
+  repository open a session. Pull requests never do.
+- An issue opens at most one session, even after a restart or when two reads
+  meet. If the session could not be created, the issue is released and the next
+  read tries again. A session that is created but gets no task is not retried.
+- The session name is built from the repository and the issue number:
+  `issue-<namespace>-<repository>-<number>`. Every character of the namespace and
+  repository that is not an ASCII letter, a digit or `_` becomes `-`. If the name
+  would be longer than 64 characters, the text before the number is cut (and its
+  trailing dashes removed) so that the whole name is exactly 64 characters or
+  fewer. The number is always kept. When a session with the name already exists,
+  the issue is skipped and a warning is logged, and no second session is opened.
+- Herrscher remembers the 200 most recently taken issues of each repository. When
+  an older issue is forgotten and updated again, it opens a session again only if
+  its session has been removed. While the session exists, the issue stays linked
+  to it and opens nothing.
+- The session starts with the issue number, its title, its URL and its body,
+  cleaned for the terminal. The trigger posts no comment on the issue.
+- The first read of a repository starts from the moment herrscher first reads
+  it. Issues updated before that moment open no session.
+- Issues are read oldest update first. Each issue handled moves the start of the
+  next read to its update time, so a read that stops early resumes where it left
+  off.
+- A repository is read at most once per `period`. One read opens at most three
+  sessions, and it reads at most 2000 issues.
+- A read that fails does not move the start of the next read. It is retried on
+  the next scheduler tick, one minute later, for as long as the forge keeps
+  failing. The failure is logged as a warning.
+- A session that cannot be created for a lasting reason, such as an unknown
+  agent, is retried on every read, and it blocks the issues that follow it in
+  its repository: the read stops at the failing issue, so the issues after it and
+  the other filters of that repository are not read until the creation succeeds.
+  Herrscher does not skip the issue on its own. Fix the cause, for example the
+  agent name, and the next read carries on.
 
 ## Troubleshooting
 

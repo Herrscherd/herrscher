@@ -1,0 +1,246 @@
+package host
+
+import (
+	"context"
+	"strconv"
+	"strings"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
+	"github.com/Herrscherd/herrscher/core/internal/state"
+)
+
+const (
+	verbEnd   = "end"
+	verbClose = "close"
+)
+
+var (
+	errSessionEndNoPR     = sessionPRError{clitext.SessionEndNoPR}
+	errSessionEndOpen     = sessionPRError{clitext.SessionEndOpen}
+	errSessionEndDetached = sessionPRError{clitext.SessionEndDetached}
+	errSessionEndDirty    = sessionPRError{clitext.SessionEndDirty}
+	errSessionEndUnpushed = sessionPRError{clitext.SessionEndUnpushed}
+)
+
+type sessionEndTarget struct {
+	language   i18n.Language
+	record     state.PullRequestRecord
+	branch     string
+	head       string
+	common     string
+	env        []string
+	headMerged bool
+}
+
+func (p sessionPRs) endVerb(reg *cli.Registry) contracts.Cmd {
+	closeSession := func(ctx context.Context, name string) error {
+		_, err := reg.Run(ctx, []string{nsSession, verbClose}, contracts.Input{Args: map[string]string{paramName: name}})
+		return err
+	}
+	return contracts.New(nsSession, verbEnd).
+		Help(clitext.CmdHelpSessionEnd).
+		Param(paramName, clitext.CmdParamSessionEndName, true).
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			return p.end(ctx, input.Get(paramName), closeSession)
+		})
+}
+
+func (p sessionPRs) end(ctx context.Context, name string, closeSession func(context.Context, string) error) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
+	target, err := p.endTarget(ctx, name)
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	if err := closeSession(ctx, name); err != nil {
+		return contracts.Result{}, err
+	}
+	return p.endOutcome(ctx, name, target)
+}
+
+func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarget, error) {
+	sess, err := p.session(name)
+	if err != nil {
+		return sessionEndTarget{}, err
+	}
+	language := namedSessionLanguage(p.store, name, p.lang())
+	if refusal := p.remoteRefusal(language, name, sess); refusal != nil {
+		return sessionEndTarget{}, refusal
+	}
+	record := sess.PullRequestRecord()
+	if record.Number == 0 {
+		return sessionEndTarget{}, p.messages.Failure(language, errSessionEndNoPR, errSessionEndNoPR.key, clitext.Params{clitext.ParamName: escapeLine(name)})
+	}
+	if !record.Ended() {
+		return sessionEndTarget{}, p.messages.Failure(language, errSessionEndOpen, errSessionEndOpen.key, clitext.Params{clitext.ParamName: escapeLine(name), clitext.ParamNumber: record.Number})
+	}
+	dir, err := p.workDir(language, name, sess)
+	if err != nil {
+		return sessionEndTarget{}, err
+	}
+	branch, err := p.git(ctx, dir, nil, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil || branch == "" {
+		return sessionEndTarget{}, p.messages.Failure(language, errSessionEndDetached, errSessionEndDetached.key, clitext.Params{clitext.ParamName: escapeLine(name)})
+	}
+	repo, err := prOriginRepo(ctx, dir)
+	if err != nil {
+		return sessionEndTarget{}, p.failure(language, err)
+	}
+	head, err := p.git(ctx, dir, nil, "rev-parse", "HEAD")
+	if err != nil {
+		return sessionEndTarget{}, p.failure(language, err)
+	}
+	headMerged := mergedAtHead(record, head)
+	if refusal := p.refuseUnsaved(ctx, language, name, branch, dir, headMerged); refusal != nil {
+		return sessionEndTarget{}, refusal
+	}
+	common, err := p.git(ctx, dir, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return sessionEndTarget{}, p.failure(language, err)
+	}
+	env, err := forge.GitEnvironment(ctx, p.credentials, repo.Host())
+	if err != nil {
+		return sessionEndTarget{}, p.failure(language, err)
+	}
+	return sessionEndTarget{language: language, record: record, branch: branch, head: head, common: common, env: env, headMerged: headMerged}, nil
+}
+
+func mergedAtHead(record state.PullRequestRecord, head string) bool {
+	return record.State == contracts.PullRequestMerged && head == record.HeadSHA
+}
+
+func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, name, branch, dir string, headOnForge bool) error {
+	status, err := p.git(ctx, dir, nil, "status", "--porcelain")
+	if err != nil {
+		return p.failure(language, err)
+	}
+	if status != "" {
+		return p.messages.Failure(language, errSessionEndDirty, errSessionEndDirty.key, clitext.Params{clitext.ParamName: escapeLine(name)})
+	}
+	if headOnForge {
+		return nil
+	}
+	unpushed, err := p.git(ctx, dir, nil, "rev-list", "--count", "HEAD", "--not", "--remotes")
+	if err != nil {
+		return p.failure(language, err)
+	}
+	if unpushed != "0" {
+		return p.messages.Failure(language, errSessionEndUnpushed, errSessionEndUnpushed.key, clitext.Params{clitext.ParamBranch: escapeLine(branch)})
+	}
+	return nil
+}
+
+func (p sessionPRs) endOutcome(ctx context.Context, name string, target sessionEndTarget) (contracts.Result, error) {
+	closed, err := p.messages.Text(target.language, clitext.SessionEnded, clitext.Params{clitext.ParamName: escapeLine(name)})
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	var remoteKey clitext.Key = clitext.SessionEndRemoteKept
+	remoteParams := branchParams(target)
+	if target.record.State == contracts.PullRequestMerged {
+		remoteKey, remoteParams = p.remoteOutcome(ctx, target)
+	}
+	remote, err := p.messages.Text(target.language, remoteKey, remoteParams)
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	localKey, localParams := p.deleteLocalBranch(ctx, target)
+	local, err := p.messages.Text(target.language, localKey, localParams)
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	return cli.Data(strings.Join([]string{closed, remote, local}, "\n"), nil)
+}
+
+func (p sessionPRs) remoteOutcome(ctx context.Context, target sessionEndTarget) (clitext.Key, clitext.Params) {
+	if err := p.deleteRemoteBranch(ctx, target); err != nil {
+		return clitext.SessionEndRemoteFailed, clitext.Params{clitext.ParamBranch: escapeLine(target.branch), clitext.ParamErr: escapeLine(err.Error())}
+	}
+	return clitext.SessionEndRemoteDeleted, branchParams(target)
+}
+
+func branchParams(target sessionEndTarget) clitext.Params {
+	return clitext.Params{clitext.ParamBranch: escapeLine(target.branch)}
+}
+
+func (p sessionPRs) deleteLocalBranch(ctx context.Context, target sessionEndTarget) (clitext.Key, clitext.Params) {
+	path, checkedOut, err := p.checkedOutPath(ctx, target)
+	if err != nil {
+		return clitext.SessionEndLocalUnverified, branchParams(target)
+	}
+	if checkedOut {
+		return clitext.SessionEndLocalCheckedOut, clitext.Params{clitext.ParamBranch: escapeLine(target.branch), clitext.ParamPath: escapeLine(path)}
+	}
+	if target.headMerged && p.forgeHoldsHead(ctx, target) {
+		return p.forceDeleteLocalBranch(ctx, target), branchParams(target)
+	}
+	if _, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "branch", "-d", target.branch); err != nil {
+		if target.headMerged {
+			return clitext.SessionEndLocalUnverified, branchParams(target)
+		}
+		return clitext.SessionEndLocalKept, branchParams(target)
+	}
+	return clitext.SessionEndLocalDeleted, branchParams(target)
+}
+
+func (p sessionPRs) checkedOutPath(ctx context.Context, target sessionEndTarget) (string, bool, error) {
+	listed, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", false, err
+	}
+	path, found := worktreeOf(listed, "refs/heads/"+target.branch)
+	return path, found, nil
+}
+
+func worktreeOf(porcelain, ref string) (string, bool) {
+	path := ""
+	for _, line := range strings.Split(porcelain, "\n") {
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			path = rest
+			continue
+		}
+		if line == "branch "+ref {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+func (p sessionPRs) forceDeleteLocalBranch(ctx context.Context, target sessionEndTarget) clitext.Key {
+	ref := "refs/heads/" + target.branch
+	if _, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "update-ref", "-d", ref, target.head); err != nil {
+		return clitext.SessionEndLocalUnverified
+	}
+	return clitext.SessionEndLocalDeleted
+}
+
+func (p sessionPRs) forgeHoldsHead(ctx context.Context, target sessionEndTarget) bool {
+	ref := pullRequestHeadRef(target.record.Number)
+	listed, err := p.git(ctx, target.common, target.env, "--git-dir="+target.common, "ls-remote", originRemote, ref)
+	if err != nil {
+		return false
+	}
+	fields := strings.Fields(listed)
+	return len(fields) == 2 && fields[0] == target.head && fields[1] == ref
+}
+
+func pullRequestHeadRef(number int) string {
+	return "refs/pull/" + strconv.Itoa(number) + "/head"
+}
+
+func (p sessionPRs) deleteRemoteBranch(ctx context.Context, target sessionEndTarget) error {
+	listed, err := p.git(ctx, target.common, target.env, "--git-dir="+target.common, "ls-remote", "--heads", originRemote, "refs/heads/"+target.branch)
+	if err != nil {
+		return err
+	}
+	if listed == "" {
+		return nil
+	}
+	_, err = p.git(ctx, target.common, target.env, "--git-dir="+target.common, "push", "--quiet", originRemote, "--delete", target.branch)
+	return err
+}

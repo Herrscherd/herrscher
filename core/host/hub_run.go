@@ -196,6 +196,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
+	sched, err := newIssueScheduler(messages, options, cfg.IssueTriggers, store, runningHub, sessions, clock, tick)
+	if err != nil {
+		return err
+	}
 	sockets, err := serveHubSockets(ctx, options.Runtime, instID, runningHub)
 	if err != nil {
 		return err
@@ -206,10 +210,9 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.Seed)
+	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.notices, sessions.reviewLoopFor(options.languageSource(), store))
 	prWatchStopped := make(chan struct{})
 	go func() {
 		defer close(prWatchStopped)
@@ -226,9 +229,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
 
-	if instID != "" {
-		log.Info("instance resolved", "instance", instID)
-	}
+	logResolvedInstance(log, instID)
 	logCompiledPlugins(log)
 	startHubProbes(ctx, messages, gws, options, store, monitor, instID)
 
@@ -237,4 +238,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	<-prWatchStopped
 	<-resumesStopped
 	return stopErr
+}
+
+func logResolvedInstance(log *slog.Logger, instID string) {
+	if instID != "" {
+		log.Info("instance resolved", "instance", instID)
+	}
 }

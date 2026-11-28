@@ -94,7 +94,7 @@ func replyTestState(t *testing.T) *state.State {
 func replyRegistry(t *testing.T, st *state.State, fake *fakePRForge, loop *reviewLoop) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, prForgeOpener(fake), nil, loop); err != nil {
+	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, prForgeOpener(fake), nil, nil, loop); err != nil {
 		t.Fatal(err)
 	}
 	return reg

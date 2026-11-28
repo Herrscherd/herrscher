@@ -63,7 +63,7 @@ func prStateWith(t *testing.T, sess state.Session) *state.State {
 func prRegistryWithCredentials(t *testing.T, st *state.State, opener forgeOpener, credentials contracts.ForgeCredentials) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, credentials, nil); err != nil {
+	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, credentials, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	return reg

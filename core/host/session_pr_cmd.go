@@ -34,7 +34,6 @@ const (
 	paramBody      = "body"
 	paramBase      = "base"
 	paramDraft     = "draft"
-	resetUnknown   = "unknown time"
 )
 
 const sessionPRForgeLimit = time.Minute
@@ -66,6 +65,8 @@ type sessionPRs struct {
 	refreshes   *refreshLocks
 	forgeLimit  time.Duration
 	reviews     *reviewLoop
+	notices     *sessionNotices
+	git         gitRunner
 }
 
 type prTarget struct {
@@ -109,18 +110,18 @@ type prCommentView struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, reviews *reviewLoop) error {
-	prs := newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit)
+func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, notices *sessionNotices, reviews *reviewLoop) error {
+	prs := newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit, notices)
 	prs.reviews = reviews
 	return prs.addTo(reg)
 }
 
-func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration) sessionPRs {
-	return sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks(), forgeLimit: forgeLimit}
+func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration, notices *sessionNotices) sessionPRs {
+	return sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks(), forgeLimit: forgeLimit, notices: notices, git: prGit}
 }
 
 func (p sessionPRs) addTo(reg *cli.Registry) error {
-	return addVerbs(reg, append(p.issueVerbs(), p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb(), p.replyVerb())...)
+	return addVerbs(reg, append(p.issueVerbs(), p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb(), p.replyVerb(), p.endVerb(reg))...)
 }
 
 func (p sessionPRs) openVerb() contracts.Cmd {
@@ -550,13 +551,6 @@ func threadView(thread contracts.ReviewThread) prThreadView {
 		view.Comments = append(view.Comments, prCommentView{Author: comment.Author.Login, Body: comment.Body, CreatedAt: comment.CreatedAt})
 	}
 	return view
-}
-
-func resetText(reset time.Time) string {
-	if reset.IsZero() {
-		return resetUnknown
-	}
-	return reset.UTC().Format(time.RFC3339)
 }
 
 func escapeLine(text string) string {

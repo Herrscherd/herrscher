@@ -649,6 +649,10 @@ GitHub check, the commit, the push and the pull request share one budget of 4 mi
 15 seconds, the GitHub check included. If herrscher quits while they run, the wait
 ends too.
 
+When the pull request of a session is merged or closed, the session shows a notice
+once, which names `herrscher session end --name <session>`. Nothing closes on its
+own: the command is run by hand.
+
 ## Getting text back out
 
 The window runs on the alternate screen with the mouse captured. That is what

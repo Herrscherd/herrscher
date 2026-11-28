@@ -55,7 +55,7 @@ func issueTriggerTask(messages *hostMessages, lang languageSource) func(contract
 		return messages.text(lang(), "serve.issue_task", map[string]any{
 			"Number": issue.Ref.Number(),
 			"Title":  brackets.Replace(escapeLine(issue.Title)),
-			"URL":    escapeLine(issue.URL),
+			"URL":    brackets.Replace(escapeLine(issue.URL)),
 			"Body":   brackets.Replace(escapeLines(issue.Body)),
 		})
 	}

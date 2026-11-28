@@ -202,7 +202,8 @@ When the pull request of a session is merged or closed, the host announces it on
 in the session, and the announcement is kept in the state file so a restart does not
 repeat it. It names the command that closes the session:
 `herrscher session end --name <session>`. The host never closes a session or deletes
-a branch on its own: the human runs that command.
+a branch on its own: the operator, or a steward session, runs that command, and an
+agent session cannot.
 
 `herrscher session end --name <session>` closes the session, removes its worktree
 through the same path as `session close`, and deletes its branches. It refuses, before
@@ -212,6 +213,11 @@ uncommitted changes, and when some commits are not on any remote branch. The rem
 branch is deleted only when the pull request was merged, and only if it still exists
 on the remote (GitHub often deletes it already). The local branch is deleted with
 `git branch -d`, so git keeps it when it is not merged, and the command says so.
+
+A pull request merged by squash keeps its commits on the forge only under the head
+it was merged from. When it is merged and HEAD is still that head, the unpushed
+check does not refuse, and the local branch is deleted with `git branch -D`, since
+git never sees its commits in the default branch. Uncommitted changes still refuse.
 
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one

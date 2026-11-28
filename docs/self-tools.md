@@ -171,6 +171,10 @@ pull request with `session pr open`: what it writes there is public on the
 forge, under the account `herrscher connect` connected. A forge plugin too old
 to write issues makes `open` and `comment` say so and name `herrscher update`.
 
+`session end` is not an agent verb: it closes the session and deletes its branches,
+so the agent role refuses it, as it refuses `session close`. The operator and a
+steward session run it.
+
 ## Where it is declared
 
 Each time a local session with a worktree starts, a restart and a fork

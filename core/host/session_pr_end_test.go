@@ -267,3 +267,61 @@ func TestSessionEndKeepsTheRemoteBranchOfAClosedPullRequest(t *testing.T) {
 		t.Fatalf("end output %q does not report the kept local branch", out)
 	}
 }
+
+func TestPRDoesNotClaimAnEndWithoutAPublisher(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st := endState(t, path, t.TempDir())
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
+		t.Fatal(err)
+	}
+	merged := state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestMerged}
+	if err := endPRs(st, &sessionNotices{}).recordPullRequest("alpha", merged); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := state.LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec noticeRecorder
+	notices := &sessionNotices{}
+	notices.bind(rec.publish)
+	if err := endPRs(reloaded, notices).recordPullRequest("alpha", merged); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.events) != 1 {
+		t.Fatalf("announcements once a publisher is linked = %d, want 1: the end was claimed while nothing was published", len(rec.events))
+	}
+}
+
+func TestSessionEndAcceptsASquashMergedPullRequest(t *testing.T) {
+	dir := prFixtureRepo(t)
+	st := endState(t, filepath.Join(t.TempDir(), "state.json"), dir)
+	head, err := endGit(t, dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestMerged, HeadSHA: head}); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t.Context(), t, dir, "checkout", "-q", "master")
+	gitIn(t.Context(), t, dir, "merge", "-q", "--squash", "feat")
+	gitIn(t.Context(), t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "squash")
+	gitIn(t.Context(), t, dir, "checkout", "-q", "feat")
+	gitIn(t.Context(), t, dir, "push", "-q", originRemote, "--delete", "feat")
+	gitIn(t.Context(), t, dir, "update-ref", "-d", "refs/remotes/origin/feat")
+
+	closer := func(ctx context.Context, _ string) error {
+		gitIn(ctx, t, dir, "checkout", "-q", "master")
+		return nil
+	}
+	if _, err := endPRs(st, nil).end(t.Context(), "alpha", closer); err != nil {
+		t.Fatalf("a squash-merged session was refused: %v", err)
+	}
+	if localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat still exists after a squash-merged end")
+	}
+	if remoteHasBranch(t, dir, "feat") {
+		t.Fatal("remote branch feat still exists after a squash-merged end")
+	}
+}

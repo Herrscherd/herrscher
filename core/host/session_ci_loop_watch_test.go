@@ -65,6 +65,10 @@ func TestOneObservationRunsPerPullRequest(t *testing.T) {
 			t.Fatal(err)
 		}
 		synctest.Wait()
+		if !group.saveMu.TryLock() {
+			t.Fatal("the save lock is held while the forge is observed")
+		}
+		group.saveMu.Unlock()
 		if err := save(ctx, h.pull("2", contracts.ChecksFailed)); err != nil {
 			t.Fatal(err)
 		}

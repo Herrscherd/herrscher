@@ -104,7 +104,7 @@ func (a Agent) SelectMCP(role string) (MCPSelection, error) {
 func (a Agent) readMCPProfiles() (map[string][]string, error) {
 	raw, err := os.ReadFile(filepath.Join(a.Home, mcpProfilesFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string][]string{}, nil
+		return make(map[string][]string), nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", mcpProfilesFile, err)

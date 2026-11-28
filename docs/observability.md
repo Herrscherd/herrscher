@@ -150,6 +150,77 @@ daemon cannot be reached. An unreachable daemon is reported on stderr with the
 socket it was looked for, so a stopped daemon reads as a finding rather than a
 silent failure.
 
+## Condensed tool output, through rtk
+
+Long Bash output fills an agent's context fast. herrscher can route the Bash calls
+of an agent through [rtk](https://github.com/rtk-ai/rtk), which condenses the
+output before the model reads it. The behaviour below was measured with rtk 1.0.1.
+
+The switch is off by default and is set per agent: writing `on` into the agent's
+`rtk` file in its home directory turns it on, and any other content, or no file,
+keeps it off. Sessions started without an agent stay off and never rewrite a
+command.
+
+When the switch is on, the approval hook rewrites a Bash command to its rtk form
+only if all of these hold:
+
+- rtk is on the PATH;
+- the command is one simple command with no shell syntax: no `;`, `&`, `|`, backtick,
+  `$`, redirection, parenthesis, quote, glob, `~`, backslash or newline;
+- its program and subcommand are on the read-only list below, and none of its
+  arguments is a refused flag;
+- the command is not already run by one of the user's own Claude hooks (a hook whose
+  command is `rtk hook` or `rtk-rewrite`, in `~/.claude/settings.json` or in the
+  project's `.claude/settings.json` or `.claude/settings.local.json`);
+- rtk answers within 2 seconds with at most 4096 bytes, and its answer is exactly
+  `rtk ` followed by the command as written.
+
+The read-only list is explicit, because rtk 1.0.1 also rewrites some commands that
+write: `git branch -d` and `tree -o <file>` both get the rtk prefix. Only these
+commands can be rewritten:
+
+| Program | Forms allowed | Refused flags |
+|---|---|---|
+| `ls`, `cat`, `head`, `tail`, `wc`, `grep` | any | none |
+| `rg` | any | `--pre` and `--pre-*` |
+| `tree` | any | `-o` and `-R`, also inside a cluster such as `-aR` |
+| `find` | any | `-delete`, `-exec*`, `-ok*`, `-fprint*`, `-fls` |
+| `git status`, `git log`, `git diff`, `git show` | any | `--output*` |
+| `git branch` | listing only: `-a`, `-r`, `-v`, `-vv`, `-l`, `--all`, `--remotes`, `--verbose`, `--list`, `--show-current` | every other flag, and any name |
+| `gh pr view`, `gh pr list`, `gh pr diff`, `gh pr checks`, `gh issue view`, `gh issue list`, `gh run view`, `gh run list` | any | `--web`, `-w`, `--watch` |
+
+Every other command, including `curl`, `wget`, package managers, and any write, runs
+as written. rtk 1.0.1 also rewrites `cat f` to `rtk read f` and `head -3 f` to
+`rtk read f --head-lines 3`: those are not a plain prefix of the command, so they
+run as written too.
+
+The rewrite never changes what is approved. The approval rules and the daemon decide
+on the command as the agent wrote it, before any rewrite, and a command that is not
+allowed is never offered to rtk. Only an allowed command gets its rewritten form,
+carried in `updatedInput` of an allow decision.
+
+The exit code of `rtk rewrite` is read as follows. `3` means rewritten, both with no
+Claude rule and under an `ask` rule. `2` means a Claude `deny` rule matches the
+command, and `1` means no rewrite. For `1` and `2` the original command runs. In both
+cases herrscher's approval stays the decision herrscher makes, Claude's own rules are
+unchanged, and the exit code is logged at debug level.
+
+`herrscher health` shows a line for rtk, in one of three states: the version when
+rtk is on the PATH, a note that your own Claude hook already runs rtk when that
+hook is installed, or a note that rtk is not on the PATH, in which case agent Bash
+output is not condensed. The line is off in the last state and ok otherwise. The
+health line and the rewrite read the same settings files, through the same function.
+
+Condensing drops lines, so rtk keeps the complete output. A condensed output ends
+with a marker of the form `[+N hidden: rtk recall <hash>]`. `rtk recall <hash>`
+prints the missed part, and `rtk recall <hash> --full` prints all of it. rtk stores
+the raw output in `$XDG_DATA_HOME/rtk/recall.db` (by default
+`~/.local/share/rtk/recall.db`). How long rtk keeps it is rtk's policy, and it is not
+measured here.
+
+herrscher carries no condenser of its own. The rewrite is the only path: when rtk
+is absent or the switch is off, Bash output reaches the agent unchanged.
+
 ## Usage, from the ledger
 
 `herrscher usage` asks the running daemon for the figures it recorded in the usage
@@ -409,14 +480,15 @@ the permissions of the operator. Run it only on agents whose `mcp.json` you trus
 
 ### Lint exclusions
 
-The MCP weight code adds three path exclusions to `.golangci.yml`, and each one stays for
-the reason in this table. No other exclusion in the file is described here.
+The file `.golangci.yml` carries four path exclusions, and each one stays for the reason in
+this table. No other exclusion in the file is described here.
 
 | Path | Linter | Reason |
 |---|---|---|
 | `core/internal/mcpweight/rpc.go` | gosec G204 | `start` runs the server command that the agent's `mcp.json` declares, with its arguments after `{{WORKTREE}}` substitution. No shell is involved, and the operator trusts that file, as `--deep` says. |
 | `core/internal/mcpweight/config.go` | gosec G304 | `ReadServers` reads the `mcp.json` at the path the agent home defines. |
 | `core/internal/mcpweight/fake_test.go` | revive deep-exit | `TestFakeServer` and `serveFake` end the test binary's process, so that it acts as a server that exits, fails or stops answering. The file builds only into test binaries. |
+| `core/internal/rtk/rtk.go` | gosec G204, G304 | `Rewrite` runs the rtk binary that `exec.LookPath` finds on the PATH, with the command as a separate argument and no shell. `Probe` and the settings readers open the Claude settings files at the fixed paths the agent and the user define (`~/.claude/settings.json` and the project's `.claude/` files). |
 
 ## Also
 

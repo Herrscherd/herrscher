@@ -6357,6 +6357,21 @@
     "other": "réponse postée dans un fil de revue de la pull request #{{.Number}}"
   },
   {
+    "id": "cli.health.facts.rtk",
+    "description": "Faits de la sonde rtk quand rtk est installé",
+    "other": "rtk {{.Version}} : les agents peuvent faire condenser leur sortie Bash par rtk, désactivé par défaut et par agent"
+  },
+  {
+    "id": "cli.health.facts.rtk_user_hook",
+    "description": "Faits de la sonde rtk quand le hook Claude de l'opérateur lance déjà rtk",
+    "other": "rtk {{.Version}} : déjà lancé par votre hook Claude, herrscher ne réécrit donc pas une commande deux fois"
+  },
+  {
+    "id": "cli.health.facts.rtk_absent",
+    "description": "Faits de la sonde rtk quand rtk n'est pas sur le PATH",
+    "other": "absent du PATH : la sortie Bash des agents n'est pas condensée"
+  },
+  {
     "id": "cli.health.facts.self_tools",
     "description": "Facts of the self tools health check",
     "other": "{{.Mode}} · {{.Count}} outils · {{.Size}} octets de schémas par tour"

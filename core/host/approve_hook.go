@@ -84,6 +84,10 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 
 // RunPermissionHook answers one tool-call payload from the daemon and fails closed on every error.
 func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, out, errOut io.Writer, target func() string, answerWait time.Duration, ask hookAsker) error {
+	return runPermissionHook(ctx, owner, stdin, out, errOut, target, answerWait, ask, nil)
+}
+
+func runPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, out, errOut io.Writer, target func() string, answerWait time.Duration, ask hookAsker, rewrite commandRewriter) error {
 	messages := owner.owner
 	lang := language.Client(slog.Default(), "")
 	var payload hookInput
@@ -100,14 +104,14 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
 		note := hookText(messages, lang, hookOtherEvent, map[string]any{expectedParam: hookEvent, eventParam: payload.HookEventName})
 		logWriteFailure(fmt.Fprintln(errOut, note))
-		return writeHookDecision(messages, out, errOut, lang, "allow", "")
+		return writeHookDecision(messages, out, errOut, lang, decisionAllow, "", nil)
 	case payload.ToolName == "":
 		return refuseHook(messages, out, errOut, lang, hookNamesNoTool, nil)
 	}
 
 	payload.ToolName = approval.CanonicalTool(payload.ToolName)
 	if socket := strings.TrimSpace(os.Getenv(approvalsock.EnvApprovalSocket)); socket != "" {
-		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, answerWait, payload)
+		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, answerWait, payload, rewrite)
 	}
 
 	session := strings.TrimSpace(os.Getenv(SessionVar))
@@ -143,10 +147,10 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	if err := json.Unmarshal([]byte(answer), &verdict); err != nil || !isDecision(verdict.Decision) {
 		return refuseHook(messages, out, errOut, lang, hookAnswerUnreadable, nil)
 	}
-	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason)
+	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason, decisionInput(ctx, rewrite, payload, verdict.Decision))
 }
 
-func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut io.Writer, lang i18n.Language, socket string, answerWait time.Duration, payload hookInput) error {
+func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut io.Writer, lang i18n.Language, socket string, answerWait time.Duration, payload hookInput, rewrite commandRewriter) error {
 	req := contracts.ApprovalRequest{
 		ID:      newApprovalID(),
 		Tool:    payload.ToolName,
@@ -170,19 +174,19 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 		if answer.Reason == "" {
 			return refuseHookWithText(messages, out, errOut, lang, messages.text(lang, approvalDenialUnexplainedKey, nil))
 		}
-		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason)
+		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason, nil)
 	}
-	return writeHookDecision(messages, out, errOut, lang, "allow", answer.Reason)
+	return writeHookDecision(messages, out, errOut, lang, decisionAllow, answer.Reason, decisionInput(ctx, rewrite, payload, decisionAllow))
 }
 
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.
-func RunApprovalHook(ctx context.Context, layout RuntimeLayout, owner *Messages, stdin io.Reader, out, errOut io.Writer) error {
+func RunApprovalHook(ctx context.Context, layout RuntimeLayout, owner *Messages, stdin io.Reader, out, errOut io.Writer, options HookOptions) error {
 	target := sync.OnceValue(func() string {
 		return commandSocketTargetFrom(layout, func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
-	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, hookAnswerWait(), func(c context.Context, argv []string) (string, bool, error) {
+	return runPermissionHook(ctx, owner, stdin, out, errOut, target, hookAnswerWait(), func(c context.Context, argv []string) (string, bool, error) {
 		return dispatchToOperatorDaemon(c, owner.owner, layout, target(), argv)
-	})
+	}, rtkRewriter(options.RTK))
 }
 
 func approvalSocketFailureKey(err error) string {
@@ -211,22 +215,23 @@ func refuseHook(messages *hostMessages, out, errOut io.Writer, lang i18n.Languag
 
 func refuseHookWithText(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, reason string) error {
 	logWriteFailure(fmt.Fprintln(errOut, reason))
-	return writeHookDecision(messages, out, errOut, lang, "deny", reason)
+	return writeHookDecision(messages, out, errOut, lang, "deny", reason, nil)
 }
 
 func hookText(messages *hostMessages, lang i18n.Language, key string, params map[string]any) string {
 	return messages.text(lang, key, params)
 }
 
-func writeHookDecision(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, decision, reason string) error {
+func writeHookDecision(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, decision, reason string, updated map[string]any) error {
 	type specific struct {
-		HookEventName            string `json:"hookEventName"`
-		PermissionDecision       string `json:"permissionDecision"`
-		PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+		HookEventName            string         `json:"hookEventName"`
+		PermissionDecision       string         `json:"permissionDecision"`
+		PermissionDecisionReason string         `json:"permissionDecisionReason,omitempty"`
+		UpdatedInput             map[string]any `json:"updatedInput,omitempty"`
 	}
 	payload, err := json.Marshal(struct {
 		HookSpecificOutput specific `json:"hookSpecificOutput"`
-	}{specific{HookEventName: hookEvent, PermissionDecision: decision, PermissionDecisionReason: reason}})
+	}{specific{HookEventName: hookEvent, PermissionDecision: decision, PermissionDecisionReason: reason, UpdatedInput: updated}})
 	if err != nil {
 		return err
 	}
@@ -238,5 +243,5 @@ func writeHookDecision(messages *hostMessages, out, errOut io.Writer, lang i18n.
 }
 
 func isDecision(decision string) bool {
-	return decision == "allow" || decision == "deny"
+	return decision == decisionAllow || decision == "deny"
 }

@@ -45,6 +45,13 @@ type wireCheck struct {
 	ForgeReset time.Time             `json:"forge_reset,omitzero"`
 	Forge      *wireForge            `json:"forge,omitempty"`
 	SelfTools  *wireSelfTools        `json:"self_tools,omitempty"`
+	RTK        *wireRTK              `json:"rtk,omitempty"`
+}
+
+type wireRTK struct {
+	Present  bool   `json:"present"`
+	Version  string `json:"version,omitempty"`
+	UserHook bool   `json:"user_hook,omitempty"`
 }
 
 type wireSelfTools struct {
@@ -136,6 +143,9 @@ func encodeCheck(check Check) (wireCheck, error) {
 		Unknown:    check.Facts.CompactionUnknown,
 		ForgeReset: check.Facts.ForgeReset,
 	}
+	if rtk := check.Facts.RTK; rtk != nil {
+		wire.RTK = &wireRTK{Present: rtk.Present, Version: rtk.Version, UserHook: rtk.UserHook}
+	}
 	if self := check.Facts.SelfTools; self != nil {
 		wire.SelfTools = &wireSelfTools{Enabled: self.Enabled, Exposure: self.Exposure, Tools: self.Tools, SchemaBytes: self.SchemaBytes}
 	}
@@ -197,6 +207,9 @@ func decodeCheck(wire wireCheck) (Check, error) {
 			CompactionUnknown: wire.Unknown,
 			ForgeReset:        wire.ForgeReset,
 		},
+	}
+	if rtk := wire.RTK; rtk != nil {
+		check.Facts.RTK = &RTK{Present: rtk.Present, Version: rtk.Version, UserHook: rtk.UserHook}
 	}
 	if self := wire.SelfTools; self != nil {
 		check.Facts.SelfTools = &SelfTools{Enabled: self.Enabled, Exposure: self.Exposure, Tools: self.Tools, SchemaBytes: self.SchemaBytes}

@@ -173,6 +173,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	defer CloseKeyProxy(ctx, log, keys)
 	inputs := newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir, forgeCredentials(options.Forge))
 	inputs.selfTools = selfTools
+	inputs.rtk = measuredRTK
 	inputs.selfToolsAnswer = askSelfToolsServer
 	options.health.bind(inputs)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings), withForge(options.Forge))

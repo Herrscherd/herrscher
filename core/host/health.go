@@ -36,6 +36,7 @@ type healthInputs struct {
 	watching   bool
 	now        func() time.Time
 	selfTools  func() health.SelfTools
+	rtk        func() health.RTK
 
 	selfToolsAnswer func(ctx context.Context, socket string) (int, error)
 }
@@ -73,8 +74,24 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, memoryProbes(inputs.memory)...)
 	probes = append(probes, forgeProbes(inputs)...)
 	probes = append(probes, selfToolsProbes(inputs)...)
+	probes = append(probes, rtkProbes(inputs)...)
 	history := lastCompactions(inputs.ledger)
 	return append(probes, compactionProbes(inputs.compaction.names, history, compactionKey)...)
+}
+
+func rtkProbes(inputs healthInputs) []health.Probe {
+	if inputs.rtk == nil {
+		return nil
+	}
+	facts := inputs.rtk()
+	state := contracts.HealthOK
+	if !facts.Present {
+		state = contracts.HealthOff
+	}
+	return []health.Probe{{
+		Check: health.Check{Group: health.GroupCore, Name: health.ServiceRTK, Facts: health.Facts{RTK: &facts}},
+		Run:   reportRun(contracts.ProbeReport{State: state}),
+	}}
 }
 
 func selfToolsProbes(inputs healthInputs) []health.Probe {

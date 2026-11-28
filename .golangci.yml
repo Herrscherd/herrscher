@@ -202,6 +202,9 @@ linters:
       - path: ^core/internal/agent/(agent|store|selftools)\.go$
         linters: [gosec]
         text: "^G(304|204|703):"
+      - path: ^core/internal/rtk/rtk\.go$
+        linters: [gosec]
+        text: "^G(304|204):"
       - path: ^core/config/document\.go$
         linters: [gosec]
         text: "^G703:"

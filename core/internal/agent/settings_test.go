@@ -40,7 +40,7 @@ func TestInjectApprovalHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildSettings: %v", err)
 	}
-	out, err := injectApprovalHook(base, "/far/bin/herrscher")
+	out, err := injectApprovalHook(base, "/far/bin/herrscher", false)
 	if err != nil {
 		t.Fatalf("injectApprovalHook: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestInjectApprovalHook(t *testing.T) {
 
 func TestInjectApprovalHookKeepsHooksAlreadyThere(t *testing.T) {
 	base := []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"mine"}]}]}}`)
-	out, err := injectApprovalHook(base, "/bin/h")
+	out, err := injectApprovalHook(base, "/bin/h", false)
 	if err != nil {
 		t.Fatalf("injectApprovalHook: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestInjectApprovalHookKeepsHooksAlreadyThere(t *testing.T) {
 }
 
 func TestInjectApprovalHookRefusesBrokenSettings(t *testing.T) {
-	if _, err := injectApprovalHook([]byte("{not json"), "/bin/h"); err == nil {
+	if _, err := injectApprovalHook([]byte("{not json"), "/bin/h", false); err == nil {
 		t.Fatal("settings we cannot parse must be an error, not a silently rewritten file")
 	}
 }
@@ -85,12 +85,12 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 		`{"hooks":{"PreToolUse":{"matcher":"*"}}}`,
 		`{"hooks":{"PreToolUse":"mine"}}`,
 	} {
-		if _, err := injectApprovalHook([]byte(in), "/bin/h"); err == nil {
+		if _, err := injectApprovalHook([]byte(in), "/bin/h", false); err == nil {
 			t.Fatalf("injectApprovalHook(%s) rewrote settings it did not understand", in)
 		}
 	}
 	for _, in := range []string{`{"hooks":null}`, `{"hooks":{"PreToolUse":null}}`} {
-		out, err := injectApprovalHook([]byte(in), "/bin/h")
+		out, err := injectApprovalHook([]byte(in), "/bin/h", false)
 		if err != nil {
 			t.Fatalf("injectApprovalHook(%s): %v", in, err)
 		}
@@ -106,7 +106,7 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 
 func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
 	for _, in := range []string{"null", " null\n", "{}"} {
-		out, err := injectApprovalHook([]byte(in), "/bin/h")
+		out, err := injectApprovalHook([]byte(in), "/bin/h", false)
 		if err != nil {
 			t.Fatalf("injectApprovalHook(%q): %v", in, err)
 		}
@@ -125,7 +125,7 @@ func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
 		"/opt/my tools/herrscher": `'/opt/my tools/herrscher' approve hook`,
 		"/opt/it's/herrscher":     `'/opt/it'\''s/herrscher' approve hook`,
 	} {
-		out, err := injectApprovalHook([]byte("{}"), bin)
+		out, err := injectApprovalHook([]byte("{}"), bin, false)
 		if err != nil {
 			t.Fatalf("injectApprovalHook(%q): %v", bin, err)
 		}
@@ -270,7 +270,7 @@ func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
 
 func TestInjectApprovalHookKeepsForeignPreToolUseHooks(t *testing.T) {
 	prior := []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/usr/bin/lint"}]}]}}`)
-	out, err := injectApprovalHook(prior, "/bin/herrscher")
+	out, err := injectApprovalHook(prior, "/bin/herrscher", false)
 	if err != nil {
 		t.Fatalf("injectApprovalHook: %v", err)
 	}

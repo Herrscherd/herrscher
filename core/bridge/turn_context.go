@@ -44,19 +44,12 @@ func (c turnContext) String() string {
 func (c turnContext) sizes() []contracts.InjectedPart {
 	parts := make([]contracts.InjectedPart, 0, len(c.blocks))
 	for _, block := range c.blocks {
-		parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: sentTokens(block)})
+		parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: contextwindow.EstimateTokens(block.text)})
 	}
 	if c.selfToolsBytes > 0 {
 		parts = append(parts, contracts.InjectedPart{Part: contracts.ContextSelfTools, Tokens: contextwindow.EstimateBytes(c.selfToolsBytes)})
 	}
 	return parts
-}
-
-func sentTokens(block injectedBlock) int {
-	if block.omitted {
-		return 0
-	}
-	return contextwindow.EstimateTokens(block.text)
 }
 
 func skillsBlock(eng *skills.Engine) string {

@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/identity"
@@ -64,8 +65,13 @@ func deltaAffordances(ledger *contextLedger) affordances {
 
 func runTurnWith(t *testing.T, backend contracts.Backend, aff affordances, incarnation, memory string) {
 	t.Helper()
+	runTurnText(t, backend, aff, incarnation, memory, "hello")
+}
+
+func runTurnText(t *testing.T, backend contracts.Backend, aff affordances, incarnation, memory, text string) {
+	t.Helper()
 	sink := &recordSink{}
-	event := contracts.Event{T: eventwire.EventInput, Text: "hello", SessionIncarnation: incarnation}
+	event := contracts.Event{T: eventwire.EventInput, Text: text, SessionIncarnation: incarnation}
 	ctrl := &turnController{}
 	if err := runOneTurn(context.Background(), sink, backend, stubMemory{recall: memory}, event, ctrl, nil, aff, nil, i18n.Language(0)); err != nil {
 		t.Logf("turn ended with %v", err)
@@ -95,7 +101,7 @@ func TestContextDeltaOmitsAnUnchangedBlockAndResendsAChangedOne(t *testing.T) {
 	}
 }
 
-func TestContextDeltaSizesOnlyWhatWasSentThisTurn(t *testing.T) {
+func TestContextDeltaSizesAnOmittedBlockAtItsFullSize(t *testing.T) {
 	turn := composeTurnContext("MEM", nil, affordances{caps: "  session: list"})
 	turn.blocks[1].omitted = true
 	turn.blocks[3].omitted = true
@@ -103,8 +109,11 @@ func TestContextDeltaSizesOnlyWhatWasSentThisTurn(t *testing.T) {
 	if len(sizes) != len(turn.blocks) {
 		t.Fatalf("sizes = %+v, want every block reported so the parts stay measured", sizes)
 	}
-	if sizes[3].Tokens != 0 || sizes[0].Tokens == 0 {
-		t.Fatalf("sizes = %+v, want the omitted capabilities at 0 and the memory still sized", sizes)
+	if want := contextwindow.EstimateTokens(turn.blocks[3].text); sizes[3].Tokens != want || want == 0 {
+		t.Fatalf("sizes = %+v, want the omitted capabilities at its full %d tokens: the model still holds it", sizes, want)
+	}
+	if sizes[0].Tokens == 0 {
+		t.Fatalf("sizes = %+v, want the memory still sized", sizes)
 	}
 	if strings.Contains(turn.String(), "session: list") {
 		t.Fatalf("turn context = %q, want the omitted block left out of the prompt", turn.String())
@@ -277,4 +286,97 @@ func TestKeepsHistoryReadsOnlyTheResumeSignal(t *testing.T) {
 	if !keepsHistory(&ledgerBackend{}) {
 		t.Fatal("a backend exposing its resume token must be treated as keeping history")
 	}
+}
+
+func usageScript(sizes ...int) func(turn int, onEvent func(contracts.BackendEvent)) error {
+	return func(turn int, onEvent func(contracts.BackendEvent)) error {
+		if turn-1 < len(sizes) {
+			onEvent(contracts.BackendEvent{Kind: backendKindUsage, InTokens: sizes[turn-1]})
+		}
+		return nil
+	}
+}
+
+func TestContextDeltaResendsEverythingOnceTheInputNearsTheCompactionFloor(t *testing.T) {
+	backend := &ledgerBackend{token: "vendor-1", script: usageScript(compactFloorTokens)}
+	aff := deltaAffordances(newContextLedger(true))
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	contexts := backend.contexts()
+	if !strings.Contains(contexts[1], "session: list") {
+		t.Fatalf("turn after the input reached %d tokens = %q, want the full context resent before the vendor may compact", compactFloorTokens, contexts[1])
+	}
+}
+
+func TestContextDeltaKeepsTheDeltaWhileTheInputStaysBelowTheFloor(t *testing.T) {
+	backend := &ledgerBackend{token: "vendor-1", script: usageScript(compactFloorTokens-1000, compactFloorTokens-2000)}
+	aff := deltaAffordances(newContextLedger(true))
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	if contexts := backend.contexts(); contexts[2] != "" {
+		t.Fatalf("third turn context = %q, want the delta kept while no compaction can have happened", contexts[2])
+	}
+}
+
+func TestContextDeltaResendsEverythingWhenTheInputDropsSharply(t *testing.T) {
+	backend := &ledgerBackend{token: "vendor-1", script: usageScript(90_000, 30_000)}
+	aff := deltaAffordances(newContextLedger(true))
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	contexts := backend.contexts()
+	if !strings.Contains(contexts[2], "session: list") {
+		t.Fatalf("turn after a usage drop from 90000 to 30000 = %q, want the full context resent", contexts[2])
+	}
+}
+
+func TestContextDeltaIgnoresAGrowingOrSlightlyShrinkingInput(t *testing.T) {
+	backend := &ledgerBackend{token: "vendor-1", script: usageScript(60_000, 55_000)}
+	aff := deltaAffordances(newContextLedger(true))
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	if contexts := backend.contexts(); contexts[2] != "" {
+		t.Fatalf("third turn context = %q, want no reset for a shrink that is not sharp", contexts[2])
+	}
+}
+
+func TestContextDeltaResendsEverythingAfterASlashTurn(t *testing.T) {
+	backend := &ledgerBackend{token: "vendor-1"}
+	aff := deltaAffordances(newContextLedger(true))
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	runTurnText(t, backend, aff, "inc-1", "MEM ONE", "/compact")
+	runTurnWith(t, backend, aff, "inc-1", "MEM ONE")
+	contexts := backend.contexts()
+	if !strings.Contains(contexts[2], "session: list") || !strings.Contains(contexts[2], "MEM ONE") {
+		t.Fatalf("turn after a slash turn = %q, want the full context, since the slash turn carried none to the model", contexts[2])
+	}
+}
+
+func TestIsSlashTurnFollowsTheBackendRule(t *testing.T) {
+	for text, want := range map[string]bool{"/context": true, "  /compact now": true, "\n/x": true, "hello /x": false, "": false} {
+		if got := isSlashTurn(text); got != want {
+			t.Fatalf("isSlashTurn(%q) = %t, want %t", text, got, want)
+		}
+	}
+}
+
+func TestContextLedgerIsSafeAcrossGoroutines(_ *testing.T) {
+	ledger := newContextLedger(true)
+	var wg sync.WaitGroup
+	for i := range 4 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for range 200 {
+				turn := composeTurnContext("MEM", nil, affordances{})
+				_, plan := ledger.plan("inc-"+string(rune('a'+i)), true, "vendor", "hello", turn)
+				ledger.observeInput(1000)
+				ledger.commit(plan, "vendor")
+				ledger.reset()
+			}
+		}(i)
+	}
+	wg.Wait()
 }

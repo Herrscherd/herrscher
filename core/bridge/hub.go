@@ -328,7 +328,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
 	defer turn.discard()
-	injected, plan := aff.ledger.plan(event.SessionIncarnation, keepsHistory(backend), resumeToken(backend), composeTurnContext(memCtx, eng, aff))
+	injected, plan := aff.ledger.plan(event.SessionIncarnation, keepsHistory(backend), resumeToken(backend), event.Text, composeTurnContext(memCtx, eng, aff))
 	prompt := contracts.Prompt{Content: event.Text, Context: injected.String(), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string
@@ -345,6 +345,8 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 			aff.ledger.reset()
 		case contracts.BackendKindNotice:
 			aff.ledger.reset()
+		case backendKindUsage:
+			aff.ledger.observeInput(inputSize(event))
 		}
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
@@ -389,6 +391,10 @@ func (s turnEventSink) Emit(event contracts.Event) {
 	event.TurnID = s.identity.TurnID
 	event.Agent = s.identity.Agent
 	s.EventSink.Emit(event)
+}
+
+func inputSize(event contracts.BackendEvent) int {
+	return event.InTokens + event.CacheRead + event.CacheCreate
 }
 
 func resumeToken(backend contracts.Backend) string {

@@ -1024,5 +1024,15 @@
     "id": "selftools.failed_direct",
     "description": "Notice: a verb a session ran within its own rights failed",
     "other": "herrscher : la session a lancé {{.Subject}}, et l'appel a échoué : {{.Detail}}"
+  },
+  {
+    "id": "serve.issue_trigger",
+    "description": "Les réglages des déclencheurs d'issues du fichier de configuration sont illisibles, Detail donne la cause",
+    "other": "déclencheurs d'issues : {{.Detail}}"
+  },
+  {
+    "id": "serve.issue_task",
+    "description": "La tâche avec laquelle démarre une session ouverte depuis une issue étiquetée ou qui mentionne un compte : numéro, titre, URL et corps de l'issue, nettoyés pour le terminal",
+    "other": "Travaille sur l'issue #{{.Number}} de ce dépôt.\nTitre : {{.Title}}\nURL : {{.URL}}\n\n{{.Body}}"
   }
 ]

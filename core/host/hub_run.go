@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
+	"github.com/Herrscherd/herrscher/core/internal/issuetrigger"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -136,6 +137,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	if err != nil {
 		return wrapHost(messages, err, "serve.config", nil)
 	}
+	issueTargets, err := issueTriggerTargets(cfg.IssueTriggers)
+	if err != nil {
+		return wrapHost(messages, err, "serve.issue_trigger", map[string]any{detailParam: err.Error()})
+	}
 	telemetry, stopTelemetry := startTelemetryForConfig(ctx, messages, options.operatorLanguage(), log, cfg)
 	defer stopTelemetry()
 	sessions.telemetry = telemetry
@@ -206,7 +211,9 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick)
+	issuePoller := issuetrigger.NewPoller(store, GitHubOpener(options.Forge), runningHub, sessions.Seed,
+		issueTriggerTask(messages, options.languageSource()), clock)
+	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick).withIssues(issuePoller, issueTargets)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge))

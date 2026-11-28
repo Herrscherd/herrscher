@@ -69,6 +69,8 @@ type Config struct {
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
 
 	SelfTools *SelfToolsConfig `json:"selfTools,omitempty"`
+
+	IssueTriggers map[string]IssueTriggerConfig `json:"issueTriggers,omitempty"`
 }
 
 // SelfToolsConfig configures the herrscher MCP server a session gets. A nil Enabled means on; Expose is core or all.
@@ -202,6 +204,9 @@ func validateLoaded(cfg Config) error {
 	}
 	if err := validateOutboundFileMaxMB(cfg.OutboundFileMaxMB); err != nil {
 		return fmt.Errorf("outboundFileMaxMB: %w", err)
+	}
+	if err := validateIssueTriggers(cfg.IssueTriggers); err != nil {
+		return fmt.Errorf("issueTriggers: %w", err)
 	}
 	return nil
 }

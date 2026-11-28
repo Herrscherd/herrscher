@@ -241,6 +241,55 @@ connected to.
   entry is never cloned from `github.com`, even when a GitHub repository has the
   same path.
 
+## Open sessions from issues
+
+herrscher can open a session for an issue of a connected repository. The
+trigger is off until you list a repository under `issueTriggers` in
+`config.json`, keyed by `host/namespace/name`:
+
+```json
+{
+  "issueTriggers": {
+    "github.com/Herrscherd/herrscher": {
+      "labels": ["herrscher"],
+      "mentions": ["akayashuu"],
+      "period": "10m",
+      "agent": "builder"
+    }
+  }
+}
+```
+
+- `labels` opens a session for each issue that carries one of the labels.
+- `mentions` opens a session for each issue that mentions one of the accounts.
+- `period` is how often the repository is read. It defaults to `10m` and must be
+  at least `1m`.
+- `agent` is the agent the sessions run as. It is optional.
+
+A trigger needs at least one label or one mention. The settings are checked when
+herrscher loads the configuration, and an invalid one stops the start.
+
+The rules that apply to every trigger:
+
+- Only issues whose author is an owner, a member or a collaborator of the
+  repository open a session. Pull requests never do.
+- An issue opens at most one session, even after a restart or when two reads
+  meet. The session is named `issue-<namespace>-<repository>-<number>`. An issue
+  whose session already exists opens no other one, even after herrscher has
+  forgotten it as taken. If the session could not be created, the issue is
+  released and the next read tries again. A session that is created but gets no
+  task is not retried.
+- The session starts with the issue number, its title, its URL and its body,
+  cleaned for the terminal. The trigger posts no comment on the issue.
+- The first read of a repository starts from the moment herrscher first reads
+  it. Issues updated before that moment open no session.
+- Issues are read oldest update first. Each issue handled moves the start of the
+  next read to its update time, so a read that stops early resumes where it left
+  off.
+- A repository is read at most once per `period`. One read opens at most three
+  sessions, and it reads at most 2000 issues.
+- A read that fails is retried on the next scheduler tick, one minute later.
+
 ## Troubleshooting
 
 - **The App is not available for this host.** Either the host has no herrscher

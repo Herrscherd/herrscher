@@ -57,11 +57,11 @@ func TestMCPWeightRoleTextReportNamesKeptAndDroppedServers(t *testing.T) {
 
 func TestMCPWeightRoleWithoutProfileSaysEveryServerIsLoaded(t *testing.T) {
 	agents := singleAgent{name: "roled", home: profiledWeightHome(t, "")}
-	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "lead"})
+	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "worker"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "No profile for role lead: every server is loaded."
+	want := "No profile for role worker: every server is loaded."
 	if !strings.Contains(out, want) {
 		t.Fatalf("text report misses %q:\n%s", want, out)
 	}
@@ -109,5 +109,74 @@ func TestMCPWeightUnknownProfileServerIsLocalized(t *testing.T) {
 				t.Fatalf("localized error lost its cause: %v", err)
 			}
 		})
+	}
+}
+
+func TestMCPWeightRoleNotAssignableIsLocalized(t *testing.T) {
+	cases := []struct {
+		name string
+		lang i18n.Language
+		want string
+	}{
+		{name: "english", lang: i18n.English, want: `role not assignable: "lead" (accepted roles: worker)`},
+		{name: "french", lang: i18n.French, want: `rôle non assignable : « lead » (rôles acceptés : worker)`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			agents := singleAgent{name: "roled", home: profiledWeightHome(t, `{"worker": ["keep"]}`)}
+			_, err := mcpWeightReport(context.Background(), clitext.NewMessages(), fixedLanguage(tc.lang)(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "lead"})
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+			if _, ok := errors.AsType[*agent.UnassignableRoleError](err); !ok {
+				t.Fatalf("localized error lost its cause: %v", err)
+			}
+		})
+	}
+}
+
+func TestMCPWeightRoleKeyNotAssignableInProfileIsAnError(t *testing.T) {
+	agents := singleAgent{name: "roled", home: profiledWeightHome(t, `{"lead": ["keep"]}`)}
+	_, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "worker"})
+	if _, ok := errors.AsType[*agent.UnassignableRoleError](err); !ok {
+		t.Fatalf("error = %v, want the profile key refused", err)
+	}
+}
+
+func TestMCPWeightNullProfileEntryIsAnError(t *testing.T) {
+	agents := singleAgent{name: "roled", home: profiledWeightHome(t, `{"worker": null}`)}
+	_, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "worker"})
+	if _, ok := errors.AsType[*agent.NullProfileEntryError](err); !ok {
+		t.Fatalf("error = %v, want the null entry refused", err)
+	}
+}
+
+func TestMCPWeightRoleWithoutMCPJSONIsAsWithoutRole(t *testing.T) {
+	agents := singleAgent{name: "roled", home: t.TempDir()}
+	withRole, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "worker", asJSON: true})
+	if err != nil {
+		t.Fatalf("a role without mcp.json must not fail: %v", err)
+	}
+	withoutRole, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", asJSON: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withRole != withoutRole || withRole != "[]" {
+		t.Fatalf("role report %q, without role %q, want both to be the empty list", withRole, withoutRole)
+	}
+}
+
+func TestMCPWeightDeepWithRoleMeasuresOnlyTheKeptServers(t *testing.T) {
+	agents := singleAgent{name: "roled", home: profiledWeightHome(t, `{"worker": ["keep"]}`)}
+	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "roled", role: "worker", deep: true, asJSON: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var results []mcpweight.Result
+	if err := json.Unmarshal([]byte(out), &results); err != nil {
+		t.Fatalf("report is not JSON: %v\n%s", err, out)
+	}
+	if len(results) != 1 || results[0].Name != "keep" {
+		t.Fatalf("deep results = %+v, want only the kept server", results)
 	}
 }

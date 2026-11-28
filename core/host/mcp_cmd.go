@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/mcpweight"
 )
 
@@ -71,6 +73,10 @@ func weightServers(found agent.Agent, role string) ([]agent.MCPServer, agent.MCP
 		return servers, agent.MCPSelection{}, err
 	}
 	selection, err := found.SelectMCP(role)
+	if errors.Is(err, fs.ErrNotExist) {
+		servers, readErr := mcpweight.ReadServers(found.MCPConfigPath())
+		return servers, agent.MCPSelection{}, readErr
+	}
 	if err != nil {
 		return nil, agent.MCPSelection{}, err
 	}
@@ -79,15 +85,11 @@ func weightServers(found agent.Agent, role string) ([]agent.MCPServer, agent.MCP
 }
 
 func localizedMCPProfileError(cliMessages *clitext.Messages, lang i18n.Language, agentName string, err error) error {
-	profileErr, ok := errors.AsType[*agent.UnknownProfileServerError](err)
+	key, params, ok := manager.MCPProfileProblem(err, agentName)
 	if !ok {
 		return err
 	}
-	text, textErr := cliMessages.Text(i18n.Resolve(lang), clitext.HostErrMCPProfileServer, clitext.Params{
-		clitext.ParamAgent:  agentName,
-		clitext.ParamRole:   profileErr.Role,
-		clitext.ParamServer: profileErr.Server,
-	})
+	text, textErr := cliMessages.Text(i18n.Resolve(lang), key, params)
 	if textErr != nil {
 		return err
 	}

@@ -71,3 +71,17 @@ func TestCollectUpToCountsOnlyTheItemsItKeepsAcrossPages(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectUpToStopsAtMaxPagesWhenEveryItemIsRejected(t *testing.T) {
+	listing := &sizedListing{}
+	items, truncated, err := CollectUpTo(t.Context(), 10, func(int) bool { return false }, listing.fetch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 || !truncated {
+		t.Fatalf("got %d items, truncated %v, want an empty listing and truncated", len(items), truncated)
+	}
+	if len(listing.sizes) > MaxPages {
+		t.Fatalf("fetched %d pages, want at most %d", len(listing.sizes), MaxPages)
+	}
+}

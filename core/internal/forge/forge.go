@@ -181,12 +181,8 @@ func CollectPages[T any](ctx context.Context, fetch func(context.Context, contra
 	}
 }
 
-// CollectUpTo fetches the pages of a listing until it holds limit items that keep
-// accepts, or the listing ends, and reports whether items were left out. Items
-// that keep rejects are dropped before they count toward limit. Every page asks
-// for the same size, since a forge that pages by number shifts its pages when the
-// size changes, and the items past limit are cut here. It never fetches more
-// than MaxPages pages.
+// CollectUpTo fetches pages until limit items pass keep or the listing ends, and
+// reports whether items were left out. It reads at most MaxPages pages.
 func CollectUpTo[T any](ctx context.Context, limit int, keep func(T) bool, fetch func(context.Context, contracts.PageRequest) (contracts.Page[T], error)) ([]T, bool, error) {
 	var items []T
 	var cursor contracts.PageCursor

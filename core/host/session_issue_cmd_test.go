@@ -4,22 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 type fakeIssueForge struct {
 	contracts.Forge
 
-	queries []contracts.IssueQuery
-	pages   [][]contracts.Issue
-	issue   contracts.Issue
-	asked   []contracts.IssueRef
+	queries      []contracts.IssueQuery
+	pages        [][]contracts.Issue
+	issue        contracts.Issue
+	pullRequests []int
+	asked        []contracts.IssueRef
 }
 
 func (f *fakeIssueForge) Issues(_ context.Context, _ contracts.ForgeRepoRef, query contracts.IssueQuery, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
@@ -29,6 +32,9 @@ func (f *fakeIssueForge) Issues(_ context.Context, _ contracts.ForgeRepoRef, que
 
 func (f *fakeIssueForge) Issue(_ context.Context, ref contracts.IssueRef) (contracts.Issue, error) {
 	f.asked = append(f.asked, ref)
+	if slices.Contains(f.pullRequests, ref.Number()) {
+		return contracts.Issue{}, fmt.Errorf("issue %d of %s: the number names a pull request: %w", ref.Number(), ref.Repo(), contracts.ErrForgeNotFound)
+	}
 	if f.issue.Ref.Number() != ref.Number() {
 		return contracts.Issue{}, contracts.ErrForgeNotFound
 	}
@@ -127,13 +133,35 @@ func TestIssueLimitCountsOnlyIssuesAcrossPages(t *testing.T) {
 	}
 }
 
-func TestIssueShowRefusesAPullRequestNumberAsNotFound(t *testing.T) {
+func TestIssueShowNamesAPullRequestNumberAsNotFound(t *testing.T) {
 	st := prState(t, prFixtureRepo(t), "")
-	fake := &fakeIssueForge{issue: issueNumbered(t, 7, "seven")}
+	fake := &fakeIssueForge{issue: issueNumbered(t, 7, "seven"), pullRequests: []int{8}}
 	reg := prRegistry(t, st, prForgeOpener(fake))
 
-	if _, err := runIssue(t, reg, verbIssueShow, "--name", "alpha", "--number", "8"); !errors.Is(err, contracts.ErrForgeNotFound) {
+	_, err := runIssue(t, reg, verbIssueShow, "--name", "alpha", "--number", "8")
+	if !errors.Is(err, contracts.ErrForgeNotFound) {
 		t.Fatalf("show of a pull request number: %v, want the not-found refusal", err)
+	}
+	message := err.Error()
+	if !strings.Contains(message, "#8") || !strings.Contains(message, "pull request") || strings.Contains(message, "names a pull request") {
+		t.Fatalf("show message %q, want #8 named with the pull request hint and not the plugin text", message)
+	}
+}
+
+func TestIssueListSaysSoWhenTheLimitCutsAListOfPullRequests(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	pages := make([][]contracts.Issue, 0, forge.MaxPages+1)
+	for number := 1; number <= forge.MaxPages+1; number++ {
+		pages = append(pages, []contracts.Issue{pullRequestNumbered(t, number, "pr")})
+	}
+	reg := prRegistry(t, st, prForgeOpener(&fakeIssueForge{pages: pages}))
+
+	out, err := runIssue(t, reg, verbIssueList, "--name", "alpha")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if !strings.Contains(out, "--limit") {
+		t.Fatalf("list output %q, want the truncation line naming --limit, not the empty listing", out)
 	}
 }
 

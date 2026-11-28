@@ -219,6 +219,13 @@ it was merged from. When it is merged and HEAD is still that head, the unpushed
 check does not refuse, and the local branch is deleted with `git branch -D`, since
 git never sees its commits in the default branch. Uncommitted changes still refuse.
 
+The squash check compares HEAD with the head SHA the host read at its last refresh of the
+pull request. That SHA can be stale: when the branch was force-pushed after the last
+refresh, HEAD no longer matches it, and the squash case does not apply: the unpushed
+check runs as usual, and `git branch -d` keeps the local branch. GitHub keeps every commit of a pull request under
+`refs/pull/<number>/head`, even after the branch is force-pushed or deleted, so no commit
+the pull request merged is lost on the forge. The `-D` only removes the local branch.
+
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one
 opened from the command line. Before it commits or pushes anything, the panel checks

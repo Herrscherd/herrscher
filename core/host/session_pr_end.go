@@ -32,7 +32,7 @@ type sessionEndTarget struct {
 	branch   string
 	common   string
 	env      []string
-	squashed bool
+	headMerged bool
 }
 
 func (p sessionPRs) endVerb(reg *cli.Registry) contracts.Cmd {
@@ -93,8 +93,8 @@ func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarge
 	if err != nil {
 		return sessionEndTarget{}, p.failure(language, err)
 	}
-	squashed := mergedAtHead(record, head)
-	if refusal := p.refuseUnsaved(ctx, language, name, branch, dir, squashed); refusal != nil {
+	headMerged := mergedAtHead(record, head)
+	if refusal := p.refuseUnsaved(ctx, language, name, branch, dir, headMerged); refusal != nil {
 		return sessionEndTarget{}, refusal
 	}
 	common, err := prGit(ctx, dir, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -105,14 +105,14 @@ func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarge
 	if err != nil {
 		return sessionEndTarget{}, p.failure(language, err)
 	}
-	return sessionEndTarget{language: language, record: record, branch: branch, common: common, env: env, squashed: squashed}, nil
+	return sessionEndTarget{language: language, record: record, branch: branch, common: common, env: env, headMerged: headMerged}, nil
 }
 
 func mergedAtHead(record state.PullRequestRecord, head string) bool {
 	return record.State == contracts.PullRequestMerged && head == record.HeadSHA
 }
 
-func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, name, branch, dir string, saved bool) error {
+func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, name, branch, dir string, headOnForge bool) error {
 	status, err := prGit(ctx, dir, nil, "status", "--porcelain")
 	if err != nil {
 		return p.failure(language, err)
@@ -120,7 +120,7 @@ func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, n
 	if status != "" {
 		return p.messages.Failure(language, errSessionEndDirty, errSessionEndDirty.key, clitext.Params{clitext.ParamName: escapeLine(name)})
 	}
-	if saved {
+	if headOnForge {
 		return nil
 	}
 	unpushed, err := prGit(ctx, dir, nil, "rev-list", "--count", "HEAD", "--not", "--remotes")
@@ -152,7 +152,7 @@ func (p sessionPRs) endOutcome(ctx context.Context, name string, target sessionE
 	}
 	var localKey clitext.Key = clitext.SessionEndLocalDeleted
 	deleteFlag := "-d"
-	if target.squashed {
+	if target.headMerged {
 		deleteFlag = "-D"
 	}
 	if _, err = prGit(ctx, target.common, nil, "--git-dir="+target.common, "branch", deleteFlag, target.branch); err != nil {

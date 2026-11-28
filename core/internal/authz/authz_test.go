@@ -418,4 +418,20 @@ func TestSessionEndIsRefusedToAgentAndFollowsSessionClose(t *testing.T) {
 	if ok, why := Decide(req(SessionPrincipal("revue"), path...), RoleSteward); !ok {
 		t.Fatalf("steward refused session end: %s", why)
 	}
+	closePath := []string{"session", "close"}
+	for _, c := range []struct {
+		name      string
+		principal Principal
+		role      Role
+	}{
+		{"agent", SessionPrincipal("revue"), RoleAgent},
+		{"steward", SessionPrincipal("revue"), RoleSteward},
+		{"operator", Principal{ID: "chat:1"}, RoleOperator},
+	} {
+		closeOK, _ := Decide(req(c.principal, closePath...), c.role)
+		endOK, _ := Decide(req(c.principal, path...), c.role)
+		if endOK != closeOK {
+			t.Fatalf("%s: session end allowed=%v, session close allowed=%v", c.name, endOK, closeOK)
+		}
+	}
 }

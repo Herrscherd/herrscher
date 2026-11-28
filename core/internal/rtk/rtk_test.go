@@ -105,11 +105,18 @@ func TestRewriteAddsThePrefixToASimpleCommand(t *testing.T) {
 	}
 }
 
-func TestRewriteAcceptsDeferredApprovalExit(t *testing.T) {
+func TestRewriteAcceptsTheRewrittenExit(t *testing.T) {
 	path := fakeRTK(t, `printf 'rtk %s' "$2"; exit 3`)
-	got, ok := Rewrite(context.Background(), path, "cargo test")
-	if !ok || got != "rtk cargo test" {
-		t.Fatalf("Rewrite = %q, %v; want rtk cargo test, true", got, ok)
+	got, ok := Rewrite(context.Background(), path, "git log -1")
+	if !ok || got != "rtk git log -1" {
+		t.Fatalf("Rewrite = %q, %v; want rtk git log -1, true", got, ok)
+	}
+}
+
+func TestRewriteFallsBackWhenAClaudeDenyRuleMatches(t *testing.T) {
+	path := fakeRTK(t, `printf 'rtk %s' "$2"; exit 2`)
+	if got, ok := Rewrite(context.Background(), path, "git status"); ok {
+		t.Fatalf("a deny rule rewrote to %q, the command must run as written", got)
 	}
 }
 

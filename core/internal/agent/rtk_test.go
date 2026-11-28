@@ -22,11 +22,11 @@ func TestApprovalHandlerCarriesTheRTKFlagOnlyWhenOn(t *testing.T) {
 }
 
 func TestInjectApprovalHookWritesTheRTKFlagAndReplacesAnOlderHook(t *testing.T) {
-	first, err := injectApprovalHook([]byte("{}"), "/bin/h", false)
+	first, err := injectApprovalHook([]byte("{}"), "/bin/herrscher", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := injectApprovalHook(first, "/bin/h", true)
+	second, err := injectApprovalHook(first, "/bin/herrscher", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestInjectApprovalHookWritesTheRTKFlagAndReplacesAnOlderHook(t *testing.T) 
 	if !strings.Contains(string(second), "approve hook --rtk") {
 		t.Fatalf("the flagged hook is missing: %s", second)
 	}
-	third, err := injectApprovalHook(second, "/bin/h", false)
+	third, err := injectApprovalHook(second, "/bin/herrscher", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestInjectApprovalHookWritesTheRTKFlagAndReplacesAnOlderHook(t *testing.T) 
 }
 
 func TestIsApprovalHookMatchesTheFlaggedCommand(t *testing.T) {
-	entry := approvalGroup(approvalHandler("/bin/h", true))
+	entry := approvalGroup(approvalHandler("/bin/herrscher", true))
 	if !isApprovalHook(entry) {
 		t.Fatalf("the flagged approval group is not recognised as ours: %v", entry)
 	}

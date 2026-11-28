@@ -110,9 +110,8 @@ func runPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	}
 
 	payload.ToolName = approval.CanonicalTool(payload.ToolName)
-	updated := updatedInput(payload, rewriteCommand(ctx, rewrite, payload))
 	if socket := strings.TrimSpace(os.Getenv(approvalsock.EnvApprovalSocket)); socket != "" {
-		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, answerWait, payload, updated)
+		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, answerWait, payload, rewrite)
 	}
 
 	session := strings.TrimSpace(os.Getenv(SessionVar))
@@ -148,10 +147,10 @@ func runPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	if err := json.Unmarshal([]byte(answer), &verdict); err != nil || !isDecision(verdict.Decision) {
 		return refuseHook(messages, out, errOut, lang, hookAnswerUnreadable, nil)
 	}
-	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason, allowedInput(verdict.Decision, updated))
+	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason, decisionInput(ctx, rewrite, payload, verdict.Decision))
 }
 
-func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut io.Writer, lang i18n.Language, socket string, answerWait time.Duration, payload hookInput, updated map[string]any) error {
+func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut io.Writer, lang i18n.Language, socket string, answerWait time.Duration, payload hookInput, rewrite commandRewriter) error {
 	req := contracts.ApprovalRequest{
 		ID:      newApprovalID(),
 		Tool:    payload.ToolName,
@@ -177,7 +176,7 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 		}
 		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason, nil)
 	}
-	return writeHookDecision(messages, out, errOut, lang, decisionAllow, answer.Reason, updated)
+	return writeHookDecision(messages, out, errOut, lang, decisionAllow, answer.Reason, decisionInput(ctx, rewrite, payload, decisionAllow))
 }
 
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.

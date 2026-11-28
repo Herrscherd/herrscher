@@ -64,8 +64,15 @@ func homeSettingsPaths() []string {
 }
 
 func measuredRTK() health.RTK {
-	status := rtk.Probe(context.Background(), exec.LookPath, homeSettingsPaths()...)
+	status := rtk.Probe(context.Background(), exec.LookPath, claudeSettingsPaths()...)
 	return health.RTK{Present: status.Present, Version: status.Version, UserHook: status.UserHook}
+}
+
+func decisionInput(ctx context.Context, rewrite commandRewriter, payload hookInput, decision string) map[string]any {
+	if decision != decisionAllow {
+		return nil
+	}
+	return updatedInput(payload, rewriteCommand(ctx, rewrite, payload))
 }
 
 func rewriteCommand(ctx context.Context, rewrite commandRewriter, payload hookInput) string {
@@ -93,11 +100,4 @@ func updatedInput(payload hookInput, rewritten string) map[string]any {
 	}
 	input[inputCommand] = rewritten
 	return input
-}
-
-func allowedInput(decision string, updated map[string]any) map[string]any {
-	if decision != decisionAllow {
-		return nil
-	}
-	return updated
 }

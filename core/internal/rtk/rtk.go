@@ -1,13 +1,15 @@
 // Package rtk condenses the output of agent Bash calls through the rtk CLI: it
 // probes whether rtk is installed and whether the operator's own Claude hook
-// already rewrites commands through it, and it rewrites one command to its rtk
-// form only when that form is the command with a single prefix added.
+// already rewrites commands through it, and it rewrites one read-only command to
+// its rtk form only when that form is the command with a single prefix added.
 package rtk
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -20,13 +22,19 @@ const Binary = "rtk"
 const (
 	rewriteSubcommand = "rewrite"
 	versionFlag       = "--version"
-	exitAskDeferred   = 3
+	exitDenied        = 2
+	exitRewritten     = 3
 	versionWait       = 2 * time.Second
+	rewriteWait       = 2 * time.Second
+	rewriteGrace      = time.Second
+	maxRewriteOutput  = 4096
 	userHookMarker    = "rtk hook"
 	userRewriteMarker = "rtk-rewrite"
 	preToolUse        = "PreToolUse"
 	prefix            = Binary + " "
 )
+
+var errOutputTooLarge = errors.New("rtk rewrite output over the cap")
 
 // LookPath resolves a binary name to a path, as exec.LookPath does.
 type LookPath func(file string) (string, error)
@@ -106,20 +114,41 @@ func fileHasUserHook(path string) bool {
 	return false
 }
 
-// Rewrite returns the rtk form of command, which is the command with the rtk prefix added, and false whenever rtk would change the command any other way or cannot answer.
+// Rewrite returns the rtk form of a read-only command, which is the command with the rtk prefix added, and false whenever the command is not read-only, rtk would change it any other way, rtk does not answer within its bounds, or it declines.
 func Rewrite(ctx context.Context, binary, command string) (string, bool) {
-	if command == "" {
+	if !readOnly(command) {
 		return "", false
 	}
-	out, err := exec.CommandContext(ctx, binary, rewriteSubcommand, command).Output()
-	if !rewriteUsable(err) {
+	bounded, cancel := context.WithTimeout(ctx, rewriteWait)
+	defer cancel()
+	stdout := &cappedOutput{limit: maxRewriteOutput, stop: cancel}
+	cmd := exec.CommandContext(bounded, binary, rewriteSubcommand, command)
+	cmd.Stdout = stdout
+	cmd.WaitDelay = rewriteGrace
+	if !rewriteUsable(cmd.Run()) || stdout.overflowed {
 		return "", false
 	}
-	rewritten := strings.TrimSuffix(string(out), "\n")
+	rewritten := strings.TrimSuffix(stdout.buf.String(), "\n")
 	if rewritten != prefix+command {
 		return "", false
 	}
 	return rewritten, true
+}
+
+type cappedOutput struct {
+	buf        bytes.Buffer
+	limit      int
+	stop       context.CancelFunc
+	overflowed bool
+}
+
+func (c *cappedOutput) Write(chunk []byte) (int, error) {
+	if c.buf.Len()+len(chunk) > c.limit {
+		c.overflowed = true
+		c.stop()
+		return 0, errOutputTooLarge
+	}
+	return c.buf.Write(chunk)
 }
 
 func rewriteUsable(err error) bool {
@@ -127,5 +156,17 @@ func rewriteUsable(err error) bool {
 		return true
 	}
 	var exit *exec.ExitError
-	return errors.As(err, &exit) && exit.ExitCode() == exitAskDeferred
+	if !errors.As(err, &exit) {
+		slog.Debug("rtk rewrite did not run, the command runs as written", "err", err)
+		return false
+	}
+	switch code := exit.ExitCode(); code {
+	case exitRewritten:
+		return true
+	case exitDenied:
+		slog.Debug("rtk rewrite declined by a Claude deny rule, the command runs as written", "exit", code)
+	default:
+		slog.Debug("rtk rewrite declined, the command runs as written", "exit", code)
+	}
+	return false
 }

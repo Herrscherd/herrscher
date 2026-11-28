@@ -40,8 +40,12 @@ const (
 	keyHooks        = "hooks"
 	keyCommand      = "command"
 	preToolUse      = "PreToolUse"
-	approveHookVerb = " approve hook"
-	rtkHookFlag     = " --rtk"
+	herrscherName   = "herrscher"
+	approveWord     = "approve"
+	hookWord        = "hook"
+	rtkFlagWord     = "--rtk"
+	approveHookVerb = " " + approveWord + " " + hookWord
+	rtkHookFlag     = " " + rtkFlagWord
 )
 
 const (
@@ -118,7 +122,7 @@ func isApprovalHook(entry any) bool {
 		if !ok {
 			continue
 		}
-		if cmd, ok := hookMap[keyCommand].(string); ok && strings.Contains(cmd, approveHookVerb) {
+		if cmd, ok := hookMap[keyCommand].(string); ok && isApprovalCommand(cmd) {
 			return true
 		}
 	}

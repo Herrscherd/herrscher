@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -22,8 +23,8 @@ const (
 )
 
 var (
-	errReviewPositionBusy = errors.New("session review position kept changing")
-	errReviewNoSession    = errors.New("no such session for the review position")
+	errReviewPositionBusy = errors.New(string(clitext.SessionPRReplyNotRecorded))
+	errReviewNoSession    = errors.New(string(clitext.SessionPRReplyNotRecorded))
 )
 
 type sessionFinder interface {
@@ -65,11 +66,11 @@ func (r *reviewLoop) clock() time.Time {
 	return time.Now()
 }
 
-func (r *reviewLoop) expect(name string, number int, entry reviewloop.Pending) error {
+func (r *reviewLoop) expect(name string, number int, entry reviewloop.Pending) (reviewloop.Pending, error) {
 	for range reviewStoreAttempts {
 		sess, ok := r.store.FindSession(name)
 		if !ok {
-			return errReviewNoSession
+			return reviewloop.Pending{}, errReviewNoSession
 		}
 		stored := sess.ReviewPosition()
 		view := stored.ForRequest(number)
@@ -79,6 +80,32 @@ func (r *reviewLoop) expect(name string, number int, entry reviewloop.Pending) e
 			Marks:   view.Marks,
 			Own:     view.Own,
 			Pending: reviewloop.Expect(view.Pending, entry, entry.PostedAt),
+			Legacy:  view.Legacy,
+		}
+		claimed, err := r.store.CompareAndSetReviewPosition(name, stored, next)
+		if err != nil {
+			return reviewloop.Pending{}, err
+		}
+		if claimed {
+			return entry, nil
+		}
+	}
+	return reviewloop.Pending{}, errReviewPositionBusy
+}
+
+func (r *reviewLoop) forget(name string, number int, entry reviewloop.Pending) error {
+	for range reviewStoreAttempts {
+		sess, ok := r.store.FindSession(name)
+		if !ok {
+			return errReviewNoSession
+		}
+		stored := sess.ReviewPosition()
+		view := stored.ForRequest(number)
+		next := state.ReviewPosition{
+			Number:  number,
+			Marks:   view.Marks,
+			Own:     view.Own,
+			Pending: reviewloop.Forget(view.Pending, entry),
 			Legacy:  view.Legacy,
 		}
 		claimed, err := r.store.CompareAndSetReviewPosition(name, stored, next)
@@ -122,12 +149,52 @@ func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.
 			return
 		}
 		slog.Warn("session review message not delivered, no live session", "session", name)
-		if _, err := r.store.CompareAndSetReviewPosition(name, next, prior); err != nil {
-			slog.Error("session review position not returned", "session", name, "err", err)
-		}
+		r.restore(name, ref.Number(), batch, prior)
 		return
 	}
 	slog.Warn("session review position busy, observation skipped", "session", name)
+}
+
+func (r *reviewLoop) restore(name string, number int, batch reviewloop.Batch, prior state.ReviewPosition) {
+	for range reviewStoreAttempts {
+		sess, ok := r.store.FindSession(name)
+		if !ok {
+			return
+		}
+		stored := sess.ReviewPosition()
+		view := stored.ForRequest(number)
+		next := state.ReviewPosition{
+			Number:  number,
+			Marks:   restoredMarks(view.Marks, prior.Marks, batch.Items),
+			Own:     view.Own,
+			Pending: view.Pending,
+			Legacy:  view.Legacy,
+		}
+		if next.Equal(stored) {
+			return
+		}
+		claimed, err := r.store.CompareAndSetReviewPosition(name, stored, next)
+		if err != nil {
+			slog.Error("session review position not returned", "session", name, "err", err)
+			return
+		}
+		if claimed {
+			return
+		}
+	}
+	slog.Warn("session review rollback not recorded, the threads of the undelivered message stay marked", "session", name)
+}
+
+func restoredMarks(current, prior map[string]reviewloop.Mark, delivered []reviewloop.Item) map[string]reviewloop.Mark {
+	marks := maps.Clone(current)
+	for _, item := range delivered {
+		if mark, ok := prior[item.Thread]; ok {
+			marks[item.Thread] = mark
+			continue
+		}
+		delete(marks, item.Thread)
+	}
+	return marks
 }
 
 func (r *reviewLoop) plan(threads []contracts.ReviewThread, stored state.ReviewPosition, number int) (state.ReviewPosition, state.ReviewPosition, reviewloop.Batch) {

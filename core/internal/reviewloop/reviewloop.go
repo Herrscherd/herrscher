@@ -158,15 +158,16 @@ func Plan(threads []contracts.ReviewThread, marks map[string]Mark, own []Own, tr
 }
 
 // Initialise returns the marks of the threads of a state written with counts per thread: each
-// thread known to the counts is marked at its latest comment, so nothing it already held is
-// handed over again.
+// thread is marked at the last comment its count covers, so the comments after it are still
+// handed over. A thread whose count is zero is not marked.
 func Initialise(threads []contracts.ReviewThread, counted map[string]int) map[string]Mark {
 	marks := make(map[string]Mark, len(counted))
 	for _, thread := range threads {
-		if _, known := counted[thread.ID]; !known || len(thread.Comments) == 0 {
+		handed := min(counted[thread.ID], len(thread.Comments))
+		if handed == 0 {
 			continue
 		}
-		marks[thread.ID] = advance(Mark{}, false, thread.Comments)
+		marks[thread.ID] = advance(Mark{}, false, thread.Comments[:handed])
 	}
 	return marks
 }
@@ -198,6 +199,11 @@ func Expect(pending []Pending, entry Pending, now time.Time) []Pending {
 		}
 	}
 	return bound(append(kept, entry), MaxPendingReplies)
+}
+
+// Forget returns pending without the entry that equals entry.
+func Forget(pending []Pending, entry Pending) []Pending {
+	return slices.DeleteFunc(slices.Clone(pending), entry.Equal)
 }
 
 // IsOwn reports whether a comment of threadID is one the session posted.

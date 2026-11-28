@@ -39,6 +39,9 @@ type fakePRForge struct {
 	replySkew   time.Duration
 	hideReplies bool
 	withheld    []withheldReply
+	replyErr    error
+	connErr     error
+	noLogin     bool
 }
 
 type withheldReply struct {
@@ -47,6 +50,9 @@ type withheldReply struct {
 }
 
 func (f *fakePRForge) ReplyToThread(_ context.Context, thread contracts.ThreadRef, body string) error {
+	if f.replyErr != nil {
+		return f.replyErr
+	}
 	f.replies = append(f.replies, body)
 	comment := contracts.ReviewComment{
 		Author:    contracts.ForgeActor{Login: "herrscher", Association: contracts.AssociationMember},
@@ -79,6 +85,12 @@ func (f *fakePRForge) reveal() {
 }
 
 func (f *fakePRForge) Connection(context.Context) (contracts.ForgeConnection, error) {
+	if f.connErr != nil {
+		return contracts.ForgeConnection{}, f.connErr
+	}
+	if f.noLogin {
+		return contracts.ForgeConnection{}, nil
+	}
 	return contracts.ForgeConnection{Login: "herrscher"}, nil
 }
 

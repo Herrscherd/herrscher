@@ -281,6 +281,14 @@ at the next change or after a restart.
   for a comment, and the reply call returns none, so the login and the digest are
   what identifies it. The record is written before the reply is sent, so an
   observation running at the same time never misses it.
+- `session pr reply` refuses to publish when it cannot record that pending entry:
+  the state write fails, the position keeps changing after 5 attempts, the session
+  is no longer known, or the login of the posting account cannot be read or is
+  empty. The reply is then not sent, and the command returns a message saying so.
+  The agent can run the same command again with the same reply.
+- If the forge refuses the reply after the entry was recorded, the entry is
+  removed again, by a compare-and-set retried at most 5 times, so the failed
+  reply is not counted as the agent's own.
 - At each observation, a pending reply is matched with the first comment of the
   same thread that has the same digest, the same login and a creation time at
   least 2 minutes before the publication. That 2-minute margin absorbs the
@@ -296,9 +304,20 @@ at the next change or after a restart.
   shows up later, it is handed over as a human comment. A comment whose creation
   time is before the mark counts as seen, so a comment the forge timestamps earlier
   than the last one handed over is never handed over. If the state cannot record
-  the pending entry, the reply is still posted and may come back to the agent once.
   A concurrent write is retried at most 5 times; past that, the observation stops
   with a warning and the next one retries.
+- A rollback after a failed delivery is retried the same way. It restores the marks
+  of the threads of the undelivered message only, and keeps the own and pending
+  entries written in the meantime. If the 5 attempts are exhausted, a warning is
+  logged and the threads stay marked, so their comments wait for the next event
+  of the pull request instead of being sent at once.
+- The margin needs a clock in step with the forge. A host clock more than 2
+  minutes ahead of the forge makes the matching fail, so the agent's own reply
+  comes back to it as a human comment. Keep the clock of the host synchronised
+  with NTP.
+- A human comment with the same body, in the same thread, from the same account
+  and created in the same second as the agent's reply is taken for that reply and
+  is not handed over.
 
 ## Repositories to clone
 

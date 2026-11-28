@@ -5812,6 +5812,11 @@
     "other": "GitHub n'a pas répondu à temps : lancer session pr status pour voir si la pull request existe"
   },
   {
+    "id": "cli.session.pr.reply_not_recorded",
+    "description": "Error: the reply was refused before publication because the review loop could not track it, the agent may retry",
+    "other": "Réponse non publiée : la boucle de revue n'a pas pu la suivre, elle n'a donc pas été envoyée. Relancer session pr reply avec la même réponse"
+  },
+  {
     "id": "cli.session.pr.forge_missing",
     "description": "Error: the GitHub forge plugin is not built into this host",
     "other": "le plugin forge GitHub n'est pas intégré"

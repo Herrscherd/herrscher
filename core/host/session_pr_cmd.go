@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -51,7 +52,10 @@ var (
 	errPRNoDir          = sessionPRError{clitext.SessionPRNoDir}
 	errPRRemote         = sessionPRError{clitext.SessionPRRemote}
 	errPRNoOrigin       = sessionPRError{clitext.SessionPRNoOrigin}
+	errPRReplyRefused   = sessionPRError{clitext.SessionPRReplyNotRecorded}
 )
+
+var errReplyLoginUnknown = errors.New(string(clitext.SessionPRReplyNotRecorded))
 
 type sessionPRs struct {
 	messages    *clitext.Messages
@@ -177,28 +181,47 @@ func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts
 	if err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
-	p.expectReply(ctx, target, thread.ID(), body)
+	entry, err := p.expectReply(ctx, target, thread.ID(), body)
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
 	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
+		p.forgetReply(target, entry)
 		return contracts.Result{}, p.failure(target.language, err)
 	}
 	p.observeAfterReply(ctx, target)
 	return cli.Data(p.messages.Text(target.language, clitext.SessionPRReplied, clitext.Params{clitext.ParamNumber: target.ref.Number()}))
 }
 
-func (p sessionPRs) expectReply(ctx context.Context, target prTarget, threadID, body string) {
+func (p sessionPRs) expectReply(ctx context.Context, target prTarget, threadID, body string) (reviewloop.Pending, error) {
+	if p.reviews == nil {
+		return reviewloop.Pending{}, nil
+	}
+	connection, err := target.forge.Connection(ctx)
+	if err != nil {
+		return reviewloop.Pending{}, refusedReply(err)
+	}
+	if connection.Login == "" {
+		return reviewloop.Pending{}, refusedReply(errReplyLoginUnknown)
+	}
+	entry := reviewloop.Pending{Thread: threadID, Digest: reviewloop.Digest(body), Login: connection.Login}
+	recorded, err := p.reviews.expect(target.name, target.ref.Number(), entry)
+	if err != nil {
+		return reviewloop.Pending{}, refusedReply(err)
+	}
+	return recorded, nil
+}
+
+func refusedReply(cause error) error {
+	return fmt.Errorf("%w: %w", errPRReplyRefused, cause)
+}
+
+func (p sessionPRs) forgetReply(target prTarget, entry reviewloop.Pending) {
 	if p.reviews == nil {
 		return
 	}
-	login := ""
-	connection, err := target.forge.Connection(ctx)
-	if err != nil {
-		slog.Warn("session reply login not read, any account may match it", "session", target.name, "err", err)
-	} else {
-		login = connection.Login
-	}
-	entry := reviewloop.Pending{Thread: threadID, Digest: reviewloop.Digest(body), Login: login}
-	if err := p.reviews.expect(target.name, target.ref.Number(), entry); err != nil {
-		slog.Warn("session reply not recorded as pending, it may come back to the agent", "session", target.name, "err", err)
+	if err := p.reviews.forget(target.name, target.ref.Number(), entry); err != nil {
+		slog.Warn("session reply not removed from pending after the failed publication", "session", target.name, "err", err)
 	}
 }
 
@@ -459,6 +482,8 @@ func (p sessionPRs) failure(language i18n.Language, err error) error {
 	var limited *contracts.ForgeRateLimitedError
 	var origin prOriginError
 	switch {
+	case errors.Is(err, errPRReplyRefused):
+		return p.messages.Failure(language, err, errPRReplyRefused.key, nil)
 	case errors.Is(err, context.DeadlineExceeded):
 		return p.messages.Failure(language, err, clitext.SessionPRTimedOut, nil)
 	case errors.Is(err, contracts.ErrForgeNotConnected):

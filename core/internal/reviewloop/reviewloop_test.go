@@ -187,21 +187,31 @@ func TestPlanPassesOverTheCommentsOfTheSession(t *testing.T) {
 	}
 }
 
-func TestInitialiseMarksTheCountedThreadsAsSeen(t *testing.T) {
+func TestInitialiseMarksOnlyTheCountedCommentsAsSeen(t *testing.T) {
 	base := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
 	counted := contracts.ReviewThread{ID: "t1", Comments: []contracts.ReviewComment{
 		{Author: owner(), Body: "first", CreatedAt: base},
-		{Author: owner(), Body: "second", CreatedAt: base.Add(time.Second)},
+		{Author: member("bob"), Body: "second", CreatedAt: base.Add(time.Second)},
+	}}
+	untouched := contracts.ReviewThread{ID: "t3", Comments: []contracts.ReviewComment{
+		{Author: owner(), Body: "old", CreatedAt: base},
 	}}
 	uncounted := thread("t2", comment(owner(), "new"))
 
-	marks := Initialise([]contracts.ReviewThread{counted, uncounted}, map[string]int{"t1": 1})
+	marks := Initialise([]contracts.ReviewThread{counted, untouched, uncounted}, map[string]int{"t1": 1, "t3": 0})
 
-	if got := marks["t1"]; !got.At.Equal(base.Add(time.Second)) {
-		t.Fatalf("mark of t1 = %+v, want its latest comment", got)
+	if got := marks["t1"]; !got.At.Equal(base) {
+		t.Fatalf("mark of t1 = %+v, want its first comment, the one the count covers", got)
 	}
 	if _, known := marks["t2"]; known {
 		t.Fatalf("a thread the counts did not know was marked")
+	}
+	if _, known := marks["t3"]; known {
+		t.Fatalf("a thread with a zero count was marked")
+	}
+	batch := Plan([]contracts.ReviewThread{counted}, marks, nil, Trust{})
+	if len(batch.Items) != 1 || len(batch.Items[0].Comments) != 1 || batch.Items[0].Comments[0].Body != "second" {
+		t.Fatalf("items = %+v, want the comment the count did not cover delivered", batch.Items)
 	}
 }
 

@@ -37,6 +37,7 @@ const (
 	SessionPRUnauthorized      = "cli.session.pr.unauthorized"
 	SessionPRRateLimited       = "cli.session.pr.rate_limited"
 	SessionPRTimedOut          = "cli.session.pr.timed_out"
+	SessionPRReplyNotRecorded  = "cli.session.pr.reply_not_recorded"
 	SessionPRForgeMissing      = "cli.session.pr.forge_missing"
 	SessionPRPagesExceeded     = "cli.session.pr.pages_exceeded"
 	SessionPRFailed            = "cli.session.pr.failed"
@@ -118,6 +119,7 @@ func sessionPRKeys() map[Key][]string {
 		SessionPRUnauthorized:      nil,
 		SessionPRRateLimited:       {ParamReset},
 		SessionPRTimedOut:          nil,
+		SessionPRReplyNotRecorded:  nil,
 		SessionPRForgeMissing:      nil,
 		SessionPRPagesExceeded:     {ParamPages},
 		SessionPRFailed:            {ParamErr},

@@ -5812,6 +5812,11 @@
     "other": "GitHub did not answer in time: run session pr status to see whether the pull request exists"
   },
   {
+    "id": "cli.session.pr.reply_not_recorded",
+    "description": "Error: the reply was refused before publication because the review loop could not track it, the agent may retry",
+    "other": "Reply not published: the review loop could not track it, so it was not sent. Run session pr reply again with the same reply"
+  },
+  {
     "id": "cli.session.pr.forge_missing",
     "description": "Error: the GitHub forge plugin is not built into this host",
     "other": "the GitHub forge plugin is not built in"

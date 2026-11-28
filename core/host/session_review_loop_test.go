@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -30,15 +31,34 @@ func (r *seedRecorder) seed(_, task string) bool {
 type racingStore struct {
 	reviewStore
 	before func()
-	fired  bool
+	at     int
+	calls  int
 }
 
 func (r *racingStore) CompareAndSetReviewPosition(name string, prev, next state.ReviewPosition) (bool, error) {
-	if !r.fired {
-		r.fired = true
+	r.calls++
+	if r.calls == r.at {
 		r.before()
 	}
 	return r.reviewStore.CompareAndSetReviewPosition(name, prev, next)
+}
+
+type casStore struct {
+	reviewStore
+	claimed bool
+	err     error
+}
+
+func (s casStore) CompareAndSetReviewPosition(string, state.ReviewPosition, state.ReviewPosition) (bool, error) {
+	return s.claimed, s.err
+}
+
+type unknownStore struct {
+	reviewStore
+}
+
+func (unknownStore) FindSession(string) (state.Session, bool) {
+	return state.Session{}, false
 }
 
 var ownerActor = contracts.ForgeActor{Login: "alice", Association: contracts.AssociationOwner}
@@ -416,7 +436,7 @@ func TestReplyKeepsItsPendingEntryWhenAnObserverClaimsFirst(t *testing.T) {
 	loop, ref := reviewTestLoop(t, st, recorder.seed)
 	fake := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread()}}}
 	loop.observe(t.Context(), "alpha", fake, ref)
-	loop.store = &racingStore{reviewStore: st, before: func() { rivalPending(t, st, "alpha") }}
+	loop.store = &racingStore{reviewStore: st, before: func() { rivalPending(t, st, "alpha") }, at: 1}
 
 	postReply(t, replyRegistry(t, st, fake, loop), "done")
 
@@ -436,7 +456,7 @@ func TestObserverRetriesWhenAReplyClaimsFirst(t *testing.T) {
 	client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread()}}}
 	loop.observe(t.Context(), "main", client, ref)
 	client.threadPages[0][0].Comments = append(client.threadPages[0][0].Comments, at(memberActor("bob"), "also check", time.Now()))
-	loop.store = &racingStore{reviewStore: st, before: func() { rivalPending(t, st, "main") }}
+	loop.store = &racingStore{reviewStore: st, before: func() { rivalPending(t, st, "main") }, at: 1}
 
 	loop.observe(t.Context(), "main", client, ref)
 
@@ -479,4 +499,76 @@ func collaboratorThread(login string) contracts.ReviewThread {
 		Author: contracts.ForgeActor{Login: login, Association: contracts.AssociationCollaborator},
 		Body:   "please rename",
 	}}}
+}
+
+func TestRollbackOfAnUndeliveredMessageKeepsTheRivalWrite(t *testing.T) {
+	st := reviewTestState(t)
+	loop, ref := reviewTestLoop(t, st, (&seedRecorder{}).seed)
+	client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread()}}}
+	loop.store = &racingStore{reviewStore: st, before: func() { rivalPending(t, st, "main") }, at: 2}
+
+	loop.observe(t.Context(), "main", client, ref)
+
+	sess, _ := st.FindSession("main")
+	if _, marked := sess.ReviewPosition().Marks["t1"]; marked {
+		t.Fatalf("marks = %v, want the undelivered thread unmarked after the rollback", sess.ReviewPosition().Marks)
+	}
+	if !hasPending(sess, "t7") {
+		t.Fatalf("pending = %v, want the rival's entry kept by the rollback", sess.ReviewPending)
+	}
+}
+
+func TestReplyRefusedWhenItCannotBeTracked(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(fake *fakePRForge, loop *reviewLoop, st *state.State)
+	}{
+		{name: "connection read fails", setup: func(fake *fakePRForge, _ *reviewLoop, _ *state.State) {
+			fake.connErr = errors.New("forge offline")
+		}},
+		{name: "login unknown", setup: func(fake *fakePRForge, _ *reviewLoop, _ *state.State) {
+			fake.noLogin = true
+		}},
+		{name: "state write fails", setup: func(_ *fakePRForge, loop *reviewLoop, st *state.State) {
+			loop.store = casStore{reviewStore: st, err: errors.New("disk full")}
+		}},
+		{name: "position kept changing", setup: func(_ *fakePRForge, loop *reviewLoop, st *state.State) {
+			loop.store = casStore{reviewStore: st}
+		}},
+		{name: "no such session", setup: func(_ *fakePRForge, loop *reviewLoop, st *state.State) {
+			loop.store = unknownStore{reviewStore: st}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := replyTestState(t)
+			loop, _ := reviewTestLoop(t, st, (&seedRecorder{accept: true}).seed)
+			fake := &fakePRForge{}
+			tc.setup(fake, loop, st)
+
+			_, err := runPR(t, replyRegistry(t, st, fake, loop), verbPRReply, "--name", "alpha", "--thread", "t1", "--body", "done")
+
+			if err == nil {
+				t.Fatal("reply accepted, want it refused before publication")
+			}
+			if len(fake.replies) != 0 {
+				t.Fatalf("replies = %q, want none published", fake.replies)
+			}
+		})
+	}
+}
+
+func TestReplyRemovesItsPendingEntryWhenPublicationFails(t *testing.T) {
+	st := replyTestState(t)
+	loop, _ := reviewTestLoop(t, st, (&seedRecorder{accept: true}).seed)
+	fake := &fakePRForge{replyErr: errors.New("forge refused the reply")}
+
+	_, err := runPR(t, replyRegistry(t, st, fake, loop), verbPRReply, "--name", "alpha", "--thread", "t1", "--body", "done")
+
+	if err == nil {
+		t.Fatal("reply accepted, want the forge failure reported")
+	}
+	if sess, _ := st.FindSession("alpha"); len(sess.ReviewPending) != 0 {
+		t.Fatalf("pending = %v, want the entry of the unpublished reply removed", sess.ReviewPending)
+	}
 }

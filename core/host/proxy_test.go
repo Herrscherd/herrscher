@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -177,37 +176,42 @@ func TestProxyStopsWhenItsContextEnds(t *testing.T) {
 	}
 }
 
-type observedStdin struct {
-	reader  *io.PipeReader
-	pending atomic.Int32
-}
-
-func (s *observedStdin) Read(p []byte) (int, error) {
-	s.pending.Add(1)
-	defer s.pending.Add(-1)
-	return s.reader.Read(p)
-}
-
-func (s *observedStdin) Close() error {
-	return s.reader.Close()
-}
-
-func TestProxyEndsItsRequestCopyBeforeItReturns(t *testing.T) {
+func TestProxyRelaysTheWholeRequestWhenStdinEndsFirst(t *testing.T) {
 	layout := testRuntime(t)
+	const request = `{"session":"a","seq":0}` + "\n"
+	received := make(chan string, 1)
 	serveProxyDaemon(t, EventsSocketPathIn(layout, ""), func(conn net.Conn) {
+		body, err := io.ReadAll(conn)
+		if err != nil {
+			return
+		}
+		received <- string(body)
 		_, writeErr := io.WriteString(conn, `{"session":"a","seq":1}`+"\n")
 		logCleanup(writeErr)
 	})
-	pipeReader, pipeWriter := io.Pipe()
-	t.Cleanup(func() { logCleanup(pipeWriter.Close()) })
-	stdin := &observedStdin{reader: pipeReader}
+	stdin, stdinWriter := io.Pipe()
+	t.Cleanup(func() { logCleanup(stdinWriter.Close()) })
 	ctx, cancel := context.WithTimeout(context.Background(), proxyTestTimeout)
 	defer cancel()
-	if err := RunProxy(ctx, layout, "", "", ProxyEvents, stdin, io.Discard); err != nil {
-		t.Fatalf("RunProxy error = %v, want nil when the daemon closes", err)
+	done := make(chan error, 1)
+	go func() {
+		done <- RunProxy(ctx, layout, "", "", ProxyEvents, stdin, io.Discard)
+	}()
+	first, second := request[:len(request)/2], request[len(request)/2:]
+	if _, err := io.WriteString(stdinWriter, first); err != nil {
+		t.Fatal(err)
 	}
-	if n := stdin.pending.Load(); n != 0 {
-		t.Fatalf("%d reads of stdin still pending after RunProxy returned", n)
+	if _, err := io.WriteString(stdinWriter, second); err != nil {
+		t.Fatal(err)
+	}
+	if err := stdinWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("RunProxy error = %v, want nil once the daemon answered", err)
+	}
+	if got := <-received; got != request {
+		t.Fatalf("daemon received %q, want the whole request %q followed by end of input", got, request)
 	}
 }
 

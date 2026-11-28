@@ -28,6 +28,7 @@ const (
 type prWatcher struct {
 	prs      sessionPRs
 	store    *state.State
+	reviews  *reviewLoop
 	clock    prwatch.Clock
 	limit    *prwatch.Limit
 	policy   prwatch.Policy
@@ -52,6 +53,7 @@ type sessionFollow struct {
 
 type prGroup struct {
 	key      prGroupKey
+	forge    contracts.Forge
 	saveMu   sync.Mutex
 	last     contracts.PullRequest
 	hasLast  bool
@@ -66,10 +68,13 @@ type prRefusal struct {
 	retry  obs.Backoff
 }
 
-func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, notices *sessionNotices) *prWatcher {
+func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, notices *sessionNotices, reviews *reviewLoop) *prWatcher {
+	prs := newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit, notices)
+	prs.reviews = reviews
 	return &prWatcher{
-		prs:      newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit, notices),
+		prs:      prs,
 		store:    store,
+		reviews:  reviews,
 		clock:    prwatch.SystemClock(),
 		limit:    &prwatch.Limit{},
 		policy:   prWatchPolicy(),
@@ -261,7 +266,7 @@ func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name s
 		return nil, err
 	}
 	groupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	group := &prGroup{key: key, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
+	group := &prGroup{key: key, forge: target.forge, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
 	watch.Save = w.save(group)
 	w.groups[key] = group
 	w.watches.Add(1)
@@ -314,16 +319,33 @@ func (w *prWatcher) catchUp(ctx context.Context, group *prGroup, name string) {
 
 func (w *prWatcher) save(group *prGroup) func(context.Context, contracts.PullRequest) error {
 	return func(ctx context.Context, pull contracts.PullRequest) error {
-		group.saveMu.Lock()
-		defer group.saveMu.Unlock()
-		group.last, group.hasLast = pull, true
-		var first error
-		for _, name := range w.members(group) {
-			if err := w.saveMember(ctx, name, group.key.number, pull); err != nil && first == nil {
-				first = err
-			}
-		}
+		names, first := w.saveMembers(ctx, group, pull)
+		w.observeReviews(ctx, group, names, pull.Ref)
 		return first
+	}
+}
+
+func (w *prWatcher) saveMembers(ctx context.Context, group *prGroup, pull contracts.PullRequest) ([]string, error) {
+	group.saveMu.Lock()
+	defer group.saveMu.Unlock()
+	group.last, group.hasLast = pull, true
+	names := w.members(group)
+	var first error
+	for _, name := range names {
+		if err := w.saveMember(ctx, name, group.key.number, pull); err != nil && first == nil {
+			first = err
+		}
+	}
+	return names, first
+}
+
+func (w *prWatcher) observeReviews(ctx context.Context, group *prGroup, names []string, ref contracts.PullRequestRef) {
+	for _, name := range names {
+		w.watches.Add(1)
+		go func() {
+			defer w.watches.Done()
+			w.reviews.observe(ctx, name, group.forge, ref)
+		}()
 	}
 }
 

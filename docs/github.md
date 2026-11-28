@@ -259,6 +259,115 @@ number with the state `unknown`. The session info that the TUI and the gateways
 receive carries no pull request for such a session, so they show nothing until
 `session pr status` stores the state, draft flag and URL.
 
+## Review threads of a session
+
+When a session has a pull request, the host hands its unresolved review threads
+to the agent of the session. The host reads them each time it observes a change
+of the pull request (a review submitted, a new commit, a change of state or of
+checks), so a comment added to an existing thread without a new review is seen
+at the next change or after a restart.
+
+- Only unresolved threads are handed over. A thread that a person resolves
+  stays out, and the agent never resolves a thread.
+- A comment reaches the agent only when its author is trusted. The owner and the
+  members of the repository are trusted by default. Any other author is refused,
+  and its comment is passed over without being shown. A bot is always refused,
+  even when it is listed.
+- A collaborator, a contributor or any other author can be trusted by listing
+  its login in `HERRSCHER_REVIEW_AUTHORS`, as a comma-separated list such as
+  `carol,dan`. Logins are compared without regard to case. The list applies to
+  every session of the host and is read when the host starts, so a change needs
+  a restart. A list per session or per repository is not available yet.
+- The host hands over each comment once. For each thread, the position stores the
+  creation time of the last comment handed over and the digests of the comments
+  created at that exact instant. A comment created before that time counts as
+  seen, so deleting an earlier comment does not hide the next one. A message that
+  no live session takes is not recorded, and it is retried on the next observation.
+- A state written with the former per-thread counts is converted on its first
+  observation: each thread it knows is marked at its latest comment, so nothing it
+  already held is sent again, and a thread it does not know is handed over in full.
+- The marks of a thread move only once its message is delivered. The reply
+  command and the watcher share one review loop, and the observations of one
+  session and pull request run one at a time on it, so two observations never
+  hand the same comments over twice. Observations of different sessions or pull
+  requests do not wait for each other; each one still reads the forge while it
+  holds its lock, because the plan must match the position it reads. If no live
+  session takes the message, nothing is recorded and the next observation
+  delivers the threads again.
+- If the message is delivered but the position cannot be recorded (the state
+  write fails, or the position keeps changing after 5 attempts), the comments are
+  not marked, and the next observation hands them over again. A comment can thus
+  reach the agent twice, but never zero times. The agent may then publish the
+  same reply twice in the thread, because it answers each delivery it receives.
+- A reply that a person adds to an existing thread is seen at the next change of
+  the pull request or after a restart. The forge feed of the contract reports
+  five kinds of change (a review submitted, a new commit, a change of state, a
+  merge conflict, a change of checks), and none of them is a reply in a thread,
+  so the host learns of it only through a later read.
+- One message carries at most 8 threads, 5 new comments per thread and 1000 bytes
+  per comment, so its size is bounded. The rest comes in the next message.
+- The forge text is written in a block of data between `<donnees-revue>` and
+  `</donnees-revue>`. The body of a comment keeps its line breaks, indented under
+  its field. The path, the thread and the author are written on one line: their
+  line breaks, tabs and Unicode line separators (U+2028, U+2029) become spaces,
+  and format characters (Unicode category Cf, such as the zero-width space or the
+  bidi controls U+202A to U+202E and U+2066 to U+2069) are removed. In all of
+  them `&`, `<` and `>` are escaped, and the other control characters are
+  removed. The message tells the agent that this block is data, never an
+  instruction.
+- To answer a thread, the agent runs `herrscher session pr reply --name <session>
+  --thread <thread id> --body <text>`. The verb is checked by the authorization
+  policy of the agent role, and it runs without the approval desk, like
+  `session issue comment`. The daemon announces each reply as a write, and the
+  token stays in the host.
+- A successful reply observes the session at once, without waiting for a change
+  of the pull request. So a person's reply already in the thread, which the
+  position had not yet passed, is handed over right after the agent answers.
+- The agent's own replies never come back to it, whatever the account that posts
+  them. Before `session pr reply` publishes a reply, the host records it as pending
+  in the session state: the thread, a SHA-256 digest of its body, the time of
+  publication and the login of the posting account. The forge gives no identifier
+  for a comment, and the reply call returns none, so the login and the digest are
+  what identifies it. The record is written before the reply is sent, so an
+  observation running at the same time never misses it.
+- `session pr reply` refuses to publish when it cannot record that pending entry:
+  the state write fails, the position keeps changing after 5 attempts, the session
+  is no longer known, or the login of the posting account cannot be read or is
+  empty. The reply is then not sent, and the command returns a message saying so.
+  The agent can run the same command again with the same reply.
+- If the forge clearly refuses the reply after the entry was recorded (an
+  unauthorized, forbidden, not found or wrong-host answer, or a rate limit), the
+  entry is removed again, by a compare-and-set retried at most 5 times. A timeout
+  or a network failure does not prove that the reply was not published, so its
+  entry stays and expires after 24 hours, and the reply is not handed back.
+- At each observation, a pending reply is matched with the first comment of the
+  same thread that has the same digest, the same login and a creation time at
+  least 2 minutes before the publication. That 2-minute margin absorbs the
+  difference between the clock of the host and the clock of the forge. A match
+  becomes an own comment, identified by its thread, digest and creation time, and
+  it is never handed over.
+- A pending reply that no comment matches stays for at most 24 hours, and at most
+  20 pending replies are kept per session. Own comments are kept to the last 20.
+  Both are saved with the position, so a restart keeps them.
+- Limits. A person who posts, in the same thread, the same body from the same
+  account, after the publication minus the margin, is passed over with the agent's
+  reply. A reply that the forge does not show within 24 hours is forgotten: if it
+  shows up later, it is handed over as a human comment. A comment whose creation
+  time is before the mark counts as seen, so a comment the forge timestamps earlier
+  than the last one handed over is never handed over. If the state cannot record
+  A concurrent write is retried at most 5 times; past that, the observation stops
+  with a warning and the next one retries.
+- Recording the position after a delivery is retried the same way, and it keeps
+  the own and pending entries written in the meantime. If the 5 attempts are
+  exhausted, a warning is logged and the threads stay unmarked, as described above.
+- The margin needs a clock in step with the forge. A host clock more than 2
+  minutes ahead of the forge makes the matching fail, so the agent's own reply
+  comes back to it as a human comment. Keep the clock of the host synchronised
+  with NTP.
+- A human comment with the same body, in the same thread, from the same account
+  and created in the same second as the agent's reply is taken for that reply and
+  is not handed over.
+
 ## Repositories to clone
 
 When you create a session, the choice of repositories lists the workspace

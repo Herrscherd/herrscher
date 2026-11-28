@@ -15,7 +15,7 @@ func TestStartupReconcileBridgesUnderTheDispatchLock(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "resumed", ChannelID: "c1", Incarnation: "resumed"}); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 	var dispatchFreeWhileBridging []bool

@@ -19,7 +19,7 @@ func TestRefusedResumeIsRelaunchedByTheNextReconcile(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: name, ChannelID: "c1"}); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 	h.runtime = isolatedRuntimeDir(t)
 	var starts, stops atomic.Int32
 	h.startBridge = func(state.Session, time.Duration) error {
@@ -60,7 +60,7 @@ func TestAcceptFailureRetiredBridgeIsRelaunchedByReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 	warnings := &lockedBuffer{}
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(warnings))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = time.Minute
 	h.listen = brokenFirstListen()

@@ -66,7 +66,7 @@ func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
 	owner := newHostMessages()
-	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(owner, clitext.NewMessages()), withWarnings(warnings))
+	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(owner, clitext.NewMessages(), nil, nil), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
 	t.Cleanup(func() {

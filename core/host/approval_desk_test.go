@@ -18,7 +18,7 @@ import (
 func newTestDesk(t *testing.T) (*approvalDesk, *approvalTable, *cli.Registry) {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	reg, st := approveReg(t, approvalTab, sessionTab)
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
@@ -28,7 +28,7 @@ func newTestDesk(t *testing.T) (*approvalDesk, *approvalTable, *cli.Registry) {
 }
 
 func stubSeedDesk() *approvalDesk {
-	return newApprovalDesk(newHostMessages(), fixedLanguage(i18n.English), io.Discard, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+	return newApprovalDesk(newHostMessages(), fixedLanguage(i18n.English), io.Discard, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 }
 
 func hubDesk(st *state.State, approvals *approvalTable, sessions *sessionTable) *approvalDesk {

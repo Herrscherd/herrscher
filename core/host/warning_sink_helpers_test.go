@@ -49,7 +49,7 @@ func testHub(t *testing.T, h *hub) *hub {
 func testHubLogged(t *testing.T, h *hub, logger *slog.Logger) *hub {
 	t.Helper()
 	if h.sessions == nil {
-		h.sessions = newSessionTable(h.messages, clitext.NewMessages())
+		h.sessions = newSessionTable(h.messages, clitext.NewMessages(), nil, nil)
 	}
 	h.bindSessionState()
 	out := h.warnings

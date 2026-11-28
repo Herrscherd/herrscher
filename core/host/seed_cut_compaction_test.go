@@ -119,7 +119,7 @@ func seedWithHistoryStage(backend contracts.Backend, budget time.Duration, emiss
 }
 
 func seedWithStage(stage contracts.Compactor, backend contracts.Backend, budget time.Duration, emissions *seedEmissions) (string, error) {
-	table := newSessionTable(newHostMessages(), clitext.NewMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	policy := compactPolicy(50, "jev")
 	policy.plugins["jev"] = stage
 	policy.historyEditors["claude"] = true

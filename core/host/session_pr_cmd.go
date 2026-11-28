@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/forgeport"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
+	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
@@ -48,7 +51,10 @@ var (
 	errPRNoDir          = sessionPRError{clitext.SessionPRNoDir}
 	errPRRemote         = sessionPRError{clitext.SessionPRRemote}
 	errPRNoOrigin       = sessionPRError{clitext.SessionPRNoOrigin}
+	errPRReplyRefused   = sessionPRError{clitext.SessionPRReplyNotRecorded}
 )
+
+var errReplyLoginUnknown = sessionPRError{clitext.SessionPRReplyNotRecorded}
 
 type sessionPRs struct {
 	messages    *clitext.Messages
@@ -58,6 +64,7 @@ type sessionPRs struct {
 	credentials contracts.ForgeCredentials
 	refreshes   *refreshLocks
 	forgeLimit  time.Duration
+	reviews     *reviewLoop
 	notices     *sessionNotices
 	git         gitRunner
 }
@@ -103,8 +110,10 @@ type prCommentView struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, notices *sessionNotices) error {
-	return newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit, notices).addTo(reg)
+func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, notices *sessionNotices, reviews *reviewLoop) error {
+	prs := newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit, notices)
+	prs.reviews = reviews
+	return prs.addTo(reg)
 }
 
 func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration, notices *sessionNotices) sessionPRs {
@@ -173,10 +182,70 @@ func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts
 	if err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
-	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
+	entry, err := p.expectReply(ctx, target, thread.ID(), body)
+	if err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
+	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
+		if refusedByForge(err) {
+			p.forgetReply(target, entry)
+		}
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	p.observeAfterReply(ctx, target)
 	return cli.Data(p.messages.Text(target.language, clitext.SessionPRReplied, clitext.Params{clitext.ParamNumber: target.ref.Number()}))
+}
+
+func (p sessionPRs) expectReply(ctx context.Context, target prTarget, threadID, body string) (reviewloop.Pending, error) {
+	if p.reviews == nil {
+		return reviewloop.Pending{}, nil
+	}
+	connection, err := target.forge.Connection(ctx)
+	if err != nil {
+		return reviewloop.Pending{}, refusedReply(err)
+	}
+	if connection.Login == "" {
+		return reviewloop.Pending{}, refusedReply(errReplyLoginUnknown)
+	}
+	entry := reviewloop.Pending{Thread: threadID, Digest: reviewloop.Digest(body), Login: connection.Login}
+	recorded, err := p.reviews.expect(target.name, target.ref.Number(), entry)
+	if err != nil {
+		return reviewloop.Pending{}, refusedReply(err)
+	}
+	return recorded, nil
+}
+
+func refusedReply(cause error) error {
+	return fmt.Errorf("%w: %w", errPRReplyRefused, cause)
+}
+
+func refusedByForge(err error) bool {
+	var limited *contracts.ForgeRateLimitedError
+	return errors.As(err, &limited) ||
+		errors.Is(err, contracts.ErrForgeUnauthorized) ||
+		errors.Is(err, contracts.ErrForgeForbidden) ||
+		errors.Is(err, contracts.ErrForgeNotFound) ||
+		errors.Is(err, contracts.ErrForgeWrongHost) ||
+		errors.Is(err, contracts.ErrForgeNotConnected) ||
+		errors.Is(err, contracts.ErrInvalidRef) ||
+		errors.Is(err, contracts.ErrEmptyComment) ||
+		errors.Is(err, contracts.ErrInvalidForgeLogin)
+}
+
+func (p sessionPRs) forgetReply(target prTarget, entry reviewloop.Pending) {
+	if p.reviews == nil {
+		return
+	}
+	if err := p.reviews.forget(target.name, target.ref.Number(), entry); err != nil {
+		slog.Warn("session reply not removed from pending after the failed publication", "session", target.name, "err", err)
+	}
+}
+
+func (p sessionPRs) observeAfterReply(ctx context.Context, target prTarget) {
+	if p.reviews == nil {
+		return
+	}
+	p.reviews.observe(ctx, target.name, target.forge, target.ref)
 }
 
 func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, dir string) (contracts.ForgeRepoRef, string, error) {
@@ -429,6 +498,8 @@ func (p sessionPRs) failure(language i18n.Language, err error) error {
 	var limited *contracts.ForgeRateLimitedError
 	var origin prOriginError
 	switch {
+	case errors.Is(err, errPRReplyRefused):
+		return p.messages.Failure(language, err, errPRReplyRefused.key, nil)
 	case errors.Is(err, context.DeadlineExceeded):
 		return p.messages.Failure(language, err, clitext.SessionPRTimedOut, nil)
 	case errors.Is(err, contracts.ErrForgeNotConnected):

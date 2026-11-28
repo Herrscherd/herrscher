@@ -32,6 +32,12 @@ type sessionTable struct {
 	journal *eventJournal
 
 	notices *sessionNotices
+
+	reviews *reviewLoop
+}
+
+func (t *sessionTable) reviewLoopFor() *reviewLoop {
+	return t.reviews
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -43,8 +49,10 @@ func (t *sessionTable) percentOfSession(name string) int {
 	return t.compaction.percent
 }
 
-func newSessionTable(messages *hostMessages, cliMessages *clitext.Messages) *sessionTable {
-	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, cliMessages: cliMessages, persists: newPersistWrites(), journal: newEventJournal(), notices: &sessionNotices{}}
+func newSessionTable(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store reviewStore) *sessionTable {
+	table := &sessionTable{m: make(map[string]*sessionDriver), messages: messages, cliMessages: cliMessages, persists: newPersistWrites(), journal: newEventJournal(), notices: &sessionNotices{}}
+	table.reviews = newReviewLoop(cliMessages, lang, store, table.Seed)
+	return table
 }
 
 func (t *sessionTable) oneShotPersists() *persistWrites {

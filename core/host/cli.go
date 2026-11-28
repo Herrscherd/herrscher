@@ -239,7 +239,7 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings).withMessages(messages, options.languageSource()), newSessionTable(messages, cliMessages))
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings).withMessages(messages, options.languageSource()), newSessionTable(messages, cliMessages, options.live.Get, hostState))
 	if err != nil {
 		return nil, err
 	}
@@ -268,5 +268,6 @@ func addCheckpointAndPRVerbs(reg *cli.Registry, sessions *sessionTable, options 
 	if err := addCheckpointCommands(reg, sessions.cliMessages, options.live.Get, hostState, sessions); err != nil {
 		return err
 	}
-	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.notices)
+	reviews := sessions.reviewLoopFor()
+	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.notices, reviews)
 }

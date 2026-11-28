@@ -21,7 +21,7 @@ func compactCmdFixture(t *testing.T, vendor string) (*state.State, *sessionTable
 		t.Fatalf("AddSession: %v", err)
 	}
 	queue := make(chan queued, 1)
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	sessions.register("api", &sessionDriver{
 		messages:       newHostMessages(),
 		cliMessages:    clitext.NewMessages(),

@@ -11,7 +11,7 @@ import (
 
 func TestASettleAfterTheDeadlineIsRefusedWithoutARule(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	sessionTab.register("s1", &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), name: "s1"})
 	p := newTestPendingApproval("s1")
 	p.req = approval.Request{Tool: "Bash", Subject: "git push"}

@@ -12,7 +12,7 @@ import (
 func allowEverySession(string) bool { return true }
 
 func TestSeedTokenIsNotCreatedForASessionPurgedBeforeIt(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	sessionTab.revokeTokensExcept(func(string) bool { return false })
 	seedCtx, endSeed := context.WithCancel(t.Context())
 	t.Cleanup(endSeed)
@@ -23,7 +23,7 @@ func TestSeedTokenIsNotCreatedForASessionPurgedBeforeIt(t *testing.T) {
 }
 
 func TestSeedTokenRefusesAContextThatNeverEnds(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	if token := sessionTab.seedToken(context.Background(), "s", allowEverySession); token != "" {
 		t.Fatal("a seed lease on a context that never ends was issued, it would answer forever")
 	}
@@ -59,7 +59,7 @@ func TestSeedTokenIsRefusedForAnArchivedSession(t *testing.T) {
 	if err := store.SetArchived("doomed", true); err != nil {
 		t.Fatal(err)
 	}
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	seedCtx, endSeed := context.WithCancel(t.Context())
 	t.Cleanup(endSeed)
 	if token := sessionTab.seedToken(seedCtx, "doomed", liveSessionAllowed(store)); token != "" {
@@ -68,7 +68,7 @@ func TestSeedTokenIsRefusedForAnArchivedSession(t *testing.T) {
 }
 
 func TestSeedLeaseDiesWithItsContext(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	seedCtx, endSeed := context.WithCancel(t.Context())
 	token := sessionTab.seedToken(seedCtx, "s", allowEverySession)
 	if !sessionTab.tokenMatches("s", token) {

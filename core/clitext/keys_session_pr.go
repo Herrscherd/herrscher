@@ -39,10 +39,12 @@ const (
 	SessionPRUnauthorized      = "cli.session.pr.unauthorized"
 	SessionPRRateLimited       = "cli.session.pr.rate_limited"
 	SessionPRTimedOut          = "cli.session.pr.timed_out"
+	SessionPRReplyNotRecorded  = "cli.session.pr.reply_not_recorded"
 	SessionPRForgeMissing      = "cli.session.pr.forge_missing"
 	SessionPRPagesExceeded     = "cli.session.pr.pages_exceeded"
 	SessionPRFailed            = "cli.session.pr.failed"
 	SessionPRUnknownValue      = "cli.session.pr.unknown_value"
+	SessionPRReviewNudge       = "cli.session.pr.review_nudge"
 	SessionPREndedMerged       = "cli.session.pr.ended_merged"
 	SessionPREndedClosed       = "cli.session.pr.ended_closed"
 	SessionEnded               = "cli.session.end.done"
@@ -94,6 +96,7 @@ const (
 	ParamReset      = "Reset"
 	ParamPages      = "Pages"
 	ParamValue      = "Value"
+	ParamData       = "Data"
 )
 
 func sessionPRKeys() map[Key][]string {
@@ -135,10 +138,12 @@ func sessionPRKeys() map[Key][]string {
 		SessionPRUnauthorized:      nil,
 		SessionPRRateLimited:       {ParamReset},
 		SessionPRTimedOut:          nil,
+		SessionPRReplyNotRecorded:  nil,
 		SessionPRForgeMissing:      nil,
 		SessionPRPagesExceeded:     {ParamPages},
 		SessionPRFailed:            {ParamErr},
 		SessionPRUnknownValue:      {ParamValue},
+		SessionPRReviewNudge:       {ParamNumber, ParamCount, ParamData},
 		SessionPREndedMerged:       {ParamName, ParamNumber},
 		SessionPREndedClosed:       {ParamName, ParamNumber},
 		SessionEnded:               {ParamName},

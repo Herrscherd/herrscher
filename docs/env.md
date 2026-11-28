@@ -231,6 +231,7 @@ These variables are read by the GitHub forge when no token was saved by
 |----------|---------|---------|---------|
 | `HERRSCHER_LOG` | `info` | Structured (`log/slog`) log level on stderr: `debug\|info\|warn\|error`. The bridge's `-v` flag forces `debug`. | Host + bridge |
 | `HERRSCHER_LIMITS_TIMEOUT` | `10s` | Cap of one reading of an account's limits, counted from its start, as a Go duration between `1s` and `5m`. Read when the daemon starts, so a change takes a restart. A malformed or out of range value is reported in the daemon log and the default applies. | Host |
+| `HERRSCHER_REVIEW_AUTHORS` | none (⇒ only the owner and the members of the repository) | Comma-separated logins whose review comments also reach the session agent, compared without regard to case. A bot is refused even when listed. Read when the daemon starts, so a change takes a restart. See [Review threads of a session](github.md#review-threads-of-a-session). | Host |
 | `HERRSCHER_ENV_FILE` | `./.env` | Path of the `.env` file to load. Resolved to an absolute path and re-exported, so each `bridge` subprocess (whose cwd is a session worktree) loads the *same* file. An implicit `./.env` is best-effort; an explicit `$HERRSCHER_ENV_FILE` is authoritative (a load failure is fatal). | Host |
 
 ## Turn telemetry (OpenTelemetry)

@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
+	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
@@ -117,6 +118,11 @@ type Session struct {
 	PullRequestMerge        contracts.MergeState       `json:"pullRequestMerge,omitempty"`
 	PullRequestChecks       contracts.ChecksState      `json:"pullRequestChecks,omitempty"`
 	PullRequestLatestReview contracts.ReviewID         `json:"pullRequestLatestReview,omitempty"`
+	ReviewNumber            int                        `json:"reviewNumber,omitempty"`
+	ReviewSeen              map[string]int             `json:"reviewSeen,omitempty"`
+	ReviewMarks             map[string]reviewloop.Mark `json:"reviewMarks,omitempty"`
+	ReviewOwn               []reviewloop.Own           `json:"reviewOwn,omitempty"`
+	ReviewPending           []reviewloop.Pending       `json:"reviewPending,omitempty"`
 	PullRequestEndNotified  int                        `json:"pullRequestEndNotified,omitempty"`
 
 	// ApprovalRules are the rules that bind this session alone, on top of the daemon's.

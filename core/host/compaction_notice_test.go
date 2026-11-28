@@ -243,7 +243,7 @@ func TestSessionLanguageFallsBackToTheOperator(t *testing.T) {
 }
 
 func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	store := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	name := "lang-" + newTurnID()
 	if err := store.AddSession(state.Session{Name: name, Incarnation: "incarnation", Language: "en"}); err != nil {

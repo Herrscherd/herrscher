@@ -40,7 +40,7 @@ func (b countingCompactBackend) Compact(context.Context, contracts.CompactReques
 }
 
 func seedWithAutomaticCompactionAndPublish(backend contracts.Backend, timeout time.Duration, publish func(string, contracts.Event)) (string, error) {
-	table := newSessionTable(newHostMessages(), clitext.NewMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	policy := compactPolicy(50, contracts.CompactStageBackend)
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy

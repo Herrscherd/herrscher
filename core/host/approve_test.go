@@ -40,7 +40,7 @@ func (m *menuGatewayFake) RouteMenu(_ context.Context, _, _, prompt, _ string, _
 
 func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
 	req := approval.Request{Tool: "Bash", Subject: "sudo rm"}
 	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, time.Minute, 0)
@@ -58,7 +58,7 @@ func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 		req := approval.Request{Tool: "Bash", Subject: "git push origin master"}
 		done := make(chan approval.Decision, 1)
@@ -81,7 +81,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 
 func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
 	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 30*time.Millisecond, 0)
@@ -150,7 +150,7 @@ func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *session
 func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 		full := make([]string, 0, maxPendingPerSession)
 		for range maxPendingPerSession {
 			full = append(full, "s-cap")
@@ -186,7 +186,7 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 		sessions := make([]string, 0, maxPendingApprovals)
 		for i := range maxPendingApprovals {
 			sessions = append(sessions, fmt.Sprintf("s-fleet-%d", i))
@@ -209,7 +209,7 @@ func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 
 func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	var reason string
 	for range maxPendingPerSession + 1 {
@@ -237,7 +237,7 @@ func TestAnswerApprovalUnknownID(t *testing.T) {
 func TestTwoSessionsWaitIndependently(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		got := make(chan string, 2)
 		for _, name := range []string{"s1", "s2"} {
@@ -348,7 +348,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		done := make(chan approval.Decision, 1)
 		go func() {
@@ -381,7 +381,7 @@ func assertWaitIsSilent(t *testing.T, wait, bound time.Duration) {
 	t.Helper()
 	var warnings bytes.Buffer
 	approvalTab := newApprovalTable(&warnings)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 
 	askApproval(context.Background(), approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, wait, bound)
@@ -394,7 +394,7 @@ func TestAWaitBeyondItsBoundIsCutAndSaysSo(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var warnings bytes.Buffer
 		approvalTab := newApprovalTable(&warnings)
-		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 		ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		configured := 20 * time.Minute
 		bound := time.Second

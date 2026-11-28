@@ -21,7 +21,7 @@ func journalStartUnderLock(h *hub, name string, err error) {
 func TestARefusalDoesNotCarryOverToAReplacementSession(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	var warnings bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&warnings))
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil), withWarnings(&warnings))
 	startErr := errors.New("bridge refused")
 	if err := st.AddSession(state.Session{Name: "reused", ChannelID: "c1", Incarnation: "first"}); err != nil {
 		t.Fatal(err)

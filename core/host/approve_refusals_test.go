@@ -32,7 +32,7 @@ func expectRefusal(t *testing.T, got askResult, want string) {
 
 func TestAnOperatorRefusalWithoutReasonIsDeniedInFrench(t *testing.T) {
 	approvals := frenchApprovalTable()
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, askPolicy(), approval.ModeAsk, time.Minute)
 	pending := onlyPending(t, approvals)
 	if !answerApprovalPick(approvals, "s1", approvalPickPrefix+pending.ID+":deny") {
@@ -43,7 +43,7 @@ func TestAnOperatorRefusalWithoutReasonIsDeniedInFrench(t *testing.T) {
 
 func TestAnOperatorRefusalWithAReasonIsSentToTheAgentInFrench(t *testing.T) {
 	approvals := frenchApprovalTable()
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, askPolicy(), approval.ModeAsk, time.Minute)
 	pending := onlyPending(t, approvals)
 	if !answerApprovalPick(approvals, "s1", approvalPickPrefix+pending.ID+":deny:utilise make clean") {
@@ -54,14 +54,14 @@ func TestAnOperatorRefusalWithAReasonIsSentToTheAgentInFrench(t *testing.T) {
 
 func TestAPlanModeRefusalIsGivenInFrench(t *testing.T) {
 	approvals := frenchApprovalTable()
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	decision, reason := askApproval(context.Background(), approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, askPolicy(), approval.ModePlan, time.Minute, 0)
 	expectRefusal(t, askResult{decision: decision, reason: reason}, "herrscher : Bash(git push) a été refusé : cette session est en mode plan, qui ne fait que lire ; écris le plan, l'opérateur le valide avant toute écriture")
 }
 
 func TestAPolicyDenialIsGivenInFrench(t *testing.T) {
 	approvals := frenchApprovalTable()
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
 	decision, reason := askApproval(context.Background(), approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "sudo rm"}, pol, approval.ModeAsk, time.Minute, 0)
 	expectRefusal(t, askResult{decision: decision, reason: reason}, "herrscher : Bash(sudo rm) a été refusé par la politique")
@@ -69,7 +69,7 @@ func TestAPolicyDenialIsGivenInFrench(t *testing.T) {
 
 func TestAFleetFullRefusalIsGivenInFrench(t *testing.T) {
 	approvals := frenchApprovalTable()
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	for i := range maxPendingApprovals {
 		id := strconv.Itoa(i)
 		approvals.m[id] = &pendingApproval{id: id, session: "autre", answer: make(chan approvalVerdict, 1)}
@@ -81,7 +81,7 @@ func TestAFleetFullRefusalIsGivenInFrench(t *testing.T) {
 
 func TestASessionFullRefusalIsGivenInFrench(t *testing.T) {
 	approvals := frenchApprovalTable()
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	for i := range maxPendingPerSession {
 		id := strconv.Itoa(i)
 		approvals.m[id] = &pendingApproval{id: id, session: "s1", answer: make(chan approvalVerdict, 1)}
@@ -111,7 +111,7 @@ func expectWarning(t *testing.T, buf *bytes.Buffer, want string) {
 func TestASessionScopeWithoutADriverWarnsInFrench(t *testing.T) {
 	var buf bytes.Buffer
 	approvals := frenchApprovalTableWriting(&buf)
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pending := &pendingApproval{id: "p1", session: "s1", req: approval.Request{Tool: "Bash", Subject: "git push"}}
 	approvals.remember(sessions, pending, scopeSession)
 	expectWarning(t, &buf, "approbations : Bash(git push) a été autorisé une fois : la session « s1 » ne tourne pas, elle ne peut donc pas retenir la réponse")
@@ -120,7 +120,7 @@ func TestASessionScopeWithoutADriverWarnsInFrench(t *testing.T) {
 func TestAnAlwaysScopeWithoutAnExactSubjectWarnsInFrench(t *testing.T) {
 	var buf bytes.Buffer
 	approvals := frenchApprovalTableWriting(&buf).withRules(failingRules{})
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pending := &pendingApproval{id: "p1", session: "s1", req: approval.Request{Tool: "Bash", Subject: "git push*"}}
 	approvals.remember(sessions, pending, scopeAlways)
 	expectWarning(t, &buf, "approbations : Bash(git push*) a été autorisé une fois : il n'a pas de sujet exact qu'une règle puisse nommer sans couvrir plus que cette demande")
@@ -129,7 +129,7 @@ func TestAnAlwaysScopeWithoutAnExactSubjectWarnsInFrench(t *testing.T) {
 func TestAnAlwaysScopeWithoutARuleStoreWarnsInFrench(t *testing.T) {
 	var buf bytes.Buffer
 	approvals := frenchApprovalTableWriting(&buf)
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	pending := &pendingApproval{id: "p1", session: "s1", req: approval.Request{Tool: "Bash", Subject: "git push"}}
 	approvals.remember(sessions, pending, scopeAlways)
 	expectWarning(t, &buf, "approbations : Bash(git push) a été autorisé une fois : aucun magasin de règles n'est attaché, donc aucune règle n'a été écrite")
@@ -138,7 +138,7 @@ func TestAnAlwaysScopeWithoutARuleStoreWarnsInFrench(t *testing.T) {
 func TestAnAlwaysScopeWhoseRuleIsNotSavedWarnsInFrench(t *testing.T) {
 	var buf bytes.Buffer
 	approvals := frenchApprovalTableWriting(&buf).withRules(failingRules{})
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
 	rule, ok := approval.RuleFor(req.Tool, req.Subject)
 	if !ok {
@@ -155,7 +155,7 @@ func TestASmartModeWithoutAModelWarnsInFrench(t *testing.T) {
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) {
 		return 0, errNoRiskModel
 	}
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	approvals.rated(context.Background(), sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, approval.Deny)
 	expectWarning(t, &buf, "approbations : le mode smart n'a pas de modèle pour évaluer Bash(git push), il est donc décidé comme en mode demande")
 }
@@ -166,7 +166,7 @@ func TestASmartModeThatCannotRateWarnsInFrench(t *testing.T) {
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) {
 		return 0, errors.New("boom")
 	}
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	approvals.rated(context.Background(), sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, approval.Deny)
 	expectWarning(t, &buf, "approbations : le mode smart n'a pas pu évaluer Bash(git push) (boom), il est donc décidé comme en mode demande")
 }
@@ -175,7 +175,7 @@ func TestASmartModeWithoutAJudgeWarnsInFrench(t *testing.T) {
 	var buf bytes.Buffer
 	approvals := frenchApprovalTableWriting(&buf)
 	approvals.judge = nil
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	approvals.rated(context.Background(), sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, approval.Deny)
 	expectWarning(t, &buf, "approbations : le mode smart n'a pas de modèle pour évaluer Bash(git push), il est donc décidé comme en mode demande")
 }

@@ -14,18 +14,22 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+// MaxSessionsPerPoll bounds the sessions one poll opens across all the filters of a repository.
 const MaxSessionsPerPoll = 3
 
 const maxSessionName = 64
 
 var errWatchMoved = errors.New("issue watch moved by another read")
 
+// Opener returns the forge client that reads the issues of host.
 type Opener func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error)
 
+// Creator opens a session from a spec, as the host does for schedules.
 type Creator interface {
 	Create(context.Context, contracts.CreateSession) (contracts.Result, error)
 }
 
+// Store is the persisted issue trigger record the poller reads and advances.
 type Store interface {
 	IssueTriggerRepo(repo string) state.IssueTriggerState
 	SessionNamed(name string) bool
@@ -34,6 +38,7 @@ type Store interface {
 	ReleaseIssue(repo string, number int) error
 }
 
+// Poller opens one session per issue that a repository's filters select, at most once per issue.
 type Poller struct {
 	store   Store
 	open    Opener
@@ -43,12 +48,14 @@ type Poller struct {
 	now     func() time.Time
 }
 
+// NewPoller returns a Poller that reads through open and opens sessions through creator.
 func NewPoller(store Store, open Opener, creator Creator, seed func(session, task string) bool,
 	task func(contracts.ForgeRepoRef, contracts.Issue) string, now func() time.Time,
 ) *Poller {
 	return &Poller{store: store, open: open, creator: creator, seed: seed, task: task, now: now}
 }
 
+// Poll reads every filter of target that still has session budget and opens the sessions their issues call for.
 func (p *Poller) Poll(ctx context.Context, target Target) error {
 	forgeClient, err := p.open(ctx, target.Repo.Host())
 	if err != nil {
@@ -104,14 +111,17 @@ func (p *Poller) pollFilter(ctx context.Context, forgeClient contracts.Forge, ta
 func (p *Poller) openIssues(ctx context.Context, target Target, issues []contracts.Issue, writer *watchWriter) (int, error) {
 	repo := target.Repo.String()
 	opened := 0
-	for _, issue := range issues {
+	for index := range issues {
+		issue := issues[index]
 		number := issue.Ref.Number()
 		name := SessionName(target.Repo, number)
 		claimed, err := p.store.ClaimIssue(repo, number, name)
 		if err != nil {
 			return opened, fmt.Errorf("issue trigger %s: claim #%d: %w", repo, number, err)
 		}
-		if claimed && !p.store.SessionNamed(name) {
+		if claimed && p.store.SessionNamed(name) {
+			slog.Warn("issue trigger: a session already bears this issue's name, the issue is skipped", "repo", repo, "session", name)
+		} else if claimed {
 			if err := p.openSession(ctx, target, issue, name); err != nil {
 				return opened, err
 			}
@@ -192,6 +202,7 @@ func takenNumbers(record state.IssueTriggerState) map[int]bool {
 	return taken
 }
 
+// SessionName returns the session name of issue number of repo: issue-<namespace>-<repo>-<number>, every byte outside [A-Za-z0-9_] replaced by a dash, the slug cut so the whole name stays within 64 bytes.
 func SessionName(repo contracts.ForgeRepoRef, number int) string {
 	suffix := fmt.Sprintf("-%d", number)
 	slug := sanitize("issue-" + repo.Namespace() + "-" + repo.Name())
@@ -203,10 +214,10 @@ func SessionName(repo contracts.ForgeRepoRef, number int) string {
 
 func sanitize(text string) string {
 	var out strings.Builder
-	for _, r := range text {
+	for _, character := range text {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
-			out.WriteRune(r)
+		case character >= 'a' && character <= 'z', character >= 'A' && character <= 'Z', character >= '0' && character <= '9', character == '_':
+			out.WriteRune(character)
 		default:
 			out.WriteByte('-')
 		}

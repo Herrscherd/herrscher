@@ -21,7 +21,9 @@ type listingReader struct {
 
 func newListingReader(forgeClient contracts.Forge, repo contracts.ForgeRepoRef, query contracts.IssueQuery, revision contracts.Revision) *listingReader {
 	reader := &listingReader{forge: forgeClient, repo: repo, query: query, revision: revision}
-	reader.conditional, _ = forgeClient.(contracts.ConditionalIssues)
+	if conditional, ok := forgeClient.(contracts.ConditionalIssues); ok {
+		reader.conditional = conditional
+	}
 	return reader
 }
 

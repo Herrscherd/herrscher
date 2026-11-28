@@ -123,6 +123,7 @@ func sameWatch(a, b IssueWatch) bool {
 	return a.Since.Equal(b.Since) && a.Revision == b.Revision
 }
 
+// SessionNamed reports whether a session with this name is recorded, which marks an issue already linked to one.
 func (s *State) SessionNamed(name string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

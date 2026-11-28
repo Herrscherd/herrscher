@@ -51,24 +51,45 @@ func (c IssueTriggerConfig) PollPeriod() (time.Duration, error) {
 
 func validateIssueTriggers(triggers map[string]IssueTriggerConfig) error {
 	for repo, trigger := range triggers {
-		if _, err := contracts.ParseRepoRef(repo); err != nil {
-			return fmt.Errorf("%w: %q", ErrIssueTriggerRepo, repo)
+		if err := validateIssueTrigger(repo, trigger); err != nil {
+			return err
 		}
-		if len(trigger.Labels) == 0 && len(trigger.Mentions) == 0 {
-			return fmt.Errorf("%w: %q", ErrIssueTriggerEmpty, repo)
+	}
+	return nil
+}
+
+func validateIssueTrigger(repo string, trigger IssueTriggerConfig) error {
+	if _, err := contracts.ParseRepoRef(repo); err != nil {
+		return fmt.Errorf("%w: %q", ErrIssueTriggerRepo, repo)
+	}
+	if len(trigger.Labels) == 0 && len(trigger.Mentions) == 0 {
+		return fmt.Errorf("%w: %q", ErrIssueTriggerEmpty, repo)
+	}
+	if err := validateIssueLabels(repo, trigger.Labels); err != nil {
+		return err
+	}
+	if err := validateIssueMentions(repo, trigger.Mentions); err != nil {
+		return err
+	}
+	if _, err := trigger.PollPeriod(); err != nil {
+		return fmt.Errorf("%w: %q", err, repo)
+	}
+	return nil
+}
+
+func validateIssueLabels(repo string, labels []string) error {
+	for _, label := range labels {
+		if strings.TrimSpace(label) == "" {
+			return fmt.Errorf("%w: %q", ErrIssueTriggerLabel, repo)
 		}
-		for _, label := range trigger.Labels {
-			if strings.TrimSpace(label) == "" {
-				return fmt.Errorf("%w: %q", ErrIssueTriggerLabel, repo)
-			}
-		}
-		for _, mention := range trigger.Mentions {
-			if _, err := contracts.ParseForgeLogin(strings.TrimSpace(mention)); err != nil {
-				return fmt.Errorf("%w: %q", ErrIssueTriggerMention, repo)
-			}
-		}
-		if _, err := trigger.PollPeriod(); err != nil {
-			return fmt.Errorf("%w: %q", err, repo)
+	}
+	return nil
+}
+
+func validateIssueMentions(repo string, mentions []string) error {
+	for _, mention := range mentions {
+		if _, err := contracts.ParseForgeLogin(strings.TrimSpace(mention)); err != nil {
+			return fmt.Errorf("%w: %q", ErrIssueTriggerMention, repo)
 		}
 	}
 	return nil

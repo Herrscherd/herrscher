@@ -4,11 +4,13 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/issuetrigger"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func issueTriggerTargets(triggers map[string]config.IssueTriggerConfig) ([]issuetrigger.Target, error) {
@@ -48,12 +50,22 @@ func issueTriggerFilters(trigger config.IssueTriggerConfig) ([]issuetrigger.Filt
 }
 
 func issueTriggerTask(messages *hostMessages, lang languageSource) func(contracts.ForgeRepoRef, contracts.Issue) string {
+	delimiters := strings.NewReplacer("<issue>", "&lt;issue&gt;", "</issue>", "&lt;/issue&gt;")
 	return func(_ contracts.ForgeRepoRef, issue contracts.Issue) string {
 		return messages.text(lang(), "serve.issue_task", map[string]any{
 			"Number": issue.Ref.Number(),
-			"Title":  escapeLine(issue.Title),
+			"Title":  delimiters.Replace(escapeLine(issue.Title)),
 			"URL":    escapeLine(issue.URL),
-			"Body":   escapeLines(issue.Body),
+			"Body":   delimiters.Replace(escapeLines(issue.Body)),
 		})
 	}
+}
+
+func newIssueScheduler(messages *hostMessages, options Options, triggers map[string]config.IssueTriggerConfig, store *state.State, runningHub *hub, sessions *sessionTable, clock func() time.Time, tick time.Duration) (*scheduler, error) {
+	targets, err := issueTriggerTargets(triggers)
+	if err != nil {
+		return nil, wrapHost(messages, err, "serve.issue_trigger", map[string]any{detailParam: err.Error()})
+	}
+	poller := issuetrigger.NewPoller(store, GitHubOpener(options.Forge), runningHub, sessions.Seed, issueTriggerTask(messages, options.languageSource()), clock)
+	return newScheduler(store, store, runningHub, sessions.Seed, clock, tick).withIssues(poller, targets), nil
 }

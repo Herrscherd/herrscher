@@ -15,13 +15,15 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-var (
-	errForgeDown = errors.New("forge down")
-	t0           = time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
-)
+var errForgeDown = errors.New("forge down")
+
+func epoch() time.Time {
+	return time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+}
 
 type fakeForge struct {
 	contracts.Forge
+
 	mu          sync.Mutex
 	issues      []contracts.Issue
 	mentions    map[int]string
@@ -37,7 +39,7 @@ func (f *fakeForge) touch(number int, updated time.Duration) {
 	f.version++
 	for idx := range f.issues {
 		if f.issues[idx].Ref.Number() == number {
-			f.issues[idx].UpdatedAt = t0.Add(updated)
+			f.issues[idx].UpdatedAt = epoch().Add(updated)
 		}
 	}
 }
@@ -51,7 +53,8 @@ func (f *fakeForge) add(issue contracts.Issue) {
 
 func (f *fakeForge) selected(query contracts.IssueQuery) []contracts.Issue {
 	var out []contracts.Issue
-	for _, issue := range f.issues {
+	for index := range f.issues {
+		issue := f.issues[index]
 		if !matches(issue, query, f.mentions) {
 			continue
 		}
@@ -87,7 +90,7 @@ type conditionalForge struct {
 	*fakeForge
 }
 
-func (f conditionalForge) IssuesSince(_ context.Context, repo contracts.ForgeRepoRef, query contracts.IssueQuery, page contracts.PageRequest, since contracts.Revision) (contracts.IssueListing, error) {
+func (f *conditionalForge) IssuesSince(_ context.Context, repo contracts.ForgeRepoRef, query contracts.IssueQuery, page contracts.PageRequest, since contracts.Revision) (contracts.IssueListing, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	etag := strconv.Itoa(f.version)
@@ -161,9 +164,9 @@ func newHarness(t *testing.T, conditional bool) *harness {
 	h := &harness{
 		t:       t,
 		path:    filepath.Join(t.TempDir(), "state.json"),
-		forge:   &fakeForge{mentions: map[int]string{}, conditional: conditional},
+		forge:   &fakeForge{mentions: make(map[int]string), conditional: conditional},
 		creator: &recordingCreator{},
-		clock:   t0,
+		clock:   epoch(),
 		target: Target{
 			Repo:    repo,
 			Agent:   "builder",
@@ -180,7 +183,7 @@ func newHarness(t *testing.T, conditional bool) *harness {
 func (h *harness) newPoller(store *state.State) *Poller {
 	var forgeClient contracts.Forge = h.forge
 	if h.forge.conditional {
-		forgeClient = conditionalForge{h.forge}
+		forgeClient = &conditionalForge{h.forge}
 	}
 	open := func(context.Context, contracts.ForgeHost) (contracts.Forge, error) { return forgeClient, nil }
 	seed := func(session, task string) bool {
@@ -207,7 +210,7 @@ func (h *harness) issue(number int, updated time.Duration, association contracts
 		Ref:       ref,
 		Title:     "issue",
 		Labels:    labels,
-		UpdatedAt: t0.Add(updated),
+		UpdatedAt: epoch().Add(updated),
 		Author:    contracts.ForgeActor{Login: "bob", Association: association},
 	}
 }
@@ -228,7 +231,7 @@ func TestLabelOpensOneSessionPerIssue(t *testing.T) {
 	h := newHarness(t, false)
 	h.start()
 	h.forge.add(h.issue(7, time.Minute, contracts.AssociationMember, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +252,7 @@ func TestMentionOpensASession(t *testing.T) {
 	h.start()
 	h.forge.mentions[8] = "alice"
 	h.forge.add(h.issue(8, time.Minute, contracts.AssociationCollaborator))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +267,7 @@ func TestPullRequestsAreNeverOpened(t *testing.T) {
 	pr := h.issue(9, time.Minute, contracts.AssociationMember, "ready")
 	pr.IsPullRequest = true
 	h.forge.add(pr)
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +280,7 @@ func TestUntrustedAuthorsAreNeverOpened(t *testing.T) {
 	h := newHarness(t, false)
 	h.start()
 	h.forge.add(h.issue(10, time.Minute, contracts.AssociationNone, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +293,7 @@ func TestUnchangedListingCostsNothing(t *testing.T) {
 	h := newHarness(t, true)
 	h.start()
 	h.forge.add(h.issue(11, time.Minute, contracts.AssociationOwner, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	for range 2 {
 		if err := h.poll(t); err != nil {
 			t.Fatal(err)
@@ -312,7 +315,7 @@ func TestRestartDoesNotOpenTheSameIssueAgain(t *testing.T) {
 	h := newHarness(t, false)
 	h.start()
 	h.forge.add(h.issue(12, time.Minute, contracts.AssociationMember, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +325,7 @@ func TestRestartDoesNotOpenTheSameIssueAgain(t *testing.T) {
 	}
 	h.poller = h.newPoller(restored)
 	h.forge.add(h.issue(13, 3*time.Minute, contracts.AssociationMember))
-	h.clock = t0.Add(4 * time.Minute)
+	h.clock = epoch().Add(4 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +338,7 @@ func TestConcurrentTicksOpenOneSession(t *testing.T) {
 	h := newHarness(t, false)
 	h.start()
 	h.forge.add(h.issue(14, time.Minute, contracts.AssociationMember, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	other := h.newPoller(h.store)
 	var wg sync.WaitGroup
 	for _, poller := range []*Poller{h.poller, other} {
@@ -358,7 +361,7 @@ func TestForgeErrorKeepsTheWatermark(t *testing.T) {
 	h.start()
 	watermark := h.store.IssueTriggerRepo("github.com/Herrscherd/herrscher").Watches["label:ready"].Since
 	h.forge.add(h.issue(15, time.Minute, contracts.AssociationMember, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	h.forge.failNext = true
 	if err := h.poll(t); !errors.Is(err, errForgeDown) {
 		t.Fatalf("poll error = %v, want the forge error", err)
@@ -381,7 +384,7 @@ func TestEveryIssueOpensExactlyOnceAcrossTicks(t *testing.T) {
 	for number := 20; number < 28; number++ {
 		h.forge.add(h.issue(number, time.Minute, contracts.AssociationMember, "ready"))
 	}
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	for tick, want := range []int{3, 6, 8} {
 		if err := h.poll(t); err != nil {
 			t.Fatal(err)
@@ -390,7 +393,7 @@ func TestEveryIssueOpensExactlyOnceAcrossTicks(t *testing.T) {
 			t.Fatalf("after tick %d sessions = %d, want %d", tick+1, h.creator.count(), want)
 		}
 	}
-	names := map[string]bool{}
+	names := make(map[string]bool)
 	for _, spec := range h.creator.sessions {
 		if names[spec.Name] {
 			t.Fatalf("session %q opened twice", spec.Name)
@@ -403,7 +406,7 @@ func TestCreateFailureReleasesTheIssueForTheNextRead(t *testing.T) {
 	h := newHarness(t, false)
 	h.start()
 	h.forge.add(h.issue(16, time.Minute, contracts.AssociationMember, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	h.creator.failNext = true
 	if err := h.poll(t); !errors.Is(err, errCreate) {
 		t.Fatalf("poll error = %v, want the create error", err)
@@ -419,11 +422,56 @@ func TestCreateFailureReleasesTheIssueForTheNextRead(t *testing.T) {
 	}
 }
 
+func TestAFailedIssueIsRetriedWhileALaterOneOpens(t *testing.T) {
+	h := newHarness(t, false)
+	h.start()
+	h.forge.add(h.issue(16, time.Minute, contracts.AssociationMember, "ready"))
+	h.forge.add(h.issue(17, 2*time.Minute, contracts.AssociationMember, "ready"))
+	h.clock = epoch().Add(3 * time.Minute)
+	h.creator.failNext = true
+	if err := h.poll(t); !errors.Is(err, errCreate) {
+		t.Fatalf("first poll error = %v, want the create error", err)
+	}
+	if err := h.poll(t); err != nil {
+		t.Fatal(err)
+	}
+	if h.creator.count() != 2 {
+		t.Fatalf("sessions = %d, want 2: the refused issue must not be lost", h.creator.count())
+	}
+}
+
+func TestAnEvictedIssueReopensOnlyAfterItsSessionIsRemoved(t *testing.T) {
+	h := newHarness(t, false)
+	h.start()
+	h.forge.add(h.issue(1, time.Minute, contracts.AssociationMember, "ready"))
+	h.clock = epoch().Add(2 * time.Minute)
+	if err := h.poll(t); err != nil {
+		t.Fatal(err)
+	}
+	repo := h.target.Repo.String()
+	for number := 100; number < 400; number++ {
+		if _, err := h.store.ClaimIssue(repo, number, SessionName(h.target.Repo, number)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := h.store.RemoveSession(SessionName(h.target.Repo, 1)); err != nil {
+		t.Fatal(err)
+	}
+	h.forge.touch(1, 5*time.Minute)
+	h.clock = epoch().Add(6 * time.Minute)
+	if err := h.poll(t); err != nil {
+		t.Fatal(err)
+	}
+	if h.creator.count() != 2 {
+		t.Fatalf("sessions = %d, want 2: an evicted issue reopens once its session is gone", h.creator.count())
+	}
+}
+
 func TestAnEvictedIssueUpdatedAgainDoesNotReopen(t *testing.T) {
 	h := newHarness(t, false)
 	h.start()
 	h.forge.add(h.issue(1, time.Minute, contracts.AssociationMember, "ready"))
-	h.clock = t0.Add(2 * time.Minute)
+	h.clock = epoch().Add(2 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +482,7 @@ func TestAnEvictedIssueUpdatedAgainDoesNotReopen(t *testing.T) {
 		}
 	}
 	h.forge.touch(1, 5*time.Minute)
-	h.clock = t0.Add(6 * time.Minute)
+	h.clock = epoch().Add(6 * time.Minute)
 	if err := h.poll(t); err != nil {
 		t.Fatal(err)
 	}

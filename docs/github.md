@@ -274,11 +274,19 @@ The rules that apply to every trigger:
 - Only issues whose author is an owner, a member or a collaborator of the
   repository open a session. Pull requests never do.
 - An issue opens at most one session, even after a restart or when two reads
-  meet. The session is named `issue-<namespace>-<repository>-<number>`. An issue
-  whose session already exists opens no other one, even after herrscher has
-  forgotten it as taken. If the session could not be created, the issue is
-  released and the next read tries again. A session that is created but gets no
-  task is not retried.
+  meet. If the session could not be created, the issue is released and the next
+  read tries again. A session that is created but gets no task is not retried.
+- The session name is built from the repository and the issue number:
+  `issue-<namespace>-<repository>-<number>`. Every character of the namespace and
+  repository that is not an ASCII letter, a digit or `_` becomes `-`. If the name
+  would be longer than 64 characters, the text before the number is cut (and its
+  trailing dashes removed) so that the whole name is exactly 64 characters or
+  fewer. The number is always kept. When a session with the name already exists,
+  the issue is skipped and a warning is logged, and no second session is opened.
+- Herrscher remembers the 200 most recently taken issues of each repository. When
+  an older issue is forgotten and updated again, it opens a session again only if
+  its session has been removed. While the session exists, the issue stays linked
+  to it and opens nothing.
 - The session starts with the issue number, its title, its URL and its body,
   cleaned for the terminal. The trigger posts no comment on the issue.
 - The first read of a repository starts from the moment herrscher first reads
@@ -288,7 +296,9 @@ The rules that apply to every trigger:
   off.
 - A repository is read at most once per `period`. One read opens at most three
   sessions, and it reads at most 2000 issues.
-- A read that fails is retried on the next scheduler tick, one minute later.
+- A read that fails does not move the start of the next read. It is retried on
+  the next scheduler tick, one minute later, for as long as the forge keeps
+  failing. The failure is logged as a warning.
 
 ## Troubleshooting
 

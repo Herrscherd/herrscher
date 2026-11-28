@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -115,9 +116,9 @@ func (h *Handler) resolveHost(input contracts.Input, agentName string) string {
 	return hostName
 }
 
-func (h *Handler) checkHostReady(hostName string) error {
+func (h *Handler) checkHostReady(ctx context.Context, hostName string) error {
 	if hostName == "" || h.hs == nil {
 		return nil
 	}
-	return h.hs.Ready(hostName)
+	return h.hs.Ready(ctx, hostName)
 }

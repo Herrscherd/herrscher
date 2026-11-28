@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -22,7 +23,7 @@ func remoteSupervisor(t *testing.T) *Supervisor {
 		}
 		return Placement{}, false
 	})
-	s.remoteDirOf = func(context.Context, string, string) (string, error) { return remoteDirForTest, nil }
+	s.remoteDirOf = func(context.Context, runner.SSH) (string, error) { return remoteDirForTest, nil }
 	return s
 }
 

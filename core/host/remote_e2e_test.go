@@ -233,7 +233,7 @@ func remoteSocketDir(ctx context.Context, t *testing.T, layout RuntimeLayout, ta
 		t.Fatal(err)
 	}
 	removeRemoteRuntimeDirOnExitIfCreated(ctx, t, target)
-	dir, err := runner.RemoteRuntimeDir(ctx, target, controlPath)
+	dir, err := runner.RemoteRuntimeDir(ctx, runner.SSH{Target: target, ControlPath: controlPath})
 	if err != nil {
 		t.Fatalf("remote runtime dir: %v", err)
 	}

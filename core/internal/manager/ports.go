@@ -74,7 +74,7 @@ type Hosts interface {
 	// included. It is asked at create time only: an existing session must stay
 	// closable on a host this daemon would no longer start one on, and removing
 	// a worktree over there needs no agreement on versions.
-	Ready(name string) error
+	Ready(ctx context.Context, name string) error
 	// Worktrees returns the worktree implementation for a host name. An empty
 	// name is this machine.
 	Worktrees(name string) (Worktrees, error)

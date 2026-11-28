@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -48,6 +49,7 @@ func (Local) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 type SSH struct {
 	Target      string
 	ControlPath string
+	KnownHosts  string
 	Forwards    []Forward
 }
 
@@ -56,7 +58,19 @@ func (s SSH) Describe() string { return s.Target }
 
 func (s SSH) options() []string {
 	opts := []string{"-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10"}
+	opts = append(opts, s.hostKeyPolicy()...)
 	return append(opts, s.multiplex()...)
+}
+
+func (s SSH) hostKeyPolicy() []string {
+	if s.KnownHosts == "" {
+		return nil
+	}
+	return []string{
+		"-o", "StrictHostKeyChecking=yes",
+		"-o", "UserKnownHostsFile=\"" + s.KnownHosts + "\"",
+		"-o", "GlobalKnownHostsFile=" + os.DevNull,
+	}
 }
 
 func (s SSH) multiplex() []string {
@@ -101,14 +115,15 @@ func (s SSH) PrepareForwards(ctx context.Context) *exec.Cmd {
 	for _, f := range s.Forwards {
 		argv = append(argv, f.Remote)
 	}
-	bare := SSH{Target: s.Target, ControlPath: s.ControlPath}
+	bare := SSH{Target: s.Target, ControlPath: s.ControlPath, KnownHosts: s.KnownHosts}
 	return s.command(ctx, "ssh", append(bare.options(), "--", bare.Target, script("", argv))...)
 }
 
 // Copy puts a local file at dst on the target, over the same multiplexed
 // connection the commands use.
 func (s SSH) Copy(ctx context.Context, src, dst string) *exec.Cmd {
-	args := append([]string{"-o", "BatchMode=yes"}, s.multiplex()...)
+	args := append([]string{"-o", "BatchMode=yes"}, s.hostKeyPolicy()...)
+	args = append(args, s.multiplex()...)
 	return s.command(ctx, "scp", append(args, "--", src, s.Target+":"+dst)...)
 }
 

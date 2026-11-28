@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/filelock"
+	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
@@ -115,6 +116,21 @@ func hostErrorKeys() []hostErrorKey {
 		{errEnvRequestUnheard, "cli.host.fault.env_request_unheard"},
 		{errEnvQuote, "cli.host.fault.env_quote"},
 		{errSelfToolsSilent, "cli.host.fault.self_tools_silent"},
+		{errHostKeyMismatch, clitext.HostFaultKeyMismatch},
+		{errHostKeyChanged, clitext.HostFaultKeyChanged},
+		{errHostKeyPinMissing, clitext.HostFaultKeyPinMissing},
+		{errHostFull, clitext.HostFaultHostFull},
+		{errHostWaitLimit, clitext.HostFaultWaitLimit},
+		{errProjectNotAllowed, clitext.HostFaultProjectDenied},
+		{errMaxSessionsInvalid, clitext.HostFaultMaxInvalid},
+		{errHostUnreachable, clitext.HostFaultUnreachable},
+		{errSetConflict, clitext.HostFaultSetConflict},
+		{errSetNothing, clitext.HostFaultSetNothing},
+		{state.ErrUnknownFullPolicy, clitext.HostFaultWhenFullInvalid},
+		{runner.ErrHostKeyUnreadable, clitext.HostFaultKeyUnreadable},
+		{runner.ErrBinaryChanged, clitext.HostFaultBinaryChanged},
+		{runner.ErrDigestUnreadable, clitext.HostFaultDigestUnread},
+		{runner.ErrKnownHostsPath, clitext.HostFaultKnownHostsPath},
 	}
 }
 

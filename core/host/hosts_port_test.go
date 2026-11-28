@@ -40,7 +40,7 @@ func TestPlacerRefusesAnUnprovisionedHost(t *testing.T) {
 
 func TestPlacerRefusesAVersionDrift(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher", Version: "abc1234"}, "def5678")
-	err := p.Ready("build1")
+	err := p.Ready(t.Context(), "build1")
 	var drift *hostVersionMismatchError
 	if !errors.As(err, &drift) {
 		t.Fatalf("a host running another build must refuse as a version mismatch, got %v", err)
@@ -59,17 +59,17 @@ func TestPlacerRefusesAVersionDrift(t *testing.T) {
 func TestPlacerReadyRefusesAnUnprovisionedHost(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work"}, "")
 	var notProvisioned *hostNotProvisionedError
-	if err := p.Ready("build1"); !errors.As(err, &notProvisioned) {
+	if err := p.Ready(t.Context(), "build1"); !errors.As(err, &notProvisioned) {
 		t.Fatalf("a host with no binary must be refused as not provisioned, got %v", err)
 	}
-	if err := p.Ready(""); err != nil {
+	if err := p.Ready(t.Context(), ""); err != nil {
 		t.Fatalf("this machine is always ready, got %v", err)
 	}
 }
 
 func TestPlacerAcceptsWhenTheSourceVersionIsUnknown(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher", Version: "abc1234"}, "")
-	if err := p.Ready("build1"); err != nil {
+	if err := p.Ready(t.Context(), "build1"); err != nil {
 		t.Fatalf("nothing to compare against is not a drift, got %v", err)
 	}
 	ws, err := p.Workspace("build1")

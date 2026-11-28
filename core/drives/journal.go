@@ -425,35 +425,58 @@ func (j Journal) pruneFiles(now time.Time) error {
 	if err != nil {
 		return err
 	}
-	var kept []journalFile
-	var total int64
+	kept, err := dropIdle(files, now)
+	if err != nil {
+		return err
+	}
+	return dropPastCap(kept)
+}
+
+func dropIdle(files []journalFile, now time.Time) ([]journalFile, error) {
+	kept := make([]journalFile, 0, len(files))
 	for _, file := range files {
-		if !file.operator() && now.Sub(file.modified) > JournalRetention {
-			if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return err
-			}
+		if file.operator() || now.Sub(file.modified) <= JournalRetention {
+			kept = append(kept, file)
 			continue
 		}
-		kept = append(kept, file)
+		if err := removeJournalFile(file); err != nil {
+			return nil, err
+		}
+	}
+	return kept, nil
+}
+
+func dropPastCap(files []journalFile) error {
+	var total int64
+	for _, file := range files {
 		total += file.size
 	}
-	slices.SortFunc(kept, func(left, right journalFile) int {
-		if left.operatorWrites() != right.operatorWrites() {
-			if left.operatorWrites() {
-				return 1
-			}
-			return -1
-		}
-		return left.modified.Compare(right.modified)
-	})
-	for _, file := range kept {
+	slices.SortFunc(files, pruneOrder)
+	for _, file := range files {
 		if total <= JournalMaxBytes {
-			break
+			return nil
 		}
-		if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := removeJournalFile(file); err != nil {
 			return err
 		}
 		total -= file.size
+	}
+	return nil
+}
+
+func pruneOrder(left, right journalFile) int {
+	if left.operatorWrites() == right.operatorWrites() {
+		return left.modified.Compare(right.modified)
+	}
+	if left.operatorWrites() {
+		return 1
+	}
+	return -1
+}
+
+func removeJournalFile(file journalFile) error {
+	if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
 	return nil
 }

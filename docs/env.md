@@ -33,7 +33,7 @@ The variables below are the ones the host and the bundled plugins read.
 | `HERRSCHER_SELF_TOOLS` | on | `off` (or `0`, `false`, `no`) stops declaring the `herrscher` MCP server in session worktrees; it wins over `selfTools.enabled` in `config.json`. See [Self tools](self-tools.md). | Host |
 | `HERRSCHER_SELF_TOOLS_EXPOSE` | `core` | `all` gives every daemon verb a tool of its own in `herrscher mcp`; `core` gives the everyday reads a tool and reaches the rest through `herrscher_run`. Wins over `selfTools.expose`. | `herrscher mcp`, Host |
 | `HERRSCHER_SELF_TOOLS_BYTES` | set by the daemon | The weight of the self tools declarations, handed to each bridge so it reports it in the turn's context sizes. | Bridge |
-| `HERRSCHER_CONTEXT_DELTA` | off | `1`, `true`, `on` or `yes` makes the bridge resend an injected context block only when its content changed in the same session, for backends that keep their own history. Wins over `contextDelta.enabled` in `config.json`. See [Observability](observability.md#context-resend-on-change). | Host, Bridge |
+| `HERRSCHER_CONTEXT_DELTA` | off | `1`, `true`, `on` or `yes` turns on the daemon default for resending an injected context block only when its content changed in the same session, for backends that keep their own history. The agent's `<home>/context-delta` file wins over it, and it wins over `contextDelta.enabled` in `config.json`. See [Observability](observability.md#context-resend-on-change). | Host, Bridge |
 
 Each agent can have its own bot on a gateway. Its token is the variable
 `<KIND>_BOT_TOKEN_<NAME>`, the gateway kind and the agent name in capitals with

@@ -421,17 +421,22 @@ the reason in this table. No other exclusion in the file is described here.
 ## Context resend on change
 
 Each turn, the bridge prepends a context block to the user message: memory recall,
-skills, delegation, capabilities, identity and self tools. Most backends keep their own
-history, so a block sent on an earlier turn is still in front of the model. With the
-switch on, a block whose content has not changed since it was last sent in the same
-session is left out of the next prompt. `/context` then reports what was sent this
-turn, so a block left out counts 0 tokens and the parts stay measured.
+skills, delegation, capabilities, identity and self tools. A backend that keeps its own
+history still has a block sent on an earlier turn in front of the model. With the switch
+on, a block whose content has not changed since it was last sent in the same session is
+left out of the next prompt.
 
-The switch is off by default. It is set for the whole daemon, not per agent or per
-session:
+The switch is off by default. It is set per agent, with a file in the agent home, or for
+the whole daemon:
 
-- `HERRSCHER_CONTEXT_DELTA=1` (or `true`, `on`, `yes`), which wins over
-- `contextDelta.enabled: true` in `config.json`.
+- `<home>/context-delta` holds `on` or `off` (or `1`, `true`, `yes`, `0`, `false`, `no`).
+  It wins over the daemon default. A file that is absent, empty or holds another value
+  leaves the daemon default in force.
+- The daemon default is `HERRSCHER_CONTEXT_DELTA=1` (or `true`, `on`, `yes`), which wins
+  over `contextDelta.enabled: true` in `config.json`.
+
+A bridge process serves one session on one backend, so there is no backend switch inside
+a process to reset for: the ledger is per bridge process and starts empty with it.
 
 ### Where each backend places the context
 
@@ -455,8 +460,9 @@ Sources are the module versions pinned in `go.mod` at the time of writing.
 
 A backend keeps history for this feature when it exposes a non-empty resume token
 (`contracts.ResumeAware`). That signal is a proxy: the bridge cannot see the vendor's
-history, only the token. A backend that answers without one gets the full context on every
-turn.
+history, only the token. The explicit capability flag (`KeepsHistory`) comes from the
+contracts lot of #209; until it lands, a backend that answers without a token gets the
+full context on every turn.
 
 ### Digests and reset triggers
 
@@ -467,20 +473,38 @@ when any of these happens first:
 - the vendor resume token changed, or was lost after the turn;
 - the backend announced a resume notice, or reset its attempt during the turn;
 - the turn failed;
-- a compaction or a history prune ran (`compactwire.EventRequest`, `historywire.EventPrune`).
+- a compaction or a history prune ran (`compactwire.EventRequest`, `historywire.EventPrune`);
+- the turn is a slash command (`/...`, after leading spaces): the backend sends a slash
+  turn's text without the context, so the model holds nothing new from it;
+- the input size reported by the last `usage` event reached 100 000 tokens before the turn,
+  the vendor may compact the history during it;
+- the input size reported by a `usage` event fell below half of the one before it, which
+  is what a compaction looks like from the stream.
 
 A turn without a session incarnation, and every one-shot path, always sends everything.
 A reset that lands while a turn is in flight is not committed, so a stale digest is never
-stored.
+stored. The ledger is guarded by a mutex, since a backend may call its event handler from
+another goroutine than the one that runs the turn.
 
-### Open risk
+### Vendor compaction: what is covered and what is not
 
-Vendor-side automatic compaction is not visible on the live stream (the claude
-`compact_boundary` marker appears only in the transcript). If the vendor drops a block
-on its own, the bridge cannot see it and may leave that block out while the model no
-longer has it. This is the reason the switch stays off by default. `/context` also cannot
-show the full size of an omitted block: that needs a contracts field, recorded as a
-follow-up.
+The claude backend (v0.19.1) does not relay the `compact_boundary` system message to the
+bridge: its parser keeps only the `init` and `api_retry` subtypes. So a compaction the
+vendor runs on its own is seen only through the `usage` events, as described above. The
+100 000 token floor is a fixed, conservative value, not the session's own
+`AutoCompactPercent` times its `ContextWindow`: the bridge does not receive those per
+session. A session that compacts below the floor is caught only after the turn, by the
+drop rule, so that one turn may leave out a block the model no longer holds. This is the
+reason the switch stays off by default. A contracts event for vendor compaction and the
+explicit omitted flag belong to the contracts lot of #209; when they land, they become
+extra triggers, not replacements.
+
+### `/context`
+
+An omitted block is still in the model's window, so `/context` reports its full estimated
+size, not 0: the sizes add up to what the vendor's gauge counts. The bridge does not tell
+the operator per turn that a block was left out; that needs the explicit omitted flag of
+the contracts lot.
 
 ## Also
 

@@ -16,12 +16,22 @@
   },
   {
     "id": "skills.menu.more",
-    "description": "Avis dans le menu des compétences quand un budget de jetons en a masqué, Count porte leur nombre",
-    "other": "{{.Count}} autres compétences existent et ne sont pas listées ici. Pour toutes les lister, l'utilisateur peut lancer /skills dans le terminal."
+    "description": "Avis dans le menu des compétences quand un budget de jetons en a masqué, Count porte leur nombre, Dirs les dossiers qui contiennent toutes les compétences",
+    "other": "Compétences masquées de cette liste : {{.Count}}. Chaque compétence est un dossier contenant un fichier SKILL.md, et les masquées se trouvent dans ces dossiers : {{.Dirs}}."
   },
   {
     "id": "skills.expansion.cut",
     "description": "Avis après un corps de compétence coupé par le budget de jetons des expansions, Name est la compétence et Path le fichier à lire en entier",
     "other": "La compétence {{.Name}} est coupée ici pour tenir dans le budget des compétences. Pour la lire en entier, ouvre {{.Path}}."
+  },
+  {
+    "id": "skills.budget.malformed",
+    "description": "Erreur quand le fichier skills-budget d'un agent ne se lit pas ou ne se parse pas, Agent est l'agent et Detail la cause",
+    "other": "Le budget des compétences de l'agent {{.Agent}} est illisible ({{.Detail}}). Corrige ou supprime son fichier skills-budget."
+  },
+  {
+    "id": "skills.budget.floor",
+    "description": "Erreur quand menuTokens du budget des compétences est sous le coût fixe du menu, Menu est le budget et Floor le minimum requis",
+    "other": "Le budget du menu des compétences ({{.Menu}} jetons) est inférieur aux {{.Floor}} jetons qu'il faut au menu, même sans aucune compétence. Augmente menuTokens dans le fichier skills-budget de l'agent."
   }
 ]

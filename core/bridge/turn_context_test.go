@@ -42,10 +42,11 @@ func TestTurnContextKeepsEveryBlockInItsOrder(t *testing.T) {
 		roster: stubRoster{agents: []contracts.AgentInfo{{Name: "codex", Backend: "codex"}}},
 		caps:   "  session: list",
 		user:   identity.Identity{Name: "Jane Doe"},
+		skillMessages: newBridgeMessages(),
 	}
 	got := composeTurnContext("MEM", eng, aff, "", i18n.English).String()
-	want := strings.Join([]string{"MEM", eng.Menu("", newSkillNotices(i18n.English)), delegationBlock(aff.roster), capabilitiesBlock(aff.caps), identityBlock(aff.user)}, blockSeparator)
-	if eng.Menu("", newSkillNotices(i18n.English)) == "" || got != want {
+	want := strings.Join([]string{"MEM", eng.Menu("", newSkillNotices(i18n.English, aff.skillMessages)), delegationBlock(aff.roster), capabilitiesBlock(aff.caps), identityBlock(aff.user)}, blockSeparator)
+	if eng.Menu("", newSkillNotices(i18n.English, aff.skillMessages)) == "" || got != want {
 		t.Fatalf("turn context:\n got %q\nwant %q", got, want)
 	}
 }

@@ -24,7 +24,7 @@ type turnContext struct {
 func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances, message string, lang i18n.Language) turnContext {
 	return turnContext{blocks: []injectedBlock{
 		{part: contracts.ContextMemory, text: memCtx},
-		{part: contracts.ContextSkills, text: skillsBlock(eng, message, lang)},
+		{part: contracts.ContextSkills, text: skillsBlock(eng, message, lang, aff.skillMessages)},
 		{part: contracts.ContextDelegation, text: delegationBlock(aff.roster)},
 		{part: contracts.ContextCapabilities, text: capabilitiesBlock(aff.caps)},
 		{part: contracts.ContextIdentity, text: identityBlock(aff.user)},
@@ -52,11 +52,11 @@ func (c turnContext) sizes() []contracts.InjectedPart {
 	return parts
 }
 
-func skillsBlock(eng *skills.Engine, message string, lang i18n.Language) string {
+func skillsBlock(eng *skills.Engine, message string, lang i18n.Language, messages *bridgeMessages) string {
 	if eng == nil {
 		return ""
 	}
-	notes := newSkillNotices(lang)
+	notes := newSkillNotices(lang, messages)
 	parts := make([]string, 0, skillPartsCap)
 	if menu := eng.Menu(message, notes); menu != "" {
 		parts = append(parts, menu)

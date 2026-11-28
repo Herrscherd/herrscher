@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 func TestNewSkillEngineConfigStates(t *testing.T) {
@@ -27,7 +29,10 @@ func TestNewSkillEngineConfigStates(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			got := newSkillEngine(nil)
+			got, err := newSkillEngine(nil, skills.Budget{}, newBridgeMessages())
+			if err != nil {
+				t.Fatalf("newSkillEngine: %v", err)
+			}
 			if (got == nil) != tc.wantNil {
 				t.Fatalf("newSkillEngine nil=%v, want nil=%v", got == nil, tc.wantNil)
 			}

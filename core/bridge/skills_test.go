@@ -54,22 +54,14 @@ func writeBridgeSkill(t *testing.T, workspace, name, front, body string) {
 	}
 }
 
-func TestSkillRootsOrder(t *testing.T) {
-	roots := skillRoots("/work/repo", []string{"/opt/x"})
-	if roots[0] != filepath.Join(string(filepath.Separator), "work", "repo", ".claude", "skills") {
-		t.Fatalf("workspace root must come first, got %v", roots)
-	}
-	if roots[len(roots)-1] != "/opt/x" {
-		t.Fatalf("extra roots must come last, got %v", roots)
-	}
-}
-
 func TestNewSkillEngineNilForNativeBackend(t *testing.T) {
-	if eng := newSkillEngine(nativeBackend{}); eng != nil {
-		t.Fatalf("native backend must get no engine")
+	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
+	messages := newBridgeMessages()
+	if eng, err := newSkillEngine(nativeBackend{}, skills.Budget{}, messages); eng != nil || err != nil {
+		t.Fatalf("native backend must get no engine and no error, got %v, %v", eng, err)
 	}
-	if eng := newSkillEngine(plainBackend{}); eng == nil {
-		t.Fatalf("non-native backend must get an engine")
+	if eng, err := newSkillEngine(plainBackend{}, skills.Budget{}, messages); eng == nil || err != nil {
+		t.Fatalf("non-native backend must get an engine, got %v, %v", eng, err)
 	}
 }
 

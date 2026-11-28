@@ -16,5 +16,8 @@ func EstimateBytes(size int) int {
 
 // BytesForTokens is the largest size in bytes whose estimate fits in tokens.
 func BytesForTokens(tokens int) int {
+	if tokens <= 0 {
+		return 0
+	}
 	return tokens * bytesPerToken
 }

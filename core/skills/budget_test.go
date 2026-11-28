@@ -11,7 +11,13 @@ import (
 
 type testNotices struct{}
 
-func (testNotices) MenuMore(hidden int) string { return fmt.Sprintf("MORE %d", hidden) }
+func (testNotices) MenuMore(hidden int, _ []string) string { return fmt.Sprintf("MORE %d", hidden) }
+
+type dirNotices struct{ testNotices }
+
+func (dirNotices) MenuMore(hidden int, dirs []string) string {
+	return fmt.Sprintf("MORE %d %s", hidden, strings.Join(dirs, ","))
+}
 
 func (testNotices) ExpansionCut(name, path string) string { return "CUT " + name + " " + path }
 
@@ -185,4 +191,43 @@ func menuTokensShowing(e *Engine, message string, count int) int {
 		shown[name] = true
 	}
 	return contextwindow.EstimateTokens(e.renderMenu(shown, len(e.order)-count, testNotices{}))
+}
+
+func TestMenuNeverExceedsBudgetWithoutActiveSkills(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"deploy", "rollout", "zebra", "yak"} {
+		writeSkill(t, root, name, "name: "+name+"\ndescription: kubernetes notes about "+name+"\n", "X\n")
+	}
+	e := NewEngine([]string{root})
+	full := contextwindow.EstimateTokens(e.Menu("kubernetes", testNotices{}))
+	floor := e.MenuFloor(testNotices{})
+	if floor <= 0 || floor >= full {
+		t.Fatalf("floor %d must be positive and below the full menu %d", floor, full)
+	}
+	for budget := floor; budget <= full; budget++ {
+		e.SetBudget(Budget{Menu: budget})
+		menu := e.Menu("kubernetes", testNotices{})
+		if got := contextwindow.EstimateTokens(menu); got > budget {
+			t.Fatalf("menu of %d tokens overflows budget %d:\n%s", got, budget, menu)
+		}
+	}
+}
+
+func TestMenuFloorIsZeroWithoutSkills(t *testing.T) {
+	e := NewEngine([]string{t.TempDir()})
+	if got := e.MenuFloor(testNotices{}); got != 0 {
+		t.Fatalf("an empty engine needs no menu, got floor %d", got)
+	}
+}
+
+func TestMenuNoticeNamesTheDirectoriesOfTheRoots(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	writeSkill(t, first, "alpha", "name: alpha\ndescription: first\n", "A\n")
+	writeSkill(t, second, "beta", "name: beta\ndescription: second\n", "B\n")
+	e := NewEngine([]string{first, second})
+	e.SetBudget(Budget{Menu: 1})
+	menu := e.Menu("unrelated", dirNotices{})
+	if !strings.Contains(menu, "MORE 2 "+first+","+second) {
+		t.Fatalf("notice must name every root so the model can read the hidden skills:\n%s", menu)
+	}
 }

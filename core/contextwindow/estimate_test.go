@@ -30,3 +30,11 @@ func TestBytesForTokensFitsExactlyTheEstimate(t *testing.T) {
 		}
 	}
 }
+
+func TestBytesForTokensNonPositiveIsZero(t *testing.T) {
+	for _, tokens := range []int{0, -1, -250} {
+		if got := BytesForTokens(tokens); got != 0 {
+			t.Fatalf("BytesForTokens(%d) = %d, want 0", tokens, got)
+		}
+	}
+}

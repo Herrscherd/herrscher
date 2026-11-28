@@ -90,7 +90,7 @@ func (e *Engine) renderMenu(shown map[string]bool, hidden int, notes Notices) st
 		buf.WriteByte('\n')
 	}
 	if hidden > 0 {
-		buf.WriteString(notes.MenuMore(hidden))
+		buf.WriteString(notes.MenuMore(hidden, e.roots))
 		buf.WriteByte('\n')
 	}
 	buf.WriteString("</skills>")

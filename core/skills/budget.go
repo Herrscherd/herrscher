@@ -4,16 +4,12 @@ import (
 	"cmp"
 	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 )
 
-const (
-	minWordRunes = 3
-	nameWeight   = 2
-)
+const nameWeight = 2
 
 // Budget caps the skill text injected each turn, in estimated tokens. A zero or
 // negative field leaves that block unbounded.
@@ -26,8 +22,18 @@ type Budget struct {
 // hidden skill is named and can still be read in full. The caller supplies the
 // localized text.
 type Notices interface {
-	MenuMore(hidden int) string
+	MenuMore(hidden int, dirs []string) string
 	ExpansionCut(name, path string) string
+}
+
+// MenuFloor is the fewest tokens a menu takes when no skill is listed: its header
+// and the notice that counts every skill as hidden. A menu budget below it cannot
+// be honored, so the caller rejects it.
+func (e *Engine) MenuFloor(notes Notices) int {
+	if len(e.order) == 0 {
+		return 0
+	}
+	return contextwindow.EstimateTokens(e.renderMenu(map[string]bool{}, len(e.order), notes))
 }
 
 func (e *Engine) selectMenu(message string, notes Notices) (map[string]bool, int) {
@@ -87,19 +93,6 @@ func relevance(words map[string]bool, skill Skill) int {
 		}
 	}
 	return score
-}
-
-func wordSet(text string) map[string]bool {
-	words := make(map[string]bool)
-	fields := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	})
-	for _, field := range fields {
-		if utf8.RuneCountInString(field) >= minWordRunes {
-			words[field] = true
-		}
-	}
-	return words
 }
 
 func fitTokens(body string, tokens int) string {

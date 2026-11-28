@@ -31,7 +31,7 @@ func TestRemoteSocketsLiveInTheRemotePrivateDir(t *testing.T) {
 func TestRemoteRuntimeDirIsResolvedAtEverySessionStart(t *testing.T) {
 	s := remoteSupervisor(t)
 	calls := 0
-	s.remoteDirOf = func(context.Context, string, string) (string, error) {
+	s.remoteDirOf = func(context.Context, runner.SSH) (string, error) {
 		calls++
 		return remoteDirForTest, nil
 	}
@@ -47,7 +47,7 @@ func TestRemoteRuntimeDirIsResolvedAtEverySessionStart(t *testing.T) {
 
 func TestALaunchRefusesWhenTheRemoteDirCannotBePrepared(t *testing.T) {
 	s := remoteSupervisor(t)
-	s.remoteDirOf = func(context.Context, string, string) (string, error) {
+	s.remoteDirOf = func(context.Context, runner.SSH) (string, error) {
 		return "", runner.ErrRemoteRuntimeDir
 	}
 	_, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Host: "build1"})
@@ -58,7 +58,7 @@ func TestALaunchRefusesWhenTheRemoteDirCannotBePrepared(t *testing.T) {
 
 func TestPrepareRemoteFailsTheStartWhenTheRemoteDirCannotBePrepared(t *testing.T) {
 	s := remoteSupervisor(t)
-	s.remoteDirOf = func(context.Context, string, string) (string, error) {
+	s.remoteDirOf = func(context.Context, runner.SSH) (string, error) {
 		return "", runner.ErrRemoteRuntimeDir
 	}
 	cmd, err := s.prepareRemote(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Host: "build1"})
@@ -97,7 +97,7 @@ func TestAnOptionShapedHostIsRefusedBeforeAnySSHCommand(t *testing.T) {
 	s.SetHostLookup(func(string) (Placement, bool) {
 		return Placement{SSH: "-oProxyCommand=sh", Bin: "/home/me/.herrscher/bin/herrscher"}, true
 	})
-	s.remoteDirOf = func(context.Context, string, string) (string, error) {
+	s.remoteDirOf = func(context.Context, runner.SSH) (string, error) {
 		t.Fatal("the remote directory was probed for a target ssh would read as an option")
 		return "", nil
 	}

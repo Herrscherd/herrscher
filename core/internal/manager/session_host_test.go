@@ -22,7 +22,7 @@ type fakeHosts struct {
 	ensured      []string
 }
 
-func (f *fakeHosts) Ready(name string) error {
+func (f *fakeHosts) Ready(_ context.Context, name string) error {
 	if err := f.check(name); err != nil {
 		return err
 	}

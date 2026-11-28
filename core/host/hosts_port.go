@@ -3,10 +3,14 @@ package host
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
@@ -14,6 +18,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
+)
+
+const (
+	defaultHostWaitLimit    = 10 * time.Minute
+	defaultHostPollInterval = 5 * time.Second
 )
 
 type hostPlacer struct {
@@ -25,10 +34,14 @@ type hostPlacer struct {
 	local         *worktree.Worktreer
 	sourceVersion func() string
 	newRemote     func(runner.SSH, string) *worktree.Remote
+	cli           *clitext.Messages
+	waitLimit     time.Duration
+	pollInterval  time.Duration
 }
 
 func newHostPlacer(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
+		cli:           cliMessages,
 		messages:      messages,
 		lang:          lang,
 		warn:          warn,
@@ -39,6 +52,8 @@ func newHostPlacer(messages *hostMessages, cliMessages *clitext.Messages, lang l
 		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
 			return worktree.NewRemote(cliMessages, r, bin, instanceID)
 		},
+		waitLimit:    defaultHostWaitLimit,
+		pollInterval: defaultHostPollInterval,
 	}
 }
 
@@ -50,20 +65,69 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 	if host.Bin == "" {
 		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
-	transport, err := sshRunner(p.messages, p.lang, p.warn, p.layout, host.SSH)
+	transport, err := sshRunner(p.messages, p.lang, p.warn, p.layout, host)
 	if err != nil {
 		return state.Host{}, nil, err
 	}
 	return host, p.newRemote(transport, host.Bin), nil
 }
 
-func (p hostPlacer) Ready(name string) error {
+func (p hostPlacer) Ready(ctx context.Context, name string) error {
 	if name == "" {
 		return nil
 	}
+	return p.awaitRoom(ctx, name)
+}
+
+func (p hostPlacer) awaitRoom(ctx context.Context, name string) error {
+	limit := time.NewTimer(p.waitLimit)
+	defer limit.Stop()
+	poll := time.NewTicker(p.pollInterval)
+	defer poll.Stop()
+	for {
+		err := p.admit(ctx, name)
+		if err == nil || !retryableAdmission(err) {
+			return err
+		}
+		if host, _ := p.st.FindHost(name); host.WhenFull != state.FullWait {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: %w", ctx.Err(), err)
+		case <-limit.C:
+			return fmt.Errorf("%w: %w", errHostWaitLimit, err)
+		case <-poll.C:
+		}
+	}
+}
+
+func retryableAdmission(err error) bool {
+	return errors.Is(err, errHostFull) || errors.Is(err, errHostUnreachable)
+}
+
+func (p hostPlacer) admit(ctx context.Context, name string) error {
 	host, _, err := p.resolve(name)
 	if err != nil {
 		return err
+	}
+	transport, err := sshRunner(p.messages, p.lang, p.warn, p.layout, host)
+	if err != nil {
+		return err
+	}
+	if host.KeyChanged != "" {
+		return withDetail(errHostKeyChanged, fmt.Sprintf("host %q, pinned %s, now %s", name, host.HostKey, host.KeyChanged))
+	}
+	if host.HostKey == "" {
+		warnCatalog(p.warn, p.cli, p.lang, clitext.HostWarnUnpinned, clitext.Params{clitext.ParamHost: name})
+	}
+	if err := p.verifyBinary(ctx, host, transport); err != nil {
+		return err
+	}
+	if host.MaxSessions > 0 {
+		if running := p.st.SessionsOn(name); running >= host.MaxSessions {
+			return withDetail(errHostFull, fmt.Sprintf("host %q runs %d of %d sessions", name, running, host.MaxSessions))
+		}
 	}
 	if p.sourceVersion == nil {
 		return nil
@@ -72,6 +136,18 @@ func (p hostPlacer) Ready(name string) error {
 		return &hostVersionMismatchError{Name: name, Have: host.Version, Want: want}
 	}
 	return nil
+}
+
+func (p hostPlacer) verifyBinary(ctx context.Context, host state.Host, transport runner.SSH) error {
+	if host.BinSHA256 == "" {
+		warnCatalog(p.warn, p.cli, p.lang, clitext.HostBinaryUnrecorded, clitext.Params{clitext.ParamHost: host.Name})
+		return nil
+	}
+	err := transport.VerifyBinary(ctx, host.Bin, host.BinSHA256)
+	if err == nil || errors.Is(err, runner.ErrBinaryChanged) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", errHostUnreachable, err)
 }
 
 func (p hostPlacer) Worktrees(name string) (manager.Worktrees, error) {
@@ -126,6 +202,9 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	if err != nil {
 		return err
 	}
+	if !projectAllowed(host, project) {
+		return withDetail(errProjectNotAllowed, fmt.Sprintf("%q on host %q", project, name))
+	}
 	run, err := runnerFor(p.messages, p.lang, p.warn, p.layout, host)
 	if err != nil {
 		return err
@@ -159,4 +238,8 @@ func originOf(ctx context.Context, dir string) (string, error) {
 		return "", &noOriginError{Dir: dir}
 	}
 	return url, nil
+}
+
+func projectAllowed(host state.Host, project string) bool {
+	return len(host.Projects) == 0 || slices.Contains(host.Projects, project)
 }

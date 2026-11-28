@@ -118,6 +118,8 @@ func notASessionArgs() map[string]bool {
 		"host add name":         true,
 		"host check name":       true,
 		"host provision name":   true,
+		"host set name":         true,
+		"host trust name":       true,
 		"host rm name":          true,
 		"approve allow session": true,
 		"approve rule session":  true,

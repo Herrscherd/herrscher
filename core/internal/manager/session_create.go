@@ -30,7 +30,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	if readyErr := h.checkHostReady(req.hostName); readyErr != nil {
+	if readyErr := h.checkHostReady(ctx, req.hostName); readyErr != nil {
 		return contracts.Result{}, readyErr
 	}
 	place, err := h.placeSession(ctx, input, &req)

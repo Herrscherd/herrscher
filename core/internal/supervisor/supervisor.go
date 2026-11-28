@@ -52,7 +52,7 @@ type Supervisor struct {
 	sessionCmdSocket func(session string) string
 	sessionToken     func(session string) string
 	gate             func(vendor string) string
-	remoteDirOf      func(ctx context.Context, target, controlPath string) (string, error)
+	remoteDirOf      func(ctx context.Context, transport runner.SSH) (string, error)
 	controlPathOf    func(target string) (string, error)
 	failureSink      func(sess state.Session, stage Stage, err error)
 	controlWarn      sync.Once
@@ -61,8 +61,10 @@ type Supervisor struct {
 
 // Placement is what the supervisor needs to know about a host to launch there.
 type Placement struct {
-	SSH string
-	Bin string
+	SSH        string
+	Bin        string
+	KnownHosts string
+	BinSHA256  string
 }
 
 // SetHostLookup installs the resolver from a session's host name to a placement.
@@ -376,9 +378,14 @@ func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session
 	if err != nil {
 		return nil, err
 	}
-	dir, controlPath, err := s.remoteSite(ctx, placement.SSH)
+	dir, transport, err := s.remoteSite(ctx, placement)
 	if err != nil {
 		return nil, err
+	}
+	if placement.BinSHA256 != "" {
+		if err := transport.VerifyBinary(ctx, placement.Bin, placement.BinSHA256); err != nil {
+			return nil, err
+		}
 	}
 	args := s.bridgeArgs(sess)
 	for idx := range args {
@@ -387,12 +394,12 @@ func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session
 		}
 	}
 	args = append(args, "--env-stdin")
-	ssh := runner.SSH{Target: placement.SSH, ControlPath: controlPath, Forwards: s.forwardsFor(sess, dir)}
+	transport.Forwards = s.forwardsFor(sess, dir)
 	workDir := sess.Dir
 	if workDir == "" {
 		workDir = sess.Worktree
 	}
-	cmd := ssh.Command(ctx, workDir, append([]string{placement.Bin}, args...)...)
+	cmd := transport.Command(ctx, workDir, append([]string{placement.Bin}, args...)...)
 	cmd.Stdin = strings.NewReader(s.remoteEnvBlock(sess, dir))
 	return cmd, nil
 }
@@ -433,12 +440,12 @@ func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) (*ex
 	if err != nil {
 		return nil, err
 	}
-	dir, controlPath, err := s.remoteSite(ctx, placement.SSH)
+	dir, transport, err := s.remoteSite(ctx, placement)
 	if err != nil {
 		return nil, err
 	}
-	r := runner.SSH{Target: placement.SSH, ControlPath: controlPath, Forwards: s.forwardsFor(sess, dir)}
-	return r.PrepareForwards(ctx), nil
+	transport.Forwards = s.forwardsFor(sess, dir)
+	return transport.PrepareForwards(ctx), nil
 }
 
 func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string {
@@ -471,15 +478,16 @@ func (s *Supervisor) controlPathFor(target string) (string, error) {
 	return runner.ControlPathFor(s.runtime, target)
 }
 
-func (s *Supervisor) remoteSite(ctx context.Context, target string) (string, string, error) {
-	controlPath, err := s.controlPathFor(target)
+func (s *Supervisor) remoteSite(ctx context.Context, placement Placement) (string, runner.SSH, error) {
+	controlPath, err := s.controlPathFor(placement.SSH)
 	if err != nil {
 		s.controlWarn.Do(func() {
-			s.log.Warn("ssh multiplexing disabled, continuing without it", "host", target, "err", err)
+			s.log.Warn("ssh multiplexing disabled, continuing without it", "host", placement.SSH, "err", err)
 		})
 	}
-	dir, err := s.remoteRuntimeDir(ctx, target, controlPath)
-	return dir, controlPath, err
+	transport := runner.SSH{Target: placement.SSH, ControlPath: controlPath, KnownHosts: placement.KnownHosts}
+	dir, err := s.remoteRuntimeDir(ctx, transport)
+	return dir, transport, err
 }
 
 func (s *Supervisor) reportFailure(sess state.Session, stage Stage, msg string, err error) {

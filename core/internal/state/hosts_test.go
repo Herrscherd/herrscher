@@ -20,7 +20,7 @@ func TestHostsRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("host did not survive the round trip")
 	}
-	if got != h {
+	if got.Name != h.Name || got.SSH != h.SSH || got.Workspace != h.Workspace || got.Bin != h.Bin || got.Version != h.Version || got.GOOS != h.GOOS || got.GOARCH != h.GOARCH {
 		t.Fatalf("host = %+v, want %+v", got, h)
 	}
 }

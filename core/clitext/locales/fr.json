@@ -6450,5 +6450,220 @@
     "id": "cli.host.approve.rule_session_added",
     "description": "Reply of approve rule for one session",
     "other": "règle {{.Rule}} ajoutée pour la seule session {{.Name}}"
+  },
+  {
+    "id": "cli.host.key.presented",
+    "description": "Reply of host add, the host key shown before registration",
+    "other": "clé d'hôte de {{.Host}} : {{.Fingerprint}}. Vérifiez-la sur la machine même, puis relancez cette commande avec --host-key {{.Fingerprint}} pour l'épingler"
+  },
+  {
+    "id": "cli.host.key.trusted",
+    "description": "Reply of host trust, the host key pinned",
+    "other": "clé d'hôte de {{.Host}} épinglée : {{.Fingerprint}}"
+  },
+  {
+    "id": "cli.host.key.unpinned",
+    "description": "Reply of host check, a host without a pinned key",
+    "other": "l'hôte {{.Host}} n'a pas de clé d'hôte épinglée : vérifiez {{.Fingerprint}} sur la machine, puis lancez `host trust {{.Host}} --host-key {{.Fingerprint}}`"
+  },
+  {
+    "id": "cli.host.key.changed",
+    "description": "Reply of host check, a host key that differs from the pinned one",
+    "other": "la clé d'hôte de {{.Host}} est passée de {{.Pinned}} à {{.Fingerprint}} : l'hôte n'accepte plus de session. Vérifiez le changement, puis lancez `host trust {{.Host}} --host-key {{.Fingerprint}}` pour l'accepter"
+  },
+  {
+    "id": "cli.host.key.state_pinned",
+    "description": "Word of host list, a host key pinned",
+    "other": "clé épinglée"
+  },
+  {
+    "id": "cli.host.key.state_not_pinned",
+    "description": "Word of host list, a host without a pinned key",
+    "other": "clé non épinglée"
+  },
+  {
+    "id": "cli.host.key.state_blocked",
+    "description": "Word of host list, a host blocked by a changed key",
+    "other": "clé changée, hôte bloqué"
+  },
+  {
+    "id": "cli.host.binary.unrecorded",
+    "description": "Reply of host check and warning, a binary without a recorded digest",
+    "other": "le binaire herrscher de {{.Host}} n'a pas d'empreinte enregistrée : lancez `host provision {{.Host}}` pour l'enregistrer"
+  },
+  {
+    "id": "cli.host.sessions.line",
+    "description": "Reply of host check and host list, the session count against its cap",
+    "other": "sessions {{.Sessions}} sur {{.Max}}"
+  },
+  {
+    "id": "cli.host.sessions.unlimited",
+    "description": "Word for a host without a session cap",
+    "other": "sans plafond"
+  },
+  {
+    "id": "cli.host.load.line",
+    "description": "Reply of host check, the load average read on the host",
+    "other": "charge {{.Load}} au dernier contrôle"
+  },
+  {
+    "id": "cli.host.load.unknown",
+    "description": "Reply of host list, a host whose load was never measured",
+    "other": "charge non mesurée"
+  },
+  {
+    "id": "cli.host.list.detail",
+    "description": "Line of host list under a host, its key state, sessions and load",
+    "other": "  {{.Key}}, sessions {{.Sessions}}, {{.Load}}"
+  },
+  {
+    "id": "cli.host.set.done",
+    "description": "Reply of host set, the host updated",
+    "other": "hôte {{.Host}} mis à jour"
+  },
+  {
+    "id": "cli.host.warn.unpinned",
+    "description": "Warning when a session starts on a host without a pinned key",
+    "other": "l'hôte {{.Host}} n'a pas de clé d'hôte épinglée : ses connexions suivent les défauts ssh jusqu'à un `host trust`"
+  },
+  {
+    "id": "cli.host.fault.key_mismatch",
+    "description": "Reply of a host command, the host key given does not match the one shown",
+    "other": "la clé d'hôte donnée ne correspond pas à celle affichée : rien n'a été enregistré"
+  },
+  {
+    "id": "cli.host.fault.key_changed",
+    "description": "Reply of a host command, the host key changed since it was confirmed",
+    "other": "la clé d'hôte a changé depuis sa confirmation : l'hôte n'accepte plus de session tant que la nouvelle clé n'est pas approuvée"
+  },
+  {
+    "id": "cli.host.fault.key_unreadable",
+    "description": "Reply of a host command, no host key could be read from the target",
+    "other": "la clé d'hôte ssh n'a pas pu être lue sur l'hôte"
+  },
+  {
+    "id": "cli.host.fault.key_pin_missing",
+    "description": "Reply of a host command, a pinned host without its known_hosts file",
+    "other": "l'hôte a une clé épinglée mais son fichier known_hosts manque : relancez `host trust`"
+  },
+  {
+    "id": "cli.host.fault.binary_changed",
+    "description": "Reply of a host command, the herrscher binary differs from the recorded digest",
+    "other": "le binaire herrscher de l'hôte n'est pas celui enregistré : lancez `host provision` pour le remettre"
+  },
+  {
+    "id": "cli.host.fault.digest_unreadable",
+    "description": "Reply of a host command, the digest of the binary could not be read",
+    "other": "l'empreinte du binaire herrscher n'a pas pu être lue sur l'hôte"
+  },
+  {
+    "id": "cli.host.fault.host_full",
+    "description": "Reply of a session create, the host is at its session cap",
+    "other": "l'hôte a atteint sa limite de sessions"
+  },
+  {
+    "id": "cli.host.fault.wait_limit",
+    "description": "Reply of a session create, the host stayed full past the wait limit",
+    "other": "l'hôte est resté plein au-delà de la durée d'attente"
+  },
+  {
+    "id": "cli.host.fault.project_not_allowed",
+    "description": "Reply of a session create, the project is not on the host's list",
+    "other": "le projet ne figure pas dans la liste autorisée de l'hôte"
+  },
+  {
+    "id": "cli.host.fault.when_full_invalid",
+    "description": "Reply of a host command, an unknown when-full setting",
+    "other": "when-full doit valoir wait ou refuse"
+  },
+  {
+    "id": "cli.host.fault.max_sessions_invalid",
+    "description": "Reply of a host command, a session cap that is not a whole number",
+    "other": "max-sessions doit être un entier, zéro pour aucun plafond"
+  },
+  {
+    "id": "cli.host.fault.known_hosts_path",
+    "description": "Reply of a host command, a known_hosts path ssh cannot carry",
+    "other": "le chemin known_hosts ne peut pas être transmis à ssh"
+  },
+  {
+    "id": "cli.host.fault.set_nothing",
+    "description": "Reply of host set, no change requested",
+    "other": "host set demande au moins un changement : --allow-project, --allow-all-projects, --max-sessions ou --when-full"
+  },
+  {
+    "id": "cli.help.cmd.host.trust",
+    "description": "Help of the command host trust",
+    "other": "épingle la clé d'hôte ssh d'un hôte enregistré après vérification de son empreinte"
+  },
+  {
+    "id": "cli.help.cmd.host.set",
+    "description": "Help of the command host set",
+    "other": "modifie les projets autorisés, le plafond de sessions ou la politique de saturation d'un hôte"
+  },
+  {
+    "id": "cli.help.param.host.add.host_key",
+    "description": "Help of the --host-key param of the command host add",
+    "other": "l'empreinte affichée par host add, pour confirmer et enregistrer l'hôte (SHA256:...)"
+  },
+  {
+    "id": "cli.help.param.host.add.allow_project",
+    "description": "Help of the --allow-project param of the command host add",
+    "other": "projets autorisés sur l'hôte, séparés par des virgules ; vide autorise tous les projets"
+  },
+  {
+    "id": "cli.help.param.host.add.max_sessions",
+    "description": "Help of the --max-sessions param of the command host add",
+    "other": "sessions simultanées sur l'hôte, zéro pour aucun plafond"
+  },
+  {
+    "id": "cli.help.param.host.add.when_full",
+    "description": "Help of the --when-full param of the command host add",
+    "other": "ce que fait une session quand l'hôte est plein : refuse (défaut) ou wait"
+  },
+  {
+    "id": "cli.help.param.host.trust.name",
+    "description": "Help of the name param of the command host trust",
+    "other": "nom de l'hôte enregistré"
+  },
+  {
+    "id": "cli.help.param.host.trust.host_key",
+    "description": "Help of the --host-key param of the command host trust",
+    "other": "l'empreinte affichée par host trust, pour l'épingler (SHA256:...)"
+  },
+  {
+    "id": "cli.help.param.host.set.name",
+    "description": "Help of the name param of the command host set",
+    "other": "nom de l'hôte enregistré"
+  },
+  {
+    "id": "cli.help.param.host.set.allow_project",
+    "description": "Help of the --allow-project param of the command host set",
+    "other": "projets autorisés sur l'hôte, séparés par des virgules ; remplace la liste"
+  },
+  {
+    "id": "cli.help.param.host.set.allow_all_projects",
+    "description": "Help of the --allow-all-projects param of the command host set",
+    "other": "vide la liste de projets pour autoriser tous les projets"
+  },
+  {
+    "id": "cli.help.param.host.set.max_sessions",
+    "description": "Help of the --max-sessions param of the command host set",
+    "other": "sessions simultanées sur l'hôte, zéro pour aucun plafond"
+  },
+  {
+    "id": "cli.help.param.host.set.when_full",
+    "description": "Help of the --when-full param of the command host set",
+    "other": "ce que fait une session quand l'hôte est plein : refuse ou wait"
+  },
+  {
+    "id": "cli.host.fault.unreachable",
+    "description": "Reply of a host command, the host cannot be reached over ssh",
+    "other": "l'hôte ne répond pas en ssh"
+  },
+  {
+    "id": "cli.host.fault.set_conflict",
+    "description": "Reply of host set, the two project flags given together",
+    "other": "--allow-project et --allow-all-projects ne peuvent pas être donnés ensemble"
   }
 ]

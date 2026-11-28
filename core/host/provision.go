@@ -26,22 +26,30 @@ func runnerFor(messages *hostMessages, lang languageSource, warn io.Writer, layo
 	if host.SSH == "" {
 		return runner.Local{}, nil
 	}
-	ssh, err := sshRunner(messages, lang, warn, layout, host.SSH)
+	ssh, err := sshRunner(messages, lang, warn, layout, host)
 	if err != nil {
 		return nil, err
 	}
 	return ssh, nil
 }
 
-func sshRunner(messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, target string) (runner.SSH, error) {
-	if err := runner.CheckTarget(target); err != nil {
+func sshRunner(messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, host state.Host) (runner.SSH, error) {
+	if err := runner.CheckTarget(host.SSH); err != nil {
 		return runner.SSH{}, err
 	}
-	controlPath, err := runner.ControlPathFor(layout, target)
+	controlPath, err := runner.ControlPathFor(layout, host.SSH)
 	if err != nil {
-		warnLive(messages, warn, lang, "warn.ssh_multiplexing_disabled", map[string]any{nameParam: target, detailParam: err})
+		warnLive(messages, warn, lang, "warn.ssh_multiplexing_disabled", map[string]any{nameParam: host.SSH, detailParam: err})
 	}
-	return runner.SSH{Target: target, ControlPath: controlPath}, nil
+	transport := runner.SSH{Target: host.SSH, ControlPath: controlPath}
+	if host.HostKey == "" {
+		return transport, nil
+	}
+	if host.KnownHosts == "" {
+		return runner.SSH{}, withDetail(errHostKeyPinMissing, fmt.Sprintf("host %q", host.Name))
+	}
+	transport.KnownHosts = host.KnownHosts
+	return transport, nil
 }
 
 func capture(ctx context.Context, run hostRunner, argv ...string) (string, error) {
@@ -83,6 +91,21 @@ func platformFromUname(out string) (string, string, error) {
 	return goos, goarch, nil
 }
 
+func verifyCopiedBinary(ctx context.Context, run hostRunner, name, bin, want string) error {
+	out, err := capture(ctx, run, runner.BinaryDigestArgv(bin)...)
+	if err != nil {
+		return err
+	}
+	got, err := runner.ParseDigest(out)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if got != want {
+		return withDetail(runner.ErrBinaryChanged, fmt.Sprintf("%s on %s is %s, staged %s", bin, name, got, want))
+	}
+	return nil
+}
+
 func provisionHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, run hostRunner, host state.Host, src string) (state.Host, error) {
 	if src == "" {
 		return host, &noSourceCheckoutError{Host: host.Name}
@@ -115,41 +138,52 @@ func provisionHost(ctx context.Context, messages *hostMessages, cliMessages *cli
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	staged := filepath.Join(stage, "herrscher")
-	if err := service.BuildFor(ctx, cliMessages, clitext.CallerLanguage(ctx, lang), src, staged, goos, goarch); err != nil {
-		return host, err
+	if buildErr := service.BuildFor(ctx, cliMessages, clitext.CallerLanguage(ctx, lang), src, staged, goos, goarch); buildErr != nil {
+		return host, buildErr
 	}
 
+	stagedDigest, err := runner.FileSHA256(staged)
+	if err != nil {
+		return host, err
+	}
 	copied := run.Copy(ctx, staged, bin)
 	var cpErr bytes.Buffer
 	copied.Stderr = &cpErr
-	if err := copied.Run(); err != nil {
+	if err = copied.Run(); err != nil {
 		msg := strings.TrimSpace(cpErr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
 		return host, &copyError{Where: run.Describe(), Msg: msg}
 	}
-	if _, err := capture(ctx, run, "chmod", "+x", bin); err != nil {
+	if verifyErr := verifyCopiedBinary(ctx, run, host.Name, bin, stagedDigest); verifyErr != nil {
+		return host, verifyErr
+	}
+	if _, err = capture(ctx, run, "chmod", "+x", bin); err != nil {
 		return host, err
 	}
 	if _, err := capture(ctx, run, bin, "--help"); err != nil {
 		return host, wrapHost(messages, err, "provision.smoke", map[string]any{"Host": host.Name})
 	}
 
-	host.Bin, host.GOOS, host.GOARCH = bin, goos, goarch
+	host.Bin, host.GOOS, host.GOARCH, host.BinSHA256 = bin, goos, goarch, stagedDigest
 	host.Version = service.SourceVersion(ctx, src)
 	return host, nil
 }
 
 type hostReport struct {
-	Host      string   `json:"host"`
-	SSH       string   `json:"ssh,omitempty"`
-	Reachable bool     `json:"reachable"`
-	Herrscher string   `json:"herrscher,omitempty"`
-	Drift     bool     `json:"drift,omitempty"`
-	Workspace bool     `json:"workspace"`
-	Git       bool     `json:"git"`
-	Notes     []string `json:"notes,omitempty"`
+	Host        string   `json:"host"`
+	SSH         string   `json:"ssh,omitempty"`
+	Reachable   bool     `json:"reachable"`
+	Herrscher   string   `json:"herrscher,omitempty"`
+	Drift       bool     `json:"drift,omitempty"`
+	Workspace   bool     `json:"workspace"`
+	Git         bool     `json:"git"`
+	Sessions    int      `json:"sessions"`
+	MaxSessions int      `json:"maxSessions,omitempty"`
+	Load        *float64 `json:"load,omitempty"`
+	KeyChanged  string   `json:"keyChanged,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
 }
 
 func checkHost(ctx context.Context, run hostRunner, host state.Host, wantVersion string) hostReport {

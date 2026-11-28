@@ -197,7 +197,7 @@ func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *sta
 		if !ok {
 			return supervisor.Placement{}, false
 		}
-		return supervisor.Placement{SSH: host.SSH, Bin: host.Bin}, true
+		return supervisor.Placement{SSH: host.SSH, Bin: host.Bin, KnownHosts: pinnedKnownHosts(host), BinSHA256: host.BinSHA256}, true
 	})
 	sup.SetGateResolver(func(vendor string) string {
 		grain, _ := GateFor(vendor)
@@ -269,4 +269,11 @@ func addCheckpointAndPRVerbs(reg *cli.Registry, sessions *sessionTable, options 
 		return err
 	}
 	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, GitHubOpener(options.Forge), forgeCredentials(options.Forge))
+}
+
+func pinnedKnownHosts(host state.Host) string {
+	if host.HostKey == "" {
+		return ""
+	}
+	return host.KnownHosts
 }

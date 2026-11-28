@@ -227,8 +227,8 @@ func (s Service) List(ctx context.Context, caller Caller, name, rawPath string) 
 		}
 		return items, false, nil
 	}
-	if err := s.reserve(ctx, caller, Request{Drive: name, Path: rawPath, Op: OpList}); err != nil {
-		return nil, false, err
+	if reserveErr := s.reserve(ctx, caller, Request{Drive: name, Path: rawPath, Op: OpList}); reserveErr != nil {
+		return nil, false, reserveErr
 	}
 	var items []Item
 	var truncated bool
@@ -236,8 +236,8 @@ func (s Service) List(ctx context.Context, caller Caller, name, rawPath string) 
 	if err == nil {
 		items, truncated, err = runner.List(ctx, name+":"+path.String(), ListEntries)
 	}
-	if err := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpList}, err); err != nil {
-		return nil, false, err
+	if finishErr := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpList}, err); finishErr != nil {
+		return nil, false, finishErr
 	}
 	return items, truncated, nil
 }
@@ -253,8 +253,8 @@ func (s Service) Read(ctx context.Context, caller Caller, name, rawPath string) 
 	if err == nil && !utf8.Valid(content.Bytes()) {
 		err = ErrNotText
 	}
-	if err := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); err != nil {
-		return "", err
+	if finishErr := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); finishErr != nil {
+		return "", finishErr
 	}
 	return content.String(), nil
 }
@@ -278,9 +278,9 @@ func (s Service) ReadTo(ctx context.Context, caller Caller, name, rawPath, dest 
 	}
 	size, err := s.readFile(ctx, drive, path, staging, CopyBytes)
 	err = errors.Join(err, staging.Close())
-	if err := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); err != nil {
+	if finishErr := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); finishErr != nil {
 		discardStaging(root, stagingName)
-		return 0, err
+		return 0, finishErr
 	}
 	if err := root.Rename(stagingName, local); err != nil {
 		discardStaging(root, stagingName)
@@ -303,8 +303,8 @@ func (s Service) Write(ctx context.Context, caller Caller, name, rawPath, source
 	if err != nil && !sent {
 		entry.Outcome = OutcomeUnsent
 	}
-	if err := s.finish(ctx, caller, entry, err); err != nil {
-		return 0, err
+	if finishErr := s.finish(ctx, caller, entry, err); finishErr != nil {
+		return 0, finishErr
 	}
 	return size, nil
 }

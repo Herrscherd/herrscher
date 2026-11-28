@@ -76,7 +76,7 @@ func TestAnOperationWhoseEntryCannotBeWrittenWithholdsItsResult(t *testing.T) {
 	if _, unjournaled := errors.AsType[*JournalError](err); !unjournaled || content != "" {
 		t.Fatalf("Read = %q, %v, want nothing and a JournalError", content, err)
 	}
-	if _, err := service.ReadTo(t.Context(), caller, "gdrive", "secret.md", "copy.md"); err == nil {
+	if _, copyErr := service.ReadTo(t.Context(), caller, "gdrive", "secret.md", "copy.md"); copyErr == nil {
 		t.Fatal("a copy whose entry could not be written succeeded")
 	}
 	entries, err := os.ReadDir(caller.Worktree)

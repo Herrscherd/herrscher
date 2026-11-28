@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -101,13 +103,13 @@ func TestSelectMCPWithoutProfileKeepsEveryServer(t *testing.T) {
 	}
 }
 
-func TestSelectMCPUnmatchedRoleKeepsEveryServer(t *testing.T) {
-	a := profiledAgent(t, `{"worker": ["alpha"]}`)
+func TestSelectMCPRoleWithoutEntryKeepsEveryServer(t *testing.T) {
+	a := profiledAgent(t, `{}`)
 	raw, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range []string{"", "lead", "reviewer"} {
+	for _, role := range []string{"", RoleWorker} {
 		selection, err := a.SelectMCP(role)
 		if err != nil {
 			t.Fatalf("role %q: %v", role, err)
@@ -115,6 +117,99 @@ func TestSelectMCPUnmatchedRoleKeepsEveryServer(t *testing.T) {
 		if selection.Applied || !bytes.Equal(selection.Document, raw) {
 			t.Fatalf("role %q changed the document: %+v", role, selection)
 		}
+	}
+}
+
+func TestSelectMCPRejectsRolesTheProvisioningDoesNotAssign(t *testing.T) {
+	for _, role := range []string{"lead", "Worker", "workers", "reviewer"} {
+		t.Run("argument "+role, func(t *testing.T) {
+			a := profiledAgent(t, `{"worker": ["alpha"]}`)
+			_, err := a.SelectMCP(role)
+			roleErr, ok := errors.AsType[*UnassignableRoleError](err)
+			if !ok || roleErr.Role != role || roleErr.InProfile {
+				t.Fatalf("SelectMCP(%q) = %v, want UnassignableRoleError for the role", role, err)
+			}
+		})
+	}
+}
+
+func TestSelectMCPRejectsProfileKeysThatAreNotAssignableRoles(t *testing.T) {
+	for _, key := range []string{"lead", "Worker", "workers", "typo"} {
+		t.Run(key, func(t *testing.T) {
+			a := profiledAgent(t, `{"worker": ["alpha"], "`+key+`": ["beta"]}`)
+			_, err := a.SelectMCP(RoleWorker)
+			roleErr, ok := errors.AsType[*UnassignableRoleError](err)
+			if !ok || roleErr.Role != key || !roleErr.InProfile {
+				t.Fatalf("SelectMCP = %v, want UnassignableRoleError naming %q from the profile", err, key)
+			}
+			if !strings.Contains(err.Error(), key) || !strings.Contains(err.Error(), RoleWorker) {
+				t.Fatalf("error does not name the key and the accepted roles: %v", err)
+			}
+		})
+	}
+}
+
+func TestSelectMCPBadProfileKeyFailsSessionsWithoutRoleToo(t *testing.T) {
+	a := profiledAgent(t, `{"lead": ["alpha"]}`)
+	if _, err := a.SelectMCP(""); err == nil {
+		t.Fatal("a profile with a key that is not assignable must fail every session")
+	}
+}
+
+func TestSelectMCPNullProfileEntryIsAnError(t *testing.T) {
+	a := profiledAgent(t, `{"worker": null}`)
+	_, err := a.SelectMCP(RoleWorker)
+	nullErr, ok := errors.AsType[*NullProfileEntryError](err)
+	if !ok || nullErr.Role != RoleWorker {
+		t.Fatalf("SelectMCP = %v, want NullProfileEntryError for worker", err)
+	}
+}
+
+func TestSelectMCPValidatesOnlyTheKeptServers(t *testing.T) {
+	a := profiledAgent(t, `{"worker": ["alpha"]}`)
+	writeAgentFile(t, a, "mcp.json", `{"mcpServers": {"alpha": {"command": "alpha-bin"}, "broken": {"type": "stdio"}}}`)
+	selection, err := a.SelectMCP(RoleWorker)
+	if err != nil {
+		t.Fatalf("a dropped server without command must not block the session: %v", err)
+	}
+	if !slices.Equal(selection.Kept, []string{"alpha"}) || !slices.Equal(selection.Dropped, []string{"broken"}) {
+		t.Fatalf("kept %v, dropped %v", selection.Kept, selection.Dropped)
+	}
+}
+
+func TestSelectMCPKeepsTheOtherTopLevelKeysWithoutHTMLEscaping(t *testing.T) {
+	a := profiledAgent(t, `{"worker": ["alpha"]}`)
+	writeAgentFile(t, a, "mcp.json", `{"$schema": "https://example.test/mcp.json", "note": "a<b & c>d", "mcpServers": {"alpha": {"command": "alpha-bin", "args": ["x<y&z"]}, "gamma": {"command": "gamma-bin"}}}`)
+	selection, err := a.SelectMCP(RoleWorker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(selection.Document)
+	for _, want := range []string{`"$schema": "https://example.test/mcp.json"`, `"note": "a<b & c>d"`, `"x<y&z"`} {
+		if !strings.Contains(document, want) {
+			t.Fatalf("document lost %s:\n%s", want, document)
+		}
+	}
+	if strings.Contains(document, "gamma") {
+		t.Fatalf("dropped server kept:\n%s", document)
+	}
+}
+
+func TestDelegationRole(t *testing.T) {
+	cases := []struct {
+		name   string
+		parent string
+		want   string
+	}{
+		{name: "top level session has no role", parent: "", want: ""},
+		{name: "session spawned by a lead is a worker", parent: "lead-session", want: RoleWorker},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DelegationRole(tc.parent); got != tc.want {
+				t.Fatalf("DelegationRole(%q) = %q, want %q", tc.parent, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -194,11 +289,70 @@ func TestMaterializeUnknownProfileServerWritesNothing(t *testing.T) {
 	a := profiledAgent(t, `{"worker": ["ghost"]}`)
 	a.Role = RoleWorker
 	wt := t.TempDir()
+	runGit(t, wt, "init", "-q")
+	excludeBefore := readFileOrEmpty(t, filepath.Join(wt, ".git", "info", "exclude"))
 	err := a.Materialize(t.Context(), wt)
 	if _, ok := errors.AsType[*UnknownProfileServerError](err); !ok {
 		t.Fatalf("want UnknownProfileServerError, got %v", err)
 	}
+	for _, name := range []string{".mcp.json", ".claude", ".codex", "AGENTS.md"} {
+		if _, statErr := os.Stat(filepath.Join(wt, name)); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("%s written despite the error: %v", name, statErr)
+		}
+	}
+	if readFileOrEmpty(t, filepath.Join(wt, ".git", "info", "exclude")) != excludeBefore {
+		t.Fatal("git excludes written despite the error")
+	}
+}
+
+func TestMaterializeNullProfileEntryWritesNothing(t *testing.T) {
+	a := profiledAgent(t, `{"worker": null}`)
+	a.Role = RoleWorker
+	wt := t.TempDir()
+	if err := a.Materialize(t.Context(), wt); err == nil {
+		t.Fatal("a null profile entry must fail the materialization")
+	}
 	if _, statErr := os.Stat(filepath.Join(wt, ".mcp.json")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf(".mcp.json written despite the error: %v", statErr)
 	}
+}
+
+func TestMaterializeWritesServerFilesOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are not enforced on Windows")
+	}
+	a := profiledAgent(t, `{"worker": ["alpha"]}`)
+	a.Role = RoleWorker
+	wt := t.TempDir()
+	if err := a.Materialize(t.Context(), wt); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(wt, ".mcp.json"), filepath.Join(wt, ".codex", "config.toml")} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Fatalf("%s mode = %o, want 600", filepath.Base(path), mode)
+		}
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func readFileOrEmpty(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return ""
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }

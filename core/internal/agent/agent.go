@@ -43,8 +43,9 @@ const (
 )
 
 const (
-	dirMode  = 0o755
-	fileMode = 0o644
+	dirMode       = 0o755
+	fileMode      = 0o644
+	ownerFileMode = 0o600
 )
 
 func jsonStringInner(value string) string {
@@ -289,10 +290,14 @@ func (a Agent) Materialize(ctx context.Context, worktree string) error {
 
 // MaterializeAs is Materialize with the hook's binary, empty for no hook.
 func (a Agent) MaterializeAs(ctx context.Context, worktree, herrscherBin string) error {
+	selection, err := a.SelectMCP(a.Role)
+	if err != nil {
+		return err
+	}
 	if err := EnsureGitExcludes(ctx, worktree); err != nil {
 		return err
 	}
-	return a.MaterializeIntoAs(worktree, worktree, herrscherBin)
+	return a.materializeSelected(worktree, worktree, herrscherBin, selection)
 }
 
 // MaterializeInto materializes for this machine, hook included.
@@ -318,6 +323,10 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
+	return a.materializeSelected(dst, worktreePath, herrscherBin, selection)
+}
+
+func (a Agent) materializeSelected(dst, worktreePath, herrscherBin string, selection MCPSelection) error {
 	claudeDir := filepath.Join(dst, ".claude")
 	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
@@ -342,8 +351,8 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 
 func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string, mcp []byte) error {
 	mcpOut := []byte(strings.ReplaceAll(string(mcp), worktreeToken, jsonStringInner(worktreePath)))
-	if err := os.WriteFile(filepath.Join(dst, ".mcp.json"), mcpOut, fileMode); err != nil {
-		return fmt.Errorf("write %s: %w", filepath.Join(dst, ".mcp.json"), err)
+	if err := writeOwnerOnly(filepath.Join(dst, ".mcp.json"), mcpOut); err != nil {
+		return err
 	}
 	copies := []struct {
 		src, dst string
@@ -410,8 +419,15 @@ func (a Agent) writeCodexConfig(codexDir, worktreePath string, mcp []byte) error
 		return err
 	}
 	codexConfig := renderCodexMCP(servers, worktreePath)
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, fileMode); err != nil {
-		return fmt.Errorf("write config.toml: %w", err)
+	return writeOwnerOnly(filepath.Join(codexDir, "config.toml"), codexConfig)
+}
+
+func writeOwnerOnly(path string, content []byte) error {
+	if err := os.WriteFile(path, content, ownerFileMode); err != nil {
+		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
+	}
+	if err := os.Chmod(path, ownerFileMode); err != nil {
+		return fmt.Errorf("restrict %s: %w", filepath.Base(path), err)
 	}
 	return nil
 }

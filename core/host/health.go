@@ -14,6 +14,7 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/drives"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -36,6 +37,7 @@ type healthInputs struct {
 	watching   bool
 	now        func() time.Time
 	selfTools  func() health.SelfTools
+	drives     drives.Service
 
 	selfToolsAnswer func(ctx context.Context, socket string) (int, error)
 }
@@ -73,6 +75,7 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, memoryProbes(inputs.memory)...)
 	probes = append(probes, forgeProbes(inputs)...)
 	probes = append(probes, selfToolsProbes(inputs)...)
+	probes = append(probes, drivesProbe(inputs.drives))
 	history := lastCompactions(inputs.ledger)
 	return append(probes, compactionProbes(inputs.compaction.names, history, compactionKey)...)
 }
@@ -98,6 +101,30 @@ func selfToolsProbes(inputs healthInputs) []health.Probe {
 			return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{SelfTools: &measured}
 		},
 	}}
+}
+
+func drivesProbe(service drives.Service) health.Probe {
+	return health.Probe{
+		Check: health.Check{Group: health.GroupCore, Name: health.ServiceDrives, Facts: health.Facts{Drives: &health.Drives{}}},
+		Run: func(ctx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
+			connected, err := service.Catalog().Load()
+			if err != nil {
+				detail := contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", err.Error())}}
+				return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: detail}, health.Facts{Drives: &health.Drives{}}
+			}
+			facts := &health.Drives{Count: len(connected), Command: service.Rclone().Command()}
+			version, err := service.Rclone().Version(ctx)
+			if err != nil {
+				level := contracts.HealthOK
+				if len(connected) > 0 {
+					level = contracts.HealthDegraded
+				}
+				return contracts.ProbeReport{State: level}, health.Facts{Drives: facts}
+			}
+			facts.Rclone = version
+			return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{Drives: facts}
+		},
+	}
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {
@@ -482,6 +509,7 @@ func newHealthInputs(messages *hostMessages, layout runtimedir.Layout, instanceI
 		now:        time.Now,
 		forge:      forge,
 		forgeCache: newForgeCache(time.Now),
+		drives:     driveService(partDir),
 	}
 }
 

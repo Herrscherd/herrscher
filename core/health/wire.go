@@ -45,6 +45,13 @@ type wireCheck struct {
 	ForgeReset time.Time             `json:"forge_reset,omitzero"`
 	Forge      *wireForge            `json:"forge,omitempty"`
 	SelfTools  *wireSelfTools        `json:"self_tools,omitempty"`
+	Drives     *wireDrives           `json:"drives,omitempty"`
+}
+
+type wireDrives struct {
+	Rclone  string `json:"rclone,omitempty"`
+	Command string `json:"command,omitempty"`
+	Count   int    `json:"count"`
 }
 
 type wireSelfTools struct {
@@ -139,6 +146,9 @@ func encodeCheck(check Check) (wireCheck, error) {
 	if self := check.Facts.SelfTools; self != nil {
 		wire.SelfTools = &wireSelfTools{Enabled: self.Enabled, Exposure: self.Exposure, Tools: self.Tools, SchemaBytes: self.SchemaBytes}
 	}
+	if drives := check.Facts.Drives; drives != nil {
+		wire.Drives = &wireDrives{Rclone: drives.Rclone, Command: drives.Command, Count: drives.Count}
+	}
 	if pool := check.Facts.Pool; pool != nil {
 		wire.Pool = &wirePool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: int64(pool.CoolingFor)}
 	}
@@ -200,6 +210,9 @@ func decodeCheck(wire wireCheck) (Check, error) {
 	}
 	if self := wire.SelfTools; self != nil {
 		check.Facts.SelfTools = &SelfTools{Enabled: self.Enabled, Exposure: self.Exposure, Tools: self.Tools, SchemaBytes: self.SchemaBytes}
+	}
+	if drives := wire.Drives; drives != nil {
+		check.Facts.Drives = &Drives{Rclone: drives.Rclone, Command: drives.Command, Count: drives.Count}
 	}
 	if pool := wire.Pool; pool != nil {
 		check.Facts.Pool = &Pool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: time.Duration(pool.CoolingFor)}

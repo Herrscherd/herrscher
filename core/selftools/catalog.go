@@ -88,6 +88,10 @@ func CoreVerbs() []string {
 		"env get",
 		"session issue list",
 		"session issue show",
+		"drive list",
+		"drive ls",
+		"drive read",
+		"drive log",
 	}
 }
 

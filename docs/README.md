@@ -20,4 +20,5 @@ The [README](../README.md) is the startup page. These guides go deeper.
 | [Budgets](budgets.md) | Spend and token caps for sessions, and how a paused session resumes. |
 | [Memory bench](memory-bench.md) | Measuring the memory settings against each other, under a hard spend ceiling. |
 | [Self tools](self-tools.md) | The MCP server a session uses to read and configure its own daemon, and what it may change. |
+| [Drives](drives.md) | Google Drive, Dropbox, OneDrive, S3 and R2 folders, the access of each agent, each write asked, the journal. |
 | [Environment variables](env.md) | Every variable the binary reads, its default, and who reads it. |

@@ -52,8 +52,10 @@ func (r *selfRestarts) admit(session, verb string) error {
 	return r.store.RecordSelfRestart(session, now, now.Add(-selfRestartWindow))
 }
 
-func (h *hub) guardSessionCall(session, verb string, input contracts.Input) error {
+func (h *hub) guardSessionCall(ctx context.Context, session, verb string, input contracts.Input) error {
 	switch verb {
+	case verbDriveLs, verbDriveRead, verbDriveWrite:
+		return h.guardDrive(ctx, session, verb, input)
 	case verbEnvSet, verbEnvUnset:
 		if isSecretEnvKey(input.Get(paramKey)) {
 			return &accessDeniedError{Reason: errSecretSession.Error()}

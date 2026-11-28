@@ -18,6 +18,8 @@ const (
 	ServiceProxy = "proxy"
 	// ServiceSelfTools names the check of the MCP server sessions get, in [GroupCore].
 	ServiceSelfTools = "self-tools"
+	// ServiceDrives names the check of the drives and of the rclone that reaches them, in [GroupCore].
+	ServiceDrives = "drives"
 )
 
 // Check is one service checked, for one account when the service has accounts.
@@ -47,6 +49,14 @@ type Facts struct {
 	Forge               *Forge
 	ForgeReset          time.Time
 	SelfTools           *SelfTools
+	Drives              *Drives
+}
+
+// Drives is what the drives check found: the rclone version, or the command that did not run, and the number of drives connected.
+type Drives struct {
+	Rclone  string
+	Command string
+	Count   int
 }
 
 // SelfTools is what a session's herrscher MCP server lists: whether sessions get it, the exposure, the tools and the bytes their declarations add to each turn.

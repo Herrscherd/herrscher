@@ -6247,6 +6247,196 @@
     "other": "dotted key to remove"
   },
   {
+    "id": "cli.help.cmd.drive.list",
+    "description": "Help of the command drive list",
+    "other": "list the connected drives, their folders and the access each agent holds"
+  },
+  {
+    "id": "cli.help.cmd.drive.ls",
+    "description": "Help of the command drive ls",
+    "other": "list one folder of a drive"
+  },
+  {
+    "id": "cli.help.cmd.drive.read",
+    "description": "Help of the command drive read",
+    "other": "read a file of a drive, as text or copied to a file with --to"
+  },
+  {
+    "id": "cli.help.cmd.drive.write",
+    "description": "Help of the command drive write",
+    "other": "write a local file to a drive, each write put to the operator"
+  },
+  {
+    "id": "cli.help.cmd.drive.log",
+    "description": "Help of the command drive log",
+    "other": "show what each session read and wrote on the drives"
+  },
+  {
+    "id": "cli.help.cmd.drive.grant",
+    "description": "Help of the command drive grant",
+    "other": "set the access of an agent on a drive: none, read or write"
+  },
+  {
+    "id": "cli.help.cmd.drive.remove",
+    "description": "Help of the command drive remove",
+    "other": "disconnect a drive and forget its token or key"
+  },
+  {
+    "id": "cli.help.param.drive.drive",
+    "description": "Help of the parameter drive of the drive verbs",
+    "other": "the drive, as `drive list` names it"
+  },
+  {
+    "id": "cli.help.param.drive.path",
+    "description": "Help of the parameter path of the drive verbs",
+    "other": "a path inside the drive, such as Neublox/notes.md"
+  },
+  {
+    "id": "cli.help.param.drive.to",
+    "description": "Help of the parameter to of drive read",
+    "other": "copy the file there: a path in the session's worktree, or an absolute path for the operator"
+  },
+  {
+    "id": "cli.help.param.drive.from",
+    "description": "Help of the parameter from of drive write",
+    "other": "the file to send: a path in the session's worktree, or an absolute path for the operator"
+  },
+  {
+    "id": "cli.help.param.drive.agent",
+    "description": "Help of the parameter agent of drive grant and drive log",
+    "other": "an agent name, or * for every agent the drive does not name"
+  },
+  {
+    "id": "cli.help.param.drive.access",
+    "description": "Help of the parameter access of drive grant",
+    "other": "none, read or write"
+  },
+  {
+    "id": "cli.help.param.drive.session",
+    "description": "Help of the parameter session of drive log",
+    "other": "only the entries of this session"
+  },
+  {
+    "id": "cli.help.param.drive.limit",
+    "description": "Help of the parameter limit of drive log",
+    "other": "the most entries to show, 50 by default"
+  },
+  {
+    "id": "cli.host.drive.none",
+    "description": "Reply of drive list when no drive is visible",
+    "other": "No drive. The operator connects one with `herrscher drive add <name> --kind <kind>`."
+  },
+  {
+    "id": "cli.host.drive.empty_folder",
+    "description": "Reply of drive ls on an empty folder",
+    "other": "{{.Drive}}:{{.Path}} is empty."
+  },
+  {
+    "id": "cli.host.drive.truncated",
+    "description": "Line under a drive listing cut at its limit",
+    "other": "Only the first {{.Limit}} entries are shown."
+  },
+  {
+    "id": "cli.host.drive.copied",
+    "description": "Reply of drive read --to",
+    "other": "{{.Bytes}} bytes of {{.Drive}}:{{.Path}} copied to {{.To}}."
+  },
+  {
+    "id": "cli.host.drive.wrote",
+    "description": "Reply of drive write",
+    "other": "{{.Bytes}} bytes written to {{.Drive}}:{{.Path}}."
+  },
+  {
+    "id": "cli.host.drive.granted",
+    "description": "Reply of drive grant",
+    "other": "{{.Agent}} now holds {{.Access}} access on {{.Drive}}."
+  },
+  {
+    "id": "cli.host.drive.removed",
+    "description": "Reply of drive remove",
+    "other": "{{.Drive}} is disconnected, and its token or key is gone from herrscher's rclone configuration."
+  },
+  {
+    "id": "cli.host.drive.log_empty",
+    "description": "Reply of drive log with no entry",
+    "other": "The drive journal holds no entry."
+  },
+  {
+    "id": "cli.host.drive.log_unreadable",
+    "description": "Line under drive log when journal lines could not be read",
+    "other": "{{.Count}} journal lines could not be read and are left out."
+  },
+  {
+    "id": "cli.host.drive.log_suppressed",
+    "description": "Note on a journal entry after refusals that were left out",
+    "other": "(the {{.Count}} refusals of this session just before were left out)"
+  },
+  {
+    "id": "cli.host.fault.drive_mixed_forms",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "name the drive and the path once each, either as words or as --drive and --path, and nothing more"
+  },
+  {
+    "id": "cli.drive.usage",
+    "description": "Usage of herrscher drive add",
+    "other": "usage: herrscher drive add <name> --kind {{.Kind}} [--folders A,B] [--agents none|read|write]\n  s3: --access-key <id> [--secret-env VAR] [--region R] [--endpoint URL] [--provider P]\n  r2: --account <id> --access-key <id> [--secret-env VAR]\nThe other drive verbs (list, ls, read, write, log, grant, remove) run in the daemon: herrscher drive list."
+  },
+  {
+    "id": "cli.drive.added",
+    "description": "Reply of herrscher drive add",
+    "other": "{{.Drive}} ({{.Kind}}) is connected. Agents hold {{.Access}} access; change it with `herrscher drive grant {{.Drive}} --agent <name> --access read`."
+  },
+  {
+    "id": "cli.drive.secret_prompt",
+    "description": "Prompt for the secret access key, typed without echo",
+    "other": "Secret access key: "
+  },
+  {
+    "id": "cli.drive.secret_missing",
+    "description": "Refusal when no secret is given",
+    "other": "No secret access key: set {{.Name}}, or run the command in a terminal to type it."
+  },
+  {
+    "id": "cli.drive.sign_in_starting",
+    "description": "Line before rclone opens the browser sign in",
+    "other": "rclone now signs in to {{.Kind}} in your browser. The token stays in herrscher's own rclone configuration."
+  },
+  {
+    "id": "cli.drive.account_required",
+    "description": "Refusal of an r2 drive without an account id",
+    "other": "An r2 drive needs --account, the Cloudflare account id."
+  },
+  {
+    "id": "cli.drive.access_key_missing",
+    "description": "Refusal of a key drive without an access key id",
+    "other": "An s3 or r2 drive needs --access-key, the access key id."
+  },
+  {
+    "id": "cli.health.facts.drives",
+    "description": "Facts of the drives line of health",
+    "other": "{{.Version}}, drives: {{.Count}}"
+  },
+  {
+    "id": "cli.health.facts.drives_no_rclone",
+    "description": "Facts of the drives line of health when rclone does not run",
+    "other": "{{.Command}} does not run, drives: {{.Count}}. Install rclone or set HERRSCHER_RCLONE."
+  },
+  {
+    "id": "cli.host.fault.drive_name_missing",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "name a drive (see `drive list`)"
+  },
+  {
+    "id": "cli.host.fault.drive_agent_missing",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "name an agent, or * for every agent the drive does not name"
+  },
+  {
+    "id": "cli.host.fault.drive_local_forbidden",
+    "description": "Erreur d'une commande drive rendue à l'opérateur",
+    "other": "only a session or the operator's own terminal reads into or writes from a local file"
+  },
+  {
     "id": "cli.host.config.set",
     "description": "Reply of config set",
     "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."

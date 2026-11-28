@@ -39,10 +39,20 @@ func checkOwner(file *os.File, uid int) error {
 	return nil
 }
 
+// TryLockShared takes a shared lock of f without waiting. It reports false
+// when another process holds the exclusive lock.
+func TryLockShared(f *os.File) (bool, error) {
+	return flock(f, unix.LOCK_SH)
+}
+
 // TryLock takes the exclusive lock of f without waiting. It reports false when
 // another process holds it. The lock is released when f is closed.
 func TryLock(f *os.File) (bool, error) {
-	err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+	return flock(f, unix.LOCK_EX)
+}
+
+func flock(f *os.File, how int) (bool, error) {
+	err := unix.Flock(int(f.Fd()), how|unix.LOCK_NB)
 	switch {
 	case err == nil:
 		return true, nil

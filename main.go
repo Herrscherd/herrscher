@@ -205,6 +205,8 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 		return runConnect(ctx, messages, args)
 	case mcpVerb:
 		return runMCP(ctx, layout, messages, hostMessages, args)
+	case proxyVerb:
+		return runProxy(ctx, layout, messages, hostMessages, args)
 	}
 	return runForwarded(ctx, layout, messages, hostMessages, cmd, args)
 }

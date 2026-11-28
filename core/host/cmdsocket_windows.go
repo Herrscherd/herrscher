@@ -63,3 +63,11 @@ func removeSocketFiles(_ RuntimeLayout, _ string, _ []string) error {
 func dialCommandSocket(ctx context.Context, _ *hostMessages, _ RuntimeLayout, path string) (net.Conn, error) {
 	return winio.DialPipeContext(ctx, path)
 }
+
+func dialProxySocket(ctx context.Context, _ RuntimeLayout, path string) (net.Conn, error) {
+	conn, err := winio.DialPipeContext(ctx, path)
+	if err != nil {
+		return nil, proxyDialError(ctx)
+	}
+	return conn, nil
+}

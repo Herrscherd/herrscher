@@ -78,6 +78,53 @@ No token reaches a bridge on a remote machine: `remoteEnvBlock` does not carry
 Its approvals go through the asker that the turn attaches (`core/bridge/approval.go`).
 
 
+## Route ssh
+
+`herrscher proxy <command|events>` relays one local socket of the daemon over its
+standard input and output. A client that wants to drive a daemon on another machine
+runs it through ssh, one channel per socket, so no port opens on either side:
+
+```bash
+ssh build1 herrscher proxy command    # one request line in, one answer out
+ssh build1 herrscher proxy events     # NDJSON stream of events
+```
+
+The command socket takes the same line as on this machine: a JSON object with
+`argv`, and optionally `token` and `lang`, then one answer line. The events socket
+takes the cursor line that `SubscribeSessionEvents` writes first, the session and
+the sequence number already seen, then streams. The proxy never reads these
+messages: it copies bytes in both directions.
+
+Trust model: the route is trusted as local. The ssh login authenticates the
+client, and the proxy runs as the user that owns the daemon, so it reaches the
+sockets exactly as a process on this machine would. Scopes do not apply on this
+route, since they belong to the network routes. The session tokens stay in the
+daemon: the proxy forwards whatever token the client sends and never creates one.
+
+Ending a channel:
+
+- Closing stdin ends the request side. When stdin ends before the daemon closes,
+  every byte read from it is sent first, and the daemon then sees end of input on
+  its socket.
+- The proxy returns when the daemon closes its side, with status 0. It does not wait
+  for stdin to end: a read still blocked on stdin, such as a terminal or a pipe that
+  stays open, is left behind with the process, and input not yet read by then is not
+  sent.
+- When no daemon listens for the channel, the proxy prints that the daemon does
+  not answer on this machine and exits with status 1. The client learns the
+  daemon is absent from that exit status, not from a socket that hangs.
+
+Go code that opens the route calls `host.DialProxy(ctx, target, bin, channel)`. It
+starts `ssh <target> <bin> proxy <channel>`, where `bin` is the binary that
+`host add` recorded in `~/.herrscher/bin`, so the login PATH does not matter. An
+empty `bin` falls back to `herrscher` on the login PATH. The returned connection
+reads what the daemon answers and writes to it.
+
+The approval channel comes with its server and is not part of this route yet.
+Meanwhile `herrscher approve` goes through the command socket, which
+`herrscher proxy command` relays.
+
+
 ## Plugins on another machine
 
 A plugin category can run in a plugin-host on another machine. Name the category

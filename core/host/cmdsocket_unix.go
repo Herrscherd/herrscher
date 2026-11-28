@@ -100,3 +100,15 @@ func dialCommandSocket(ctx context.Context, messages *hostMessages, layout Runti
 	var d net.Dialer
 	return d.DialContext(ctx, "unix", path)
 }
+
+func dialProxySocket(ctx context.Context, layout RuntimeLayout, path string) (net.Conn, error) {
+	if err := ensureRuntimeDir(newHostMessages(), layout, path); err != nil {
+		return nil, err
+	}
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", path)
+	if err != nil {
+		return nil, proxyDialError(ctx)
+	}
+	return conn, nil
+}

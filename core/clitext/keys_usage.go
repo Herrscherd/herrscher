@@ -20,6 +20,7 @@ const (
 	UsageServe           = "cli.usage.serve"
 	UsageBridge          = "cli.usage.bridge"
 	UsageService         = "cli.usage.service"
+	UsageProxy           = "cli.usage.proxy"
 	UsageCommands        = "cli.usage.commands"
 	UsagePluginVerbs     = "cli.usage.plugin.verbs"
 	UsageUpdate          = "cli.usage.update"
@@ -53,6 +54,7 @@ func usageKeys() map[Key][]string {
 		UsageServe:           nil,
 		UsageBridge:          nil,
 		UsageService:         nil,
+		UsageProxy:           nil,
 		UsageCommands:        nil,
 		UsagePluginVerbs:     nil,
 		UsageUpdate:          nil,

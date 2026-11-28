@@ -21,6 +21,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/runner"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/service"
 )
@@ -382,6 +383,50 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 		if !strings.Contains(out, "reached the daemon") {
 			t.Fatalf("session %s got %q", name, out)
 		}
+	}
+}
+
+func TestE2EProxyCommandRoundTripsOverSSH(t *testing.T) {
+	target := e2eTarget(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	layout := testRuntime(t)
+
+	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
+	provisioned, err := provisionHost(ctx, newHostMessages(), clitext.NewMessages(), fixedLanguageSource(i18n.English), runnerForTest(t, layout, h), h, sourceRoot(t))
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+
+	local := layout.Socket("herrscher-e2e-proxy.sock")
+	serveTestCommandSocket(ctx, t, layout, local, &fakeDispatcher{out: "reached the daemon"}, defaultCommandReadTimeout)
+	remote := runtimedir.Name(remoteSocketDir(ctx, t, layout, target), "herrscher-command")
+	removeRemoteSocketOnExit(t, target, remote)
+	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
+	if prep := run.PrepareForwards(ctx); prep != nil {
+		logCleanup(prep.Run())
+	}
+	holdForward(ctx, t, run, remote)
+
+	conn, err := DialProxy(ctx, target, provisioned.Bin, ProxyCommand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, writeErr := io.WriteString(conn, `{"argv":["e2e-ping"],"lang":"en"}`+"\n"); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	if closeErr := conn.CloseWrite(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	answer, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Fatalf("read the answer through the remote proxy: %v, stderr %q", err, conn.Stderr())
+	}
+	if !strings.Contains(answer, "reached the daemon") {
+		t.Fatalf("the proxied command must carry the daemon's answer, got %q", answer)
+	}
+	if closeErr := conn.Close(); closeErr != nil {
+		t.Fatalf("Close = %v, want nil when the remote proxy returns, stderr %q", closeErr, conn.Stderr())
 	}
 }
 

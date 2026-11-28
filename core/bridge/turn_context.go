@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
@@ -20,10 +21,10 @@ type turnContext struct {
 	selfToolsBytes int
 }
 
-func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances) turnContext {
+func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances, message string, lang i18n.Language) turnContext {
 	return turnContext{blocks: []injectedBlock{
 		{part: contracts.ContextMemory, text: memCtx},
-		{part: contracts.ContextSkills, text: skillsBlock(eng)},
+		{part: contracts.ContextSkills, text: skillsBlock(eng, message, lang, aff.skillMessages)},
 		{part: contracts.ContextDelegation, text: delegationBlock(aff.roster)},
 		{part: contracts.ContextCapabilities, text: capabilitiesBlock(aff.caps)},
 		{part: contracts.ContextIdentity, text: identityBlock(aff.user)},
@@ -51,15 +52,16 @@ func (c turnContext) sizes() []contracts.InjectedPart {
 	return parts
 }
 
-func skillsBlock(eng *skills.Engine) string {
+func skillsBlock(eng *skills.Engine, message string, lang i18n.Language, messages *bridgeMessages) string {
 	if eng == nil {
 		return ""
 	}
+	notes := newSkillNotices(lang, messages)
 	parts := make([]string, 0, skillPartsCap)
-	if menu := eng.Menu(); menu != "" {
+	if menu := eng.Menu(message, notes); menu != "" {
 		parts = append(parts, menu)
 	}
-	if exp := eng.Expansions(); exp != "" {
+	if exp := eng.Expansions(notes); exp != "" {
 		parts = append(parts, exp)
 	}
 	return strings.Join(parts, blockSeparator)

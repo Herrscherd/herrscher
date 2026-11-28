@@ -126,9 +126,9 @@ In the terminal TUI, **`/skills`** opens a read-only modal panel listing the dis
 skills: name and description per row, `↑↓` to move the selection, `Esc` to close. It
 shows at most 12 rows (a third of the window height, at least 5) and then a `… +N more` line.
 
-The panel is **session-agnostic** (the TUI is one gateway over many sessions), so it lists
-from `~/.claude/skills` plus any configured extra roots and deliberately omits per-session
-workspace roots. Rows are sorted by name.
+The panel lists the roots of the session it is shown for, from the same function the menu
+scans (`skills.Roots`): the session's repository skills, its learned skills, `~/.claude/skills`
+and the configured extra roots. So it lists every skill the menu can hide. Rows are sorted by name.
 
 ## Config
 
@@ -142,6 +142,75 @@ In `~/.config/herrscher/config.json`, all optional:
 ```
 
 A missing `skills` object, or a missing `enabled`, means the feature is **on**.
+
+The budget is not in this file. It is set per agent, in the agent's home (see
+[Budgets](#budgets)), so two agents on the same daemon can carry different budgets.
+
+## Budgets
+
+The budget of an agent lives in its home directory, in a file named `skills-budget`, read
+when the bridge starts for that agent, the same way the `account` file is read:
+
+```json
+{
+  "menuTokens": 600,
+  "expansionTokens": 4000
+}
+```
+
+- `menuTokens` caps the menu, `expansionTokens` caps the active skill bodies, both in
+  estimated tokens.
+- A missing file means **no budget**: the menu lists every skill and every body is injected
+  in full, exactly as before budgets existed.
+- A zero field leaves that block unbounded.
+- A file that cannot be read, has an unknown field, trailing data, a negative cap or a wrong
+  type is **refused**: the bridge does not start, and the error names the agent and the file
+  to fix. A broken budget is never silently ignored.
+
+Both caps are estimated with the same four-bytes-per-token estimate the context window
+uses (`contextwindow.EstimateTokens`). They are estimates, not vendor counts.
+
+**The floor.** The menu always costs at least its header and its notice, even when no skill
+is listed. A `menuTokens` below that floor cannot be honored, so the bridge refuses to start
+with a localized error that gives the floor. The floor is checked in both languages, so the
+answer does not depend on the language of a session.
+
+**The menu.** When the full menu is over `menuTokens`, the engine chooses which skills to
+list, and no skill is dropped without a notice:
+
+- A skill that is **active** (its body is expanded this session) is always listed, even
+  when that alone is over the cap. This is the one exception to the cap, and it is documented
+  here rather than hidden: an active skill is never removed from the menu.
+- The other skills are ranked by a deterministic lexical score against the current message:
+  each word of the message that occurs in the skill's name counts twice, and each word that
+  occurs in its description counts once. Words are compared lowercase and with accents
+  folded (`réseau` matches `reseau`), a plural `s` or `x` is stripped (`rapports` matches
+  `rapport`), and words shorter than three letters and the common French and English stop
+  words (`les`, `pour`, `the`, `and`…) are ignored. Ties break by name, so the same message
+  and the same skills always give the same menu.
+- Skills are then added greedily in that order: each one is kept if the menu still fits the
+  cap with it, and skipped otherwise, so a smaller and less relevant skill can be added after
+  a larger and more relevant one was skipped. A skill that does not fit is not retried later
+  in the turn.
+- The menu ends with a localized notice that counts the hidden skills and names the
+  directories that hold every skill, such as `~/.claude/skills`. The model can read those
+  directories itself, so the notice works outside the terminal, in every gateway, and the
+  user can list them with `/skills` in the terminal.
+
+With no message, or a message that shares no word with any skill, the ranking falls back to
+name order.
+
+**The expansions.** The active bodies share one cap, taken in discovery order: the roots in
+the order of the table above, and the skills of each root in name order. A body that fits is
+injected whole. A body that does not fit is cut at the last whole line that fits the
+remaining budget (mid-line only when one line alone is longer than that), and a localized
+line follows it naming the skill and the absolute path of its `SKILL.md`, which the model can
+`Read` in full. A skill that comes after the budget is spent is still listed, with an empty
+body and the same line, so nothing is silently hidden. The tags and these notices are outside
+the cap; the bodies are inside it.
+
+The cut is a fallback, not a filter: the engine never removes a skill from the active set
+because of the budget, and the full text is always reachable by reading the file.
 
 ## Related
 

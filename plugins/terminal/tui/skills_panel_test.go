@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -60,5 +64,44 @@ func TestSkillsPanelNavClamps(t *testing.T) {
 	m.moveSkills(5)
 	if m.skillsIdx != 1 {
 		t.Fatalf("down past end must clamp to last, got %d", m.skillsIdx)
+	}
+}
+
+func TestSkillPanelSeesTheRootsTheMenuScans(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("HERRSCHER_STATE_DIR", stateDir)
+	extraRoot := t.TempDir()
+	writeSkill(t, filepath.Join(extraRoot, "extra"), "extra")
+	config := fmt.Sprintf(`{"skills":{"roots":[%q]}}`, extraRoot)
+	if err := os.WriteFile(filepath.Join(stateDir, "config.json"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	writeSkill(t, filepath.Join(cwd, ".claude", "skills", "proj"), "proj")
+
+	roots := skillPanelRoots(cwd)
+	want := skills.Roots(cwd, []string{extraRoot})
+	if !slices.Equal(roots, want) {
+		t.Fatalf("the panel must scan exactly the menu's roots:\npanel %v\nmenu  %v", roots, want)
+	}
+	listed := make(map[string]bool)
+	for _, row := range skills.Discover(roots) {
+		listed[row.Name] = true
+	}
+	for _, name := range []string{"proj", "extra"} {
+		if !listed[name] {
+			t.Fatalf("the panel must list the skill %q the menu can hide, roots %v", name, roots)
+		}
+	}
+}
+
+func writeSkill(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: " + name + "\ndescription: a " + name + " skill\n---\nBODY\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

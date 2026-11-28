@@ -96,6 +96,10 @@ func runBridge(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 	if rosterRoot == "" {
 		rosterRoot = host.DefaultAgentsRoot()
 	}
+	budget, err := bridge.AgentSkillBudget(rosterRoot, *agent)
+	if err != nil {
+		return bridge.LocalizeSkillBudgetError(err, clitext.ClientLanguage())
+	}
 	opts := bridge.Options{
 		Channel:          *channel,
 		HubSocket:        *hubSocket,
@@ -107,6 +111,7 @@ func runBridge(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 		MemoryAgent:      *agent,
 		OutboundMaxBytes: cfg.EffectiveOutboundMaxBytes(),
 		ApprovalWait:     host.BridgeApprovalWait(),
+		SkillsBudget:     budget,
 	}
 	if mem != nil {
 		opts.Scope = vaultScopeResolver{mem: mem, log: log}

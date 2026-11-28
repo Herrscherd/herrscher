@@ -3,6 +3,8 @@ package skills
 import (
 	"regexp"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/contextwindow"
 )
 
 var useMarker = regexp.MustCompile(`(?i)<\s*use-skill\s*>\s*([^<]+?)\s*<\s*/\s*use-skill\s*>`)
@@ -17,7 +19,12 @@ type Engine struct {
 	active map[string]bool
 	byPath map[string]Skill
 	bodies map[string]string
+	budget Budget
 }
+
+// SetBudget sets the token caps on the menu and on the expansions. A zero Budget
+// leaves both unbounded, which is the default.
+func (e *Engine) SetBudget(budget Budget) { e.budget = budget }
 
 // NewEngine discovers skills under roots and returns an engine over them. An
 // engine with no skills is a valid no-op (empty Menu/Expansions).
@@ -57,19 +64,33 @@ func (e *Engine) load() {
 func (e *Engine) Refresh() { e.load() }
 
 // Menu renders the activation instruction and one line per discovered skill. It
-// returns "" when no skills exist so the caller injects nothing.
-func (e *Engine) Menu() string {
+// returns "" when no skills exist so the caller injects nothing. Under a menu
+// budget, active skills are always listed and the rest are ranked by their lexical
+// relevance to message; the skills that do not fit are named by notes.MenuMore.
+func (e *Engine) Menu(message string, notes Notices) string {
 	if len(e.order) == 0 {
 		return ""
 	}
+	shown, hidden := e.selectMenu(message, notes)
+	return e.renderMenu(shown, hidden, notes)
+}
+
+func (e *Engine) renderMenu(shown map[string]bool, hidden int, notes Notices) string {
 	var buf strings.Builder
 	buf.WriteString("<skills data-only=\"true\">\n")
 	buf.WriteString("Skills available for this session. To use one, output the marker <use-skill>NAME</use-skill> in your reply; its full instructions arrive next turn.\n")
 	for _, name := range e.order {
+		if !shown[name] {
+			continue
+		}
 		buf.WriteString("- ")
 		buf.WriteString(name)
 		buf.WriteString(": ")
 		buf.WriteString(e.byName[name].Description)
+		buf.WriteByte('\n')
+	}
+	if hidden > 0 {
+		buf.WriteString(notes.MenuMore(hidden, e.roots))
 		buf.WriteByte('\n')
 	}
 	buf.WriteString("</skills>")
@@ -104,29 +125,59 @@ func (e *Engine) Strip(reply string) string {
 
 // Expansions returns the bodies of all active skills, each fenced with its name
 // and absolute directory so the model can Read bundled files. A body that fails
-// to load is skipped. Returns "" when nothing is active.
-func (e *Engine) Expansions() string {
+// to load is skipped. Under an expansions budget the bodies share a token cap: a
+// body that does not fit is cut at a line boundary and notes.ExpansionCut names
+// the file to read in full. Returns "" when nothing is active.
+func (e *Engine) Expansions(notes Notices) string {
 	var buf strings.Builder
+	used := 0
 	for _, name := range e.order {
 		if !e.active[name] {
 			continue
 		}
 		skill := e.byName[name]
-		body, ok := e.bodies[skill.bodyPath]
+		body, ok := e.body(skill)
 		if !ok {
-			var err error
-			if body, err = skill.Body(); err != nil {
-				continue
-			}
-			e.bodies[skill.bodyPath] = body
+			continue
 		}
-		buf.WriteString("<skill name=\"")
-		buf.WriteString(name)
-		buf.WriteString("\" dir=\"")
-		buf.WriteString(skill.Dir)
-		buf.WriteString("\">\n")
-		buf.WriteString(body)
-		buf.WriteString("\n</skill>\n")
+		bodyTokens := contextwindow.EstimateTokens(body)
+		if e.budget.Expansions <= 0 || used+bodyTokens <= e.budget.Expansions {
+			used += bodyTokens
+			buf.WriteString(expansionBlock(skill, body, ""))
+			continue
+		}
+		kept := fitTokens(body, e.budget.Expansions-used)
+		used += contextwindow.EstimateTokens(kept)
+		buf.WriteString(expansionBlock(skill, kept, notes.ExpansionCut(name, skill.bodyPath)))
 	}
+	return buf.String()
+}
+
+func (e *Engine) body(skill Skill) (string, bool) {
+	if body, ok := e.bodies[skill.bodyPath]; ok {
+		return body, true
+	}
+	body, err := skill.Body()
+	if err != nil {
+		return "", false
+	}
+	e.bodies[skill.bodyPath] = body
+	return body, true
+}
+
+func expansionBlock(skill Skill, body, notice string) string {
+	var buf strings.Builder
+	buf.WriteString("<skill name=\"")
+	buf.WriteString(skill.Name)
+	buf.WriteString("\" dir=\"")
+	buf.WriteString(skill.Dir)
+	buf.WriteString("\">\n")
+	buf.WriteString(body)
+	buf.WriteByte('\n')
+	if notice != "" {
+		buf.WriteString(notice)
+		buf.WriteByte('\n')
+	}
+	buf.WriteString("</skill>\n")
 	return buf.String()
 }

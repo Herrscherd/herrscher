@@ -111,6 +111,12 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 	}
 	defer closeAndWarn(backend)
 
+	messages := newBridgeMessages()
+	eng, err := newSkillEngine(backend, opts.SkillsBudget, messages)
+	if err != nil {
+		return err
+	}
+
 	conn, err := dialHub(ctx, opts.HubSocket)
 	if err != nil {
 		return err
@@ -146,13 +152,12 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 		return fmt.Errorf("working directory: %w", err)
 	}
 	ProjectLearnedSkills(ctx, orch, cwd)
-	eng := newSkillEngine(backend)
 	var pin *scopePin
 	if opts.Scope != nil && !opts.ProjectPinned {
 		pin = &scopePin{resolve: opts.Scope, current: opts.LaunchProject, agent: opts.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
-		affordances{roster: opts.Roster, caps: opts.Capabilities, selfTools: opts.SelfToolsBytes, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals}, pin)
+		affordances{roster: opts.Roster, caps: opts.Capabilities, selfTools: opts.SelfToolsBytes, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals, skillMessages: messages}, pin)
 	if err := parent.Err(); err != nil {
 		return err
 	}
@@ -174,6 +179,7 @@ type affordances struct {
 	user      identity.Identity
 	outbox    outboundSettings
 	approvals *approvalChannel
+	skillMessages *bridgeMessages
 }
 
 type scopePin struct {
@@ -327,7 +333,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
 	defer turn.discard()
-	injected := composeTurnContext(memCtx, eng, aff)
+	injected := composeTurnContext(memCtx, eng, aff, event.Text, lang)
 	prompt := contracts.Prompt{Content: event.Text, Context: injected.String(), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string

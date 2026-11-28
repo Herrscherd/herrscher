@@ -15,7 +15,7 @@ func TestRefreshPicksUpAnEditedDescription(t *testing.T) {
 	writeSkill(t, root, "one", "name: one\ndescription: second, and longer\n", "ONE\n")
 	e.Refresh()
 
-	if got := e.Menu(); !strings.Contains(got, "second, and longer") {
+	if got := e.Menu("", testNotices{}); !strings.Contains(got, "second, and longer") {
 		t.Fatalf("menu kept the stale description:\n%s", got)
 	}
 }
@@ -25,14 +25,14 @@ func TestRefreshPicksUpAnEditedBody(t *testing.T) {
 	writeSkill(t, root, "one", "name: one\ndescription: first\n", "OLD BODY\n")
 	e := NewEngine([]string{root})
 	e.Detect("<use-skill>one</use-skill>")
-	if got := e.Expansions(); !strings.Contains(got, "OLD BODY") {
+	if got := e.Expansions(testNotices{}); !strings.Contains(got, "OLD BODY") {
 		t.Fatalf("expansion did not carry the body:\n%s", got)
 	}
 
 	writeSkill(t, root, "one", "name: one\ndescription: first\n", "NEW BODY, rewritten\n")
 	e.Refresh()
 
-	got := e.Expansions()
+	got := e.Expansions(testNotices{})
 	if strings.Contains(got, "OLD BODY") || !strings.Contains(got, "NEW BODY") {
 		t.Fatalf("expansion served the cached body after an edit:\n%s", got)
 	}
@@ -43,15 +43,15 @@ func TestRefreshPicksUpASameSizeEdit(t *testing.T) {
 	writeSkill(t, root, "one", "name: one\ndescription: aaa\n", "BODY A\n")
 	e := NewEngine([]string{root})
 	e.Detect("<use-skill>one</use-skill>")
-	_ = e.Expansions()
+	_ = e.Expansions(testNotices{})
 
 	writeSkill(t, root, "one", "name: one\ndescription: bbb\n", "BODY B\n")
 	e.Refresh()
 
-	if got := e.Menu(); !strings.Contains(got, "bbb") {
+	if got := e.Menu("", testNotices{}); !strings.Contains(got, "bbb") {
 		t.Fatalf("menu kept the stale description:\n%s", got)
 	}
-	if got := e.Expansions(); !strings.Contains(got, "BODY B") {
+	if got := e.Expansions(testNotices{}); !strings.Contains(got, "BODY B") {
 		t.Fatalf("expansion kept the stale body:\n%s", got)
 	}
 }
@@ -61,7 +61,7 @@ func TestRefreshForgetsARemovedSkill(t *testing.T) {
 	writeSkill(t, root, "one", "name: one\ndescription: first\n", "GONE SOON\n")
 	e := NewEngine([]string{root})
 	e.Detect("<use-skill>one</use-skill>")
-	_ = e.Expansions()
+	_ = e.Expansions(testNotices{})
 
 	if err := os.RemoveAll(filepath.Join(root, "one")); err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestRefreshForgetsARemovedSkill(t *testing.T) {
 	if len(e.bodies) != 0 {
 		t.Fatalf("body cache kept %d entries for a skill that no longer exists", len(e.bodies))
 	}
-	if got := e.Expansions(); got != "" {
+	if got := e.Expansions(testNotices{}); got != "" {
 		t.Fatalf("expansion still carries a removed skill:\n%s", got)
 	}
 }

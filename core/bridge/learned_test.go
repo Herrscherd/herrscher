@@ -186,7 +186,7 @@ func TestRenderSkillCollapsesADescriptionThatWouldEscape(t *testing.T) {
 }
 
 func TestSkillRootsPutsLearnedBetweenRepoAndGlobal(t *testing.T) {
-	roots := skillRoots("/wt", []string{"/extra"})
+	roots := skills.Roots("/wt", []string{"/extra"})
 
 	if len(roots) != 4 {
 		t.Fatalf("%d roots, want 4: %v", len(roots), roots)
@@ -342,7 +342,7 @@ func TestRunUntilClosedInListsTheSkillsOfItsDirectory(t *testing.T) {
 	close(in)
 	be := &captureBackend{reply: "ok"}
 
-	if err := RunUntilClosedIn(context.Background(), dir, func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, make(chan contracts.Event, 8)); err != nil {
+	if err := RunUntilClosedIn(context.Background(), dir, skills.Budget{}, func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, make(chan contracts.Event, 8)); err != nil {
 		t.Fatalf("RunUntilClosedIn: %v", err)
 	}
 	if len(be.contexts) != 1 || !strings.Contains(be.contexts[0], "brask-release") {

@@ -298,9 +298,12 @@ func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state
 	}
 	dir := seedRunDir(sess)
 	bridge.ProjectLearnedSkills(ctx, orch, dir)
-	err := bridge.RunUntilClosedIn(ctx, dir, func(string) (contracts.Backend, error) {
-		return runtime.backendFactory()(ctx, sess)
-	}, orch, sess.ChannelID, toBridge, fromBridge)
+	budget, err := bridge.AgentSkillBudget(DefaultAgentsRoot(), sess.Agent)
+	if err == nil {
+		err = bridge.RunUntilClosedIn(ctx, dir, budget, func(string) (contracts.Backend, error) {
+			return runtime.backendFactory()(ctx, sess)
+		}, orch, sess.ChannelID, toBridge, fromBridge)
+	}
 	bridgeErr <- err
 	if cancelsSeed(err) && ctx.Err() == nil {
 		cancel()

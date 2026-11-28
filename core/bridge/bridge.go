@@ -75,6 +75,9 @@ type Options struct {
 	OutboxRoot       string
 	OutboundMaxBytes int64
 	ApprovalWait     time.Duration
+	// SkillsBudget caps the skill text injected each turn, read from the agent's
+	// skills-budget file. The zero budget leaves the skills unbounded.
+	SkillsBudget skills.Budget
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
@@ -98,16 +101,21 @@ func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contrac
 	if err != nil {
 		cwd = "."
 	}
-	return RunUntilClosedIn(ctx, cwd, newBackend, orch, channel, input, out)
+	return RunUntilClosedIn(ctx, cwd, skills.Budget{}, newBackend, orch, channel, input, out)
 }
 
-// RunUntilClosedIn is RunUntilClosed for a session whose skills live in dir rather than in the working directory.
-func RunUntilClosedIn(ctx context.Context, dir string, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
+// RunUntilClosedIn is RunUntilClosed for a session whose skills live in dir rather than in the working directory, capped by budget.
+func RunUntilClosedIn(ctx context.Context, dir string, budget skills.Budget, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
 	resp, err := newBackend(channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
 	defer closeAndWarn(resp)
+
+	messages := newBridgeMessages()
+	if _, err := newSkillEngineIn(resp, dir, budget, messages); err != nil {
+		return err
+	}
 
 	var lang i18n.Language
 	for {
@@ -120,7 +128,11 @@ func RunUntilClosedIn(ctx context.Context, dir string, newBackend BackendFactory
 				lang = languageOf(event.Value)
 				continue
 			}
-			router := turnRouter{sink: channelSink{done: ctx.Done(), out: out}, backend: resp, orch: orch, eng: newSkillEngineIn(resp, dir)}
+			eng, err := newSkillEngineIn(resp, dir, budget, messages)
+			if err != nil {
+				return err
+			}
+			router := turnRouter{sink: channelSink{done: ctx.Done(), out: out}, backend: resp, orch: orch, eng: eng, aff: affordances{skillMessages: messages}}
 			if turnErr := router.route(ctx, event, lang); turnErr != nil {
 				return turnErr
 			}

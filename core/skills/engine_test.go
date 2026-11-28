@@ -12,18 +12,18 @@ func TestEngineMenuDetectExpand(t *testing.T) {
 
 	e := NewEngine([]string{repo})
 
-	menu := e.Menu()
+	menu := e.Menu("", testNotices{})
 	for _, want := range []string{"<skills", "pdf-fill: fill PDFs", "web: browse", "<use-skill>"} {
 		if !strings.Contains(menu, want) {
 			t.Fatalf("menu missing %q:\n%s", want, menu)
 		}
 	}
-	if e.Expansions() != "" {
-		t.Fatalf("nothing active yet, want empty expansions, got %q", e.Expansions())
+	if e.Expansions(testNotices{}) != "" {
+		t.Fatalf("nothing active yet, want empty expansions, got %q", e.Expansions(testNotices{}))
 	}
 
 	e.Detect("sure, I'll use it <use-skill> pdf-fill </use-skill> now")
-	exp := e.Expansions()
+	exp := e.Expansions(testNotices{})
 	if !strings.Contains(exp, "FILL THE PDF") {
 		t.Fatalf("active skill body missing:\n%s", exp)
 	}
@@ -52,22 +52,22 @@ func TestEngineRefreshPicksUpNewSkill(t *testing.T) {
 	writeSkill(t, repo, "two", "name: two\ndescription: second\n", "TWO\n")
 	e.Refresh()
 
-	if !strings.Contains(e.Menu(), "two: second") {
-		t.Fatalf("refresh must surface the newly added skill:\n%s", e.Menu())
+	if !strings.Contains(e.Menu("", testNotices{}), "two: second") {
+		t.Fatalf("refresh must surface the newly added skill:\n%s", e.Menu("", testNotices{}))
 	}
-	if !strings.Contains(e.Expansions(), "ONE") {
-		t.Fatalf("refresh must keep the already-active skill active:\n%s", e.Expansions())
+	if !strings.Contains(e.Expansions(testNotices{}), "ONE") {
+		t.Fatalf("refresh must keep the already-active skill active:\n%s", e.Expansions(testNotices{}))
 	}
 }
 
 func TestEngineUnknownMarkerIgnored(t *testing.T) {
 	e := NewEngine([]string{t.TempDir()})
 	e.Detect("<use-skill>nope</use-skill>")
-	if e.Expansions() != "" {
-		t.Fatalf("unknown skill must not activate, got %q", e.Expansions())
+	if e.Expansions(testNotices{}) != "" {
+		t.Fatalf("unknown skill must not activate, got %q", e.Expansions(testNotices{}))
 	}
-	if e.Menu() != "" {
-		t.Fatalf("no skills discovered, menu must be empty, got %q", e.Menu())
+	if e.Menu("", testNotices{}) != "" {
+		t.Fatalf("no skills discovered, menu must be empty, got %q", e.Menu("", testNotices{}))
 	}
 }
 
@@ -89,7 +89,7 @@ func TestDetectReturnsTheKnownNamesItActivated(t *testing.T) {
 			t.Fatalf("Detect = %v, want %v in order of first appearance", got, want)
 		}
 	}
-	if exp := e.Expansions(); !strings.Contains(exp, "DO ALPHA") || !strings.Contains(exp, "DO BETA") {
+	if exp := e.Expansions(testNotices{}); !strings.Contains(exp, "DO ALPHA") || !strings.Contains(exp, "DO BETA") {
 		t.Errorf("Detect returned names but activated nothing:\n%s", exp)
 	}
 }

@@ -1,11 +1,8 @@
 package state
 
 import (
-	"errors"
 	"io"
-	"io/fs"
 	"log/slog"
-	"os"
 )
 
 func logFailure(action string, err error) {
@@ -16,10 +13,4 @@ func logFailure(action string, err error) {
 
 func closeLogged(closer io.Closer) {
 	logFailure("close", closer.Close())
-}
-
-func removeLogged(path string) {
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		logFailure("remove "+path, err)
-	}
 }

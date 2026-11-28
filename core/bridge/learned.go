@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -74,19 +75,9 @@ func writeSkillFile(dir, body string) error {
 	if err := os.MkdirAll(dir, dirShared); err != nil {
 		return err
 	}
-	staged, err := os.CreateTemp(dir, ".SKILL-*.md")
-	if err != nil {
-		return err
-	}
-	stagedPath := staged.Name()
-	_, writeErr := staged.WriteString(body)
-	if err := errors.Join(writeErr, staged.Chmod(fileSecret), staged.Close()); err != nil {
-		return errors.Join(err, os.Remove(stagedPath))
-	}
-	if err := os.Rename(stagedPath, filepath.Join(dir, "SKILL.md")); err != nil {
-		return errors.Join(err, os.Remove(stagedPath))
-	}
-	return nil
+	skillPath := filepath.Join(dir, "SKILL.md")
+	atomicfile.SweepLogged(skillPath)
+	return atomicfile.Write(skillPath, []byte(body), fileSecret)
 }
 
 func removeLegacyProjection(cwd string) {

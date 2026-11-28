@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -17,9 +17,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/testsupport/statesavestest"
 )
 
 type jammedRestartSup struct {
+	t          *testing.T
 	statePath  string
 	restartErr error
 	restarted  []state.Session
@@ -34,9 +36,7 @@ func (s *jammedRestartSup) RestartWithin(sess state.Session, _ time.Duration) er
 	if len(s.restarted) > 1 {
 		return nil
 	}
-	if err := os.Mkdir(s.statePath+".tmp", 0o700); err != nil {
-		return err
-	}
+	statesavestest.Block(s.t, s.statePath)
 	return s.restartErr
 }
 
@@ -63,9 +63,9 @@ func TestSessionSwitchNamesTheLostSessionWhenRestartAndRollbackFail(t *testing.T
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "s.json")
+			path := filepath.Join(t.TempDir(), "state.json")
 			err := switchWithLostRollback(t, path, tc.lang, restartErr)
-			assertLostSession(t, err, restartErr, path+".tmp", tc.lang, tc.wantError, tc.wantRendered)
+			assertLostSession(t, err, restartErr, path, tc.lang, tc.wantError, tc.wantRendered)
 		})
 	}
 }
@@ -76,7 +76,7 @@ func switchWithLostRollback(t *testing.T, path string, lang i18n.Language, resta
 	if err := st.AddSession(state.Session{Name: "s1", ChannelID: "42", Type: "text", Vendor: "claude", Cmd: "claude"}); err != nil {
 		t.Fatal(err)
 	}
-	sup := &jammedRestartSup{statePath: path, restartErr: restartErr}
+	sup := &jammedRestartSup{t: t, statePath: path, restartErr: restartErr}
 	h := NewHandler(clitext.NewMessages(), &fakeChannelAdmin{}, sup, &fakeWT{path: t.TempDir(), scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
 	h.SetLanguage(lang)
 	_, err := h.sessionSwitchRun(context.Background(), args(
@@ -91,22 +91,26 @@ func switchWithLostRollback(t *testing.T, path string, lang i18n.Language, resta
 	return err
 }
 
-func assertLostSession(t *testing.T, err, restartErr error, faultPath string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
+func assertLostSession(t *testing.T, err, restartErr error, statePath string, lang i18n.Language, wantErrorFormat, wantRenderedFormat string) {
 	t.Helper()
 	var pathErr *fs.PathError
 	if !errors.As(err, &pathErr) {
 		t.Fatalf("no *fs.PathError in the chain, the rollback cause is lost: %v", err)
 	}
-	if pathErr.Path != faultPath {
-		t.Fatalf("rollback failed on %q, want the jammed state file %q", pathErr.Path, faultPath)
+	if faultDir := filepath.Dir(statePath); filepath.Dir(pathErr.Path) != faultDir {
+		t.Fatalf("rollback failed on %q, want a write inside the jammed state directory %q", pathErr.Path, faultDir)
+	}
+	if !strings.HasPrefix(filepath.Base(pathErr.Path), ".state.json.") {
+		t.Fatalf("rollback failed on %q, want the staging file of state.json", pathErr.Path)
 	}
 	if !errors.Is(err, restartErr) {
 		t.Fatalf("errors.Is(restart cause) = false, the cause is lost: %v", err)
 	}
-	if got, want := err.Error(), fmt.Sprintf(wantErrorFormat, restartErr, pathErr); got != want {
+	rollback := fmt.Sprintf("write %s: %v", statePath, pathErr)
+	if got, want := err.Error(), fmt.Sprintf(wantErrorFormat, restartErr, rollback); got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
-	if got, want := cli.Localize(clitext.NewMessages(), err, lang).Error(), fmt.Sprintf(wantRenderedFormat, restartErr, pathErr); got != want {
+	if got, want := cli.Localize(clitext.NewMessages(), err, lang).Error(), fmt.Sprintf(wantRenderedFormat, restartErr, rollback); got != want {
 		t.Fatalf("notice = %q, want %q", got, want)
 	}
 }

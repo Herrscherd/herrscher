@@ -92,7 +92,9 @@ func (s *Store) SetReply(name string, rule contracts.ReplyRule) error {
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(filepath.Join(home, replyFile), text, fileMode)
+	rulePath := filepath.Join(home, replyFile)
+	atomicfile.SweepLogged(rulePath)
+	return atomicfile.Write(rulePath, text, fileMode)
 }
 
 // Channels reads the channels of an agent, in the order of the file. A missing
@@ -144,6 +146,9 @@ func (s *Store) SetReplyWithChannels(name string, rule contracts.ReplyRule, chan
 		return err
 	}
 	channelsPath := filepath.Join(home, channelsFile)
+	rulePath := filepath.Join(home, replyFile)
+	atomicfile.SweepLogged(channelsPath)
+	atomicfile.SweepLogged(rulePath)
 	previous, existed, err := readOptional(channelsPath)
 	if err != nil {
 		return err
@@ -151,7 +156,7 @@ func (s *Store) SetReplyWithChannels(name string, rule contracts.ReplyRule, chan
 	if err := atomicfile.Write(channelsPath, channelsText, fileMode); err != nil {
 		return err
 	}
-	if err := atomicfile.Write(filepath.Join(home, replyFile), ruleText, fileMode); err != nil {
+	if err := atomicfile.Write(rulePath, ruleText, fileMode); err != nil {
 		return channelsLeftBehind(name, err, channelsPath, previous, existed)
 	}
 	return nil

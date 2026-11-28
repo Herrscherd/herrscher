@@ -51,17 +51,6 @@ func unblockTranscript(path string) {
 	logCleanup(writer.Close())
 }
 
-func awaitPersistWriteInFlight(t *testing.T, h *hub) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for h.persists.group.pending() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("the write never entered the persist group: its caller is not wired to the write tracker")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 func startBlockedTranscriptWrite(t *testing.T, h *hub, name string) <-chan struct{} {
 	t.Helper()
 	sink := h.liveSink(t.Context(), state.Session{Name: name, ChannelID: "c1"})
@@ -72,10 +61,6 @@ func startBlockedTranscriptWrite(t *testing.T, h *hub, name string) <-chan struc
 	}()
 	awaitPersistWriteInFlight(t, h)
 	return written
-}
-
-func persistOverrunText(h *hub) string {
-	return newHostMessages().text(h.textLanguage()(), "warn.persist_overrun", map[string]any{graceParam: persistWriteGrace.String()})
 }
 
 func TestStopWaitsForAPersistentWriteInFlight(t *testing.T) {

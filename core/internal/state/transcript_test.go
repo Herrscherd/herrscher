@@ -103,6 +103,12 @@ func TestReadTranscriptHandlesHugeLine(t *testing.T) {
 func TestTranscriptCompactionBoundsGrowth(t *testing.T) {
 	dir := t.TempDir()
 	p := TranscriptPath(dir, "sess")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(p+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
 	body := strings.Repeat("m", 5000)
 	const n = 1000
 	for i := range n {

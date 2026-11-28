@@ -2,9 +2,10 @@ package state
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 )
 
 func TestSetAccountRollsBackWhenSaveFails(t *testing.T) {
@@ -26,7 +27,7 @@ func TestSetAccountRollsBackWhenSaveFails(t *testing.T) {
 		t.Fatalf("file after a failed SetAccount = account %q, token %q, mark %q, want a, tok, turn-1", got.Account, got.ResumeToken, got.InterruptedTurn)
 	}
 
-	s.write = os.WriteFile
+	s.write = atomicfile.Write
 	must(t, s.SetHome(HomeRef{ID: "home", Type: "chat"}))
 	reloaded, err = LoadState(path)
 	must(t, err)
@@ -55,7 +56,7 @@ func TestSetBackendTargetRollsBackWhenSaveFails(t *testing.T) {
 		t.Fatalf("file after a failed SetBackendTarget = vendor %q, cmd %q, model %q, token %q, mark %q, want v1, c1, m1, tok, turn-1", got.Vendor, got.Cmd, got.ModelID, got.ResumeToken, got.InterruptedTurn)
 	}
 
-	s.write = os.WriteFile
+	s.write = atomicfile.Write
 	must(t, s.SetHome(HomeRef{ID: "home", Type: "chat"}))
 	reloaded, err = LoadState(path)
 	must(t, err)

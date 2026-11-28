@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/forgecreds"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
@@ -224,6 +225,7 @@ func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) 
 }
 
 func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, opts Options) (*state.State, instanceClaim, error) {
+	logCleanup(atomicfile.Sweep(opts.StatePath))
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
 		return nil, instanceClaim{}, err
@@ -232,6 +234,7 @@ func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAn
 	if err != nil {
 		return nil, instanceClaim{}, err
 	}
+	sweepTranscriptStaging(filepath.Dir(opts.StatePath))
 	applyHubDefaults(store, opts)
 	return store, claim, nil
 }

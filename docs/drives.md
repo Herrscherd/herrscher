@@ -177,16 +177,31 @@ failure. Your own operations are journaled with no session. The root of a
 drive with folders lists those folders without reading the remote, and is not
 journaled.
 
-Writes that ran or failed go to `drives/writes.jsonl`, everything else to
-`drives/journal.jsonl`, so no amount of listing or reading pushes a write out
-of the history. Each file is rotated at 4 MiB and keeps eight previous files
-(`.1` to `.8`). `drive log` reads both newest first and stops once it holds
-the entries it shows. A line it cannot read is counted and said under the
-listing.
+Nothing runs unrecorded. An operation is journaled before its result is given:
+a read or a listing whose entry cannot be written returns an error instead of
+what it found, and a copy removes what it staged. A write has already reached
+the drive by then, so it returns an error saying that its entry is missing.
 
-A session cannot flood `journal.jsonl` either: at most 60 of its listings,
-reads and refusals are recorded per minute, and the next recorded one says how
-many were left out before it.
+The journal lives in `drives/journal/`, with files of its own for each session
+and for you, so a session can only ever rotate its own history away. Writes
+that reached the drive, done or failed, go to a file of their own
+(`<session>.writes.jsonl`), and nothing else fills it. Listings, reads,
+refusals and the writes that never left the machine (a missing or oversized
+source) go to `<session>.jsonl`. Each file is rotated at 4 MiB and keeps eight
+previous files (`.1` to `.8`). `drive log` reads them newest first and stops
+once it holds the entries it shows; a filter on a session reads that session's
+files alone. A line it cannot read is counted and said under the listing.
+
+Two caps keep a session from flooding it:
+
+- the entries that carry no data, refusals and writes that never left the
+  machine, are recorded at most 60 per minute and per session, and the next one
+  recorded says how many were left out before it;
+- a session runs at most 600 listings, reads and writes per minute; the next
+  one is refused before it runs, with an error that says so, and that refusal
+  is journaled. You are never capped.
+
+Every listing and read that runs is recorded with its path, whatever the pace.
 
 ## Limits
 

@@ -71,27 +71,27 @@ func TestTheJournalKeepsItsGenerationsAndReadsAcrossThem(t *testing.T) {
 	journal := Open(t.TempDir()).Journal()
 	padding := strings.Repeat("x", journalRotateBytes/2)
 	for index := range 5 {
-		entry := Entry{Time: time.Now(), Drive: "gdrive", Session: "s1", Op: OpRead, Outcome: OutcomeDone, Reason: padding}
+		entry := Entry{Time: time.Now(), Drive: "gdrive", Op: OpRead, Outcome: OutcomeDone, Reason: padding}
 		if index == 4 {
-			entry.Session = "s2"
+			entry.Agent = "a2"
 		}
 		if err := journal.Append(t.Context(), entry); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := os.Stat(generation(journal.path, 2)); err != nil {
+	if _, err := os.Stat(generation(journal.operatorPath(), 2)); err != nil {
 		t.Fatalf("no second generation: %v", err)
 	}
 	all, err := journal.Read(Filter{}, 0)
 	if err != nil || len(all.Entries) != 5 {
 		t.Fatalf("Read = %d entries, %v, want 5", len(all.Entries), err)
 	}
-	mine, err := journal.Read(Filter{Session: "s2"}, 0)
+	mine, err := journal.Read(Filter{Agent: "a2"}, 0)
 	if err != nil || len(mine.Entries) != 1 {
-		t.Fatalf("Read of s2 = %+v, %v", mine, err)
+		t.Fatalf("Read of a2 = %d entries, %v", len(mine.Entries), err)
 	}
 	last, err := journal.Read(Filter{}, 1)
-	if err != nil || len(last.Entries) != 1 || last.Entries[0].Session != "s2" {
+	if err != nil || len(last.Entries) != 1 || last.Entries[0].Agent != "a2" {
 		t.Fatalf("Read limit 1 = %+v, %v, want the newest", last, err)
 	}
 }
@@ -101,7 +101,7 @@ func TestTheJournalCountsTheLinesItCannotRead(t *testing.T) {
 	if err := journal.Append(t.Context(), Entry{Time: time.Now(), Drive: "gdrive", Op: OpRead, Outcome: OutcomeDone}); err != nil {
 		t.Fatal(err)
 	}
-	file, err := os.OpenFile(journal.path, os.O_APPEND|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(journal.operatorPath(), os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestTheJournalCountsTheLinesItCannotRead(t *testing.T) {
 func TestASessionKeptRefusedCannotFlushTheJournal(t *testing.T) {
 	journal := Open(t.TempDir()).Journal()
 	start := time.Now()
-	for index := range EntriesPerWindow + 15 {
+	for index := range RefusalsPerWindow + 15 {
 		entry := Entry{Time: start.Add(time.Duration(index) * time.Millisecond), Session: "noisy", Drive: "gdrive", Op: OpWrite, Outcome: OutcomeRefused}
 		if err := journal.Append(t.Context(), entry); err != nil {
 			t.Fatal(err)
@@ -129,12 +129,12 @@ func TestASessionKeptRefusedCannotFlushTheJournal(t *testing.T) {
 	if err := journal.Append(t.Context(), Entry{Time: start, Session: "quiet", Drive: "gdrive", Op: OpWrite, Outcome: OutcomeRefused}); err != nil {
 		t.Fatal(err)
 	}
-	if err := journal.Append(t.Context(), Entry{Time: start.Add(EntryWindow + time.Second), Session: "noisy", Drive: "gdrive", Op: OpWrite, Outcome: OutcomeRefused}); err != nil {
+	if err := journal.Append(t.Context(), Entry{Time: start.Add(Window + time.Second), Session: "noisy", Drive: "gdrive", Op: OpWrite, Outcome: OutcomeRefused}); err != nil {
 		t.Fatal(err)
 	}
 	noisy, err := journal.Read(Filter{Session: "noisy"}, 0)
-	if err != nil || len(noisy.Entries) != EntriesPerWindow+1 {
-		t.Fatalf("noisy entries = %d, %v, want %d", len(noisy.Entries), err, EntriesPerWindow+1)
+	if err != nil || len(noisy.Entries) != RefusalsPerWindow+1 {
+		t.Fatalf("noisy entries = %d, %v, want %d", len(noisy.Entries), err, RefusalsPerWindow+1)
 	}
 	if last := noisy.Entries[len(noisy.Entries)-1]; last.Suppressed != 15 {
 		t.Fatalf("the first refusal of the next window says %d left out, want 15", last.Suppressed)
@@ -167,48 +167,90 @@ func TestNoListingOrReadPushesAWriteOutOfTheJournal(t *testing.T) {
 	}
 }
 
-func TestASessionsListingsAndReadsAreCountedLikeItsRefusals(t *testing.T) {
+func TestEveryListingAndReadIsRecordedWhileOnlyEmptyEntriesAreCapped(t *testing.T) {
 	journal := Open(t.TempDir()).Journal()
 	start := time.Now()
-	for index := range EntriesPerWindow + 10 {
-		if err := journal.Append(t.Context(), Entry{Time: start.Add(time.Duration(index) * time.Millisecond), Session: "s1", Drive: "gdrive", Op: OpList, Outcome: OutcomeDone}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for range 3 {
-		if err := journal.Append(t.Context(), Entry{Time: start, Session: "s1", Drive: "gdrive", Op: OpWrite, Outcome: OutcomeDone}); err != nil {
-			t.Fatal(err)
+	for index := range RefusalsPerWindow + 10 {
+		at := start.Add(time.Duration(index) * time.Millisecond)
+		for _, entry := range []Entry{
+			{Time: at, Session: "s1", Drive: "gdrive", Path: "p" + strconv.Itoa(index), Op: OpRead, Outcome: OutcomeDone},
+			{Time: at, Session: "s1", Drive: "gdrive", Op: OpWrite, Outcome: OutcomeUnsent},
+		} {
+			if err := journal.Append(t.Context(), entry); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	log, err := journal.Read(Filter{Session: "s1"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	listings, writes := 0, 0
+	reads, unsent := 0, 0
 	for _, entry := range log.Entries {
-		switch entry.Op {
-		case OpList:
-			listings++
-		case OpWrite:
-			writes++
-		case OpRead:
+		switch entry.Outcome {
+		case OutcomeDone:
+			reads++
+		case OutcomeUnsent:
+			unsent++
+		case OutcomeRefused, OutcomeFailed:
 		}
 	}
-	if listings != EntriesPerWindow || writes != 3 {
-		t.Fatalf("listings = %d, writes = %d, want %d and every write", listings, writes, EntriesPerWindow)
+	if reads != RefusalsPerWindow+10 || unsent != RefusalsPerWindow {
+		t.Fatalf("reads = %d, unsent writes = %d, want every read and %d unsent writes", reads, unsent, RefusalsPerWindow)
+	}
+	if _, err := os.Stat(filepath.Join(journal.dir, fileKey("s1")+writesSuffix)); err == nil {
+		t.Fatal("an unsent write went to the file of the writes that reached the remote")
+	}
+}
+
+func TestASessionOnlyEverRotatesItsOwnHistory(t *testing.T) {
+	journal := Open(t.TempDir()).Journal()
+	start := time.Now()
+	if err := journal.Append(t.Context(), Entry{Time: start, Session: "quiet", Drive: "gdrive", Path: "kept.md", Op: OpRead, Outcome: OutcomeDone}); err != nil {
+		t.Fatal(err)
+	}
+	padding := strings.Repeat("x", journalRotateBytes/2)
+	for index := range 2 * (JournalGenerations + 2) {
+		if err := journal.Append(t.Context(), Entry{Time: start.Add(time.Duration(index+1) * time.Second), Session: "noisy", Drive: "gdrive", Op: OpRead, Outcome: OutcomeDone, Reason: padding}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	quiet, err := journal.Read(Filter{Session: "quiet"}, 0)
+	if err != nil || len(quiet.Entries) != 1 || quiet.Entries[0].Path != "kept.md" {
+		t.Fatalf("quiet = %+v, %v, want its read kept", quiet, err)
+	}
+}
+
+func TestASessionPastItsOperationCapIsRefusedBeforeRunning(t *testing.T) {
+	journal := Open(t.TempDir()).Journal()
+	now := time.Now()
+	for range OperationsPerWindow {
+		if err := journal.Reserve(t.Context(), "s1", now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, capped := errors.AsType[*OperationCapError](journal.Reserve(t.Context(), "s1", now)); !capped {
+		t.Fatal("an operation past the cap was reserved")
+	}
+	if err := journal.Reserve(t.Context(), "s2", now); err != nil {
+		t.Fatalf("another session was capped: %v", err)
+	}
+	if err := journal.Reserve(t.Context(), "", now); err != nil {
+		t.Fatalf("the operator was capped: %v", err)
+	}
+	if err := journal.Reserve(t.Context(), "s1", now.Add(Window)); err != nil {
+		t.Fatalf("the next window is still capped: %v", err)
 	}
 }
 
 func TestTheSessionRatesForgetAnEndedWindow(t *testing.T) {
 	journal := Open(t.TempDir()).Journal()
 	start := time.Now()
-	for _, entry := range []Entry{
-		{Time: start, Session: "gone", Drive: "gdrive", Op: OpList, Outcome: OutcomeDone},
-		{Time: start.Add(EntryWindow + time.Second), Session: "later", Drive: "gdrive", Op: OpList, Outcome: OutcomeDone},
-	} {
-		if err := journal.Append(t.Context(), entry); err != nil {
-			t.Fatal(err)
-		}
+	if err := journal.Reserve(t.Context(), "gone", start); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.Reserve(t.Context(), "later", start.Add(Window+time.Second)); err != nil {
+		t.Fatal(err)
 	}
 	rates, err := journal.loadRates()
 	if err != nil {
@@ -221,7 +263,10 @@ func TestTheSessionRatesForgetAnEndedWindow(t *testing.T) {
 
 func TestALimitedReadStopsBeforeTheOlderFiles(t *testing.T) {
 	journal := Open(t.TempDir()).Journal()
-	if err := os.WriteFile(generation(journal.path, 1), []byte("not json\n"), 0o600); err != nil {
+	if err := os.MkdirAll(journal.dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(generation(journal.operatorPath(), 1), []byte("not json\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now()
@@ -282,4 +327,8 @@ func TestAnOrphanSecretIsReplacedByTheNextAdd(t *testing.T) {
 	if err != nil || !slices.Contains(env, "RCLONE_CONFIG_S3_SECRET_ACCESS_KEY=fresh") {
 		t.Fatalf("environment = %v, %v, want the fresh secret", env, err)
 	}
+}
+
+func (j Journal) operatorPath() string {
+	return filepath.Join(j.dir, operatorFile+activitySuffix)
 }

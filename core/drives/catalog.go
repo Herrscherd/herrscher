@@ -18,7 +18,7 @@ const (
 	catalogFile     = "drives.json"
 	catalogLockFile = "drives.lock"
 	rcloneFile      = "rclone.conf"
-	journalFile     = "journal.jsonl"
+	journalDir      = "journal"
 	catalogVersion  = 1
 	dirMode         = os.FileMode(0o700)
 	fileMode        = os.FileMode(0o600)
@@ -68,7 +68,7 @@ func (c Catalog) Dir() string { return c.dir }
 func (c Catalog) RcloneConfig() string { return filepath.Join(c.dir, rcloneFile) }
 
 // Journal is the journal of the catalogue.
-func (c Catalog) Journal() Journal { return Journal{path: filepath.Join(c.dir, journalFile)} }
+func (c Catalog) Journal() Journal { return Journal{dir: filepath.Join(c.dir, journalDir)} }
 
 // Ensure creates the directory, readable by its owner alone.
 func (c Catalog) Ensure() error {

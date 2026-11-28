@@ -172,6 +172,42 @@ func (s Service) admit(caller Caller, request Request) (Drive, Path, error) {
 	return drive, path, nil
 }
 
+// JournalError reports an operation whose journal entry could not be
+// written. A read or a listing then withholds what it found, a copy removes
+// what it staged, and a write, which already reached the remote, says so.
+type JournalError struct {
+	Op    Op
+	Cause error
+}
+
+func (e *JournalError) Error() string {
+	if e.Op == OpWrite {
+		return "the write reached the drive, but its journal entry could not be written: " + e.Cause.Error()
+	}
+	return "the drive journal could not record this operation, so its result is withheld: " + e.Cause.Error()
+}
+
+func (e *JournalError) Unwrap() error { return e.Cause }
+
+func (s Service) start(ctx context.Context, caller Caller, request Request) (Drive, Path, error) {
+	drive, path, err := s.Admit(ctx, caller, request)
+	if err != nil {
+		return Drive{}, Path{}, err
+	}
+	if err := s.reserve(ctx, caller, request); err != nil {
+		return Drive{}, Path{}, err
+	}
+	return drive, path, nil
+}
+
+func (s Service) reserve(ctx context.Context, caller Caller, request Request) error {
+	err := s.catalog.Journal().Reserve(ctx, caller.Session, time.Now().UTC())
+	if err != nil {
+		s.record(ctx, caller, Entry{Drive: request.Drive, Path: request.Path, Op: request.Op, Outcome: OutcomeRefused, Reason: err.Error()})
+	}
+	return err
+}
+
 // List lists one level of a folder of the drive. The root of a drive that
 // exposes folders lists those folders, without rclone and without a journal
 // entry, since nothing of the remote is read.
@@ -191,14 +227,16 @@ func (s Service) List(ctx context.Context, caller Caller, name, rawPath string) 
 		}
 		return items, false, nil
 	}
+	if err := s.reserve(ctx, caller, Request{Drive: name, Path: rawPath, Op: OpList}); err != nil {
+		return nil, false, err
+	}
 	var items []Item
 	var truncated bool
 	runner, err := s.runnerFor(drive)
 	if err == nil {
 		items, truncated, err = runner.List(ctx, name+":"+path.String(), ListEntries)
 	}
-	s.recordOutcome(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpList}, err)
-	if err != nil {
+	if err := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpList}, err); err != nil {
 		return nil, false, err
 	}
 	return items, truncated, nil
@@ -206,7 +244,7 @@ func (s Service) List(ctx context.Context, caller Caller, name, rawPath string) 
 
 // Read returns a text file of the drive, refused past InlineReadBytes, when it is not UTF-8 or when it is a folder.
 func (s Service) Read(ctx context.Context, caller Caller, name, rawPath string) (string, error) {
-	drive, path, err := s.Admit(ctx, caller, Request{Drive: name, Path: rawPath, Op: OpRead})
+	drive, path, err := s.start(ctx, caller, Request{Drive: name, Path: rawPath, Op: OpRead})
 	if err != nil {
 		return "", err
 	}
@@ -215,8 +253,7 @@ func (s Service) Read(ctx context.Context, caller Caller, name, rawPath string) 
 	if err == nil && !utf8.Valid(content.Bytes()) {
 		err = ErrNotText
 	}
-	s.recordOutcome(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err)
-	if err != nil {
+	if err := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); err != nil {
 		return "", err
 	}
 	return content.String(), nil
@@ -224,29 +261,49 @@ func (s Service) Read(ctx context.Context, caller Caller, name, rawPath string) 
 
 // ReadTo copies a file of the drive to dest, inside the session's worktree or
 // at an absolute path for the operator. The copy streams into a staging file
-// beside dest, renamed over it once complete.
+// beside dest, renamed over it once complete and journaled.
 func (s Service) ReadTo(ctx context.Context, caller Caller, name, rawPath, dest string) (int64, error) {
-	drive, path, err := s.Admit(ctx, caller, Request{Drive: name, Path: rawPath, Local: dest, Op: OpRead})
+	drive, path, err := s.start(ctx, caller, Request{Drive: name, Path: rawPath, Local: dest, Op: OpRead})
 	if err != nil {
 		return 0, err
 	}
-	size, err := s.copyTo(ctx, caller, drive, path, dest)
-	s.recordOutcome(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err)
+	root, local, err := s.localRoot(caller, dest)
 	if err != nil {
+		return 0, s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead}, err)
+	}
+	defer closeRoot(root)
+	staging, stagingName, err := createStaging(root, local)
+	if err != nil {
+		return 0, s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead}, err)
+	}
+	size, err := s.readFile(ctx, drive, path, staging, CopyBytes)
+	err = errors.Join(err, staging.Close())
+	if err := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); err != nil {
+		discardStaging(root, stagingName)
+		return 0, err
+	}
+	if err := root.Rename(stagingName, local); err != nil {
+		discardStaging(root, stagingName)
 		return 0, err
 	}
 	return size, nil
 }
 
-// Write sends the local file source to the drive, from the session's worktree or an absolute path for the operator.
+// Write sends the local file source to the drive, from the session's worktree
+// or an absolute path for the operator. A write that fails before anything
+// reaches the remote is journaled as unsent, under the cap of the entries that
+// carry no data.
 func (s Service) Write(ctx context.Context, caller Caller, name, rawPath, source string) (int64, error) {
-	drive, path, err := s.Admit(ctx, caller, Request{Drive: name, Path: rawPath, Local: source, Op: OpWrite})
+	drive, path, err := s.start(ctx, caller, Request{Drive: name, Path: rawPath, Local: source, Op: OpWrite})
 	if err != nil {
 		return 0, err
 	}
-	size, err := s.sendFile(ctx, caller, drive, path, source)
-	s.recordOutcome(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpWrite, Bytes: size}, err)
-	if err != nil {
+	size, sent, err := s.sendFile(ctx, caller, drive, path, source)
+	entry := Entry{Drive: name, Path: path.String(), Op: OpWrite, Bytes: size}
+	if err != nil && !sent {
+		entry.Outcome = OutcomeUnsent
+	}
+	if err := s.finish(ctx, caller, entry, err); err != nil {
 		return 0, err
 	}
 	return size, nil
@@ -287,74 +344,67 @@ func (s Service) readFile(ctx context.Context, drive Drive, path Path, dst io.Wr
 	return runner.Read(ctx, target, dst, limit)
 }
 
-func (s Service) copyTo(ctx context.Context, caller Caller, drive Drive, path Path, dest string) (int64, error) {
-	root, name, err := s.localRoot(caller, dest)
-	if err != nil {
-		return 0, err
-	}
-	defer closeRoot(root)
-	staging, stagingName, err := createStaging(root, name)
-	if err != nil {
-		return 0, err
-	}
-	size, err := s.readFile(ctx, drive, path, staging, CopyBytes)
-	err = errors.Join(err, staging.Close())
-	if err == nil {
-		err = root.Rename(stagingName, name)
-	}
-	if err != nil {
-		discardStaging(root, stagingName)
-		return 0, err
-	}
-	return size, nil
-}
-
-func (s Service) sendFile(ctx context.Context, caller Caller, drive Drive, path Path, source string) (int64, error) {
+func (s Service) sendFile(ctx context.Context, caller Caller, drive Drive, path Path, source string) (int64, bool, error) {
 	target, err := drive.Target(path)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	runner, err := s.runnerFor(drive)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	root, name, err := s.localRoot(caller, source)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer closeRoot(root)
 	file, size, err := openSource(root, name)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer closeLocal(file)
 	if size > CopyBytes {
-		return 0, &TooLargeError{Limit: CopyBytes}
+		return 0, false, &TooLargeError{Limit: CopyBytes}
 	}
 	if err := runner.Write(ctx, target, io.LimitReader(file, size), size); err != nil {
-		return 0, err
+		return 0, true, err
 	}
-	return size, nil
+	return size, true, nil
 }
 
-func (s Service) recordOutcome(ctx context.Context, caller Caller, entry Entry, err error) {
-	entry.Outcome = OutcomeDone
-	if err != nil {
-		entry.Outcome = OutcomeFailed
-		entry.Reason = err.Error()
+func (s Service) finish(ctx context.Context, caller Caller, entry Entry, opErr error) error {
+	if entry.Outcome == "" {
+		entry.Outcome = OutcomeDone
+	}
+	if opErr != nil {
+		if entry.Outcome == OutcomeDone {
+			entry.Outcome = OutcomeFailed
+		}
+		entry.Reason = opErr.Error()
 		entry.Bytes = 0
 	}
-	s.record(ctx, caller, entry)
+	if err := s.append(ctx, caller, entry); err != nil {
+		if opErr != nil {
+			slog.Warn("drive journal append", "drive", entry.Drive, "err", err)
+			return opErr
+		}
+		return &JournalError{Op: entry.Op, Cause: err}
+	}
+	return opErr
 }
 
 func (s Service) record(ctx context.Context, caller Caller, entry Entry) {
+	if err := s.append(ctx, caller, entry); err != nil {
+		slog.Warn("drive journal append", "drive", entry.Drive, "err", err)
+	}
+}
+
+func (s Service) append(ctx context.Context, caller Caller, entry Entry) error {
 	entry.Time = time.Now().UTC()
 	entry.Session = caller.Session
 	entry.Agent = caller.Agent
 	if runes := []rune(entry.Reason); len(runes) > reasonRunes {
 		entry.Reason = string(runes[:reasonRunes])
 	}
-	if err := s.catalog.Journal().Append(context.WithoutCancel(ctx), entry); err != nil {
-		slog.Warn("drive journal append", "drive", entry.Drive, "err", err)
-	}
+	return s.catalog.Journal().Append(context.WithoutCancel(ctx), entry)
 }

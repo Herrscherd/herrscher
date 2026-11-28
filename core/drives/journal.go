@@ -3,14 +3,18 @@ package drives
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
@@ -21,15 +25,33 @@ const (
 	journalRotateBytes = 4 << 20
 	// JournalGenerations is how many rotated files each journal file keeps beside the current one.
 	JournalGenerations = 8
-	// EntriesPerWindow is how many listings, reads and refusals of one session the journal records in each EntryWindow.
-	EntriesPerWindow = 60
-	// EntryWindow is the span over which the entries of one session are counted.
-	EntryWindow    = time.Minute
-	lockSuffix     = ".lock"
+	// RefusalsPerWindow is how many refusals of one session the journal records in each Window.
+	RefusalsPerWindow = 60
+	// OperationsPerWindow is how many listings, reads and writes one session runs in each Window; past it, the next is refused before it runs.
+	OperationsPerWindow = 600
+	// Window is the span over which the refusals and the operations of one session are counted.
+	Window         = time.Minute
+	lockFile       = "journal.lock"
 	ratesFile      = "session-rates.json"
+	activitySuffix = ".jsonl"
+	writesSuffix   = ".writes.jsonl"
+	operatorFile   = "operator"
+	sessionPrefix  = "session-"
+	sessionKeyHex  = 16
 	suppressedKept = 24 * time.Hour
-	writesFile     = "writes.jsonl"
 )
+
+// OperationCapError reports a session that ran OperationsPerWindow operations
+// within Window: the next one is refused before it runs, so nothing runs
+// unrecorded.
+type OperationCapError struct {
+	Limit  int
+	Window time.Duration
+}
+
+func (e *OperationCapError) Error() string {
+	return fmt.Sprintf("this session ran %d drive operations within %s: wait before the next one", e.Limit, e.Window)
+}
 
 // Op is what a journal entry records.
 type Op string
@@ -53,10 +75,12 @@ const (
 	OutcomeRefused Outcome = "refused"
 	// OutcomeFailed is an operation rclone could not carry out.
 	OutcomeFailed Outcome = "failed"
+	// OutcomeUnsent is a write that failed before anything reached the remote, such as a missing source.
+	OutcomeUnsent Outcome = "unsent"
 )
 
-// Entry is one line of the journal. Suppressed counts the entries of the
-// same session left out just before it, past EntriesPerWindow.
+// Entry is one line of the journal. Suppressed counts the refusals of the
+// same session left out just before it, past RefusalsPerWindow.
 type Entry struct {
 	Time       time.Time `json:"time"`
 	Session    string    `json:"session,omitempty"`
@@ -68,6 +92,14 @@ type Entry struct {
 	Outcome    Outcome   `json:"outcome"`
 	Reason     string    `json:"reason,omitempty"`
 	Suppressed int       `json:"suppressed,omitempty"`
+}
+
+func (e *Entry) carriesNoData() bool {
+	return e.Outcome == OutcomeRefused || e.Outcome == OutcomeUnsent
+}
+
+func (e *Entry) reachedTheRemoteAsWrite() bool {
+	return e.Op == OpWrite && (e.Outcome == OutcomeDone || e.Outcome == OutcomeFailed)
 }
 
 // Filter narrows a journal read. An empty field matches every entry.
@@ -90,45 +122,74 @@ type Log struct {
 }
 
 // Journal is the append only record of what sessions read and wrote on the
-// drives. Writes go to a file of their own, so no amount of listing or
-// reading pushes a write out of the history. The other file records at most
-// EntriesPerWindow entries of one session in each EntryWindow. Each file keeps
-// JournalGenerations rotated ones beside it.
+// drives. Each session, and the operator, has files of its own, so one session
+// can only ever rotate its own history away. Every listing, read and write
+// that ran is recorded; writes that reached the remote go to a file of their
+// own, which nothing else fills. Only the entries that carry no data, the
+// refusals and the writes that never left the machine, are capped at
+// RefusalsPerWindow per session. Each file keeps JournalGenerations rotated
+// ones beside it.
 type Journal struct {
-	path string
+	dir string
 }
 
 type sessionRate struct {
 	Start      time.Time `json:"start"`
-	Count      int       `json:"count"`
+	Operations int       `json:"operations"`
+	Refusals   int       `json:"refusals"`
 	Suppressed int       `json:"suppressed"`
 }
 
-func isWrite(entry *Entry) bool {
-	return entry.Op == OpWrite && entry.Outcome != OutcomeRefused
-}
-
-func (j Journal) writesPath() string {
-	return filepath.Join(filepath.Dir(j.path), writesFile)
-}
-
-// Append records one entry.
-func (j Journal) Append(ctx context.Context, entry Entry) error {
-	if mkdirErr := os.MkdirAll(filepath.Dir(j.path), dirMode); mkdirErr != nil {
-		return mkdirErr
+func fileKey(session string) string {
+	if session == "" {
+		return operatorFile
 	}
-	release, err := filelock.Acquire(ctx, j.path+lockSuffix)
+	sum := sha256.Sum256([]byte(session))
+	return sessionPrefix + hex.EncodeToString(sum[:])[:sessionKeyHex]
+}
+
+// Reserve counts one operation of session and refuses it with an
+// OperationCapError past OperationsPerWindow, before anything runs. The
+// operator is never capped.
+func (j Journal) Reserve(ctx context.Context, session string, now time.Time) error {
+	if session == "" {
+		return nil
+	}
+	release, err := j.lock(ctx)
 	if err != nil {
 		return err
 	}
 	defer release()
-	target := j.writesPath()
-	if !isWrite(&entry) {
-		target = j.path
-		keep, admitErr := j.admit(&entry)
+	rates, err := j.loadRates()
+	if err != nil {
+		return err
+	}
+	rate := current(rates[session], now)
+	if rate.Operations >= OperationsPerWindow {
+		return &OperationCapError{Limit: OperationsPerWindow, Window: Window}
+	}
+	rate.Operations++
+	rates[session] = rate
+	return j.saveRates(prune(rates, session, now))
+}
+
+// Append records one entry. It fails when the entry could not be written, and
+// a caller that ran an operation reports that failure instead of its result.
+func (j Journal) Append(ctx context.Context, entry Entry) error {
+	release, err := j.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if entry.carriesNoData() && entry.Session != "" {
+		keep, admitErr := j.admitRefusal(&entry)
 		if admitErr != nil || !keep {
 			return admitErr
 		}
+	}
+	target := filepath.Join(j.dir, fileKey(entry.Session)+activitySuffix)
+	if entry.reachedTheRemoteAsWrite() {
+		target = filepath.Join(j.dir, fileKey(entry.Session)+writesSuffix)
 	}
 	line, err := json.Marshal(entry)
 	if err != nil {
@@ -145,40 +206,52 @@ func (j Journal) Append(ctx context.Context, entry Entry) error {
 	return errors.Join(writeErr, file.Close())
 }
 
-func (j Journal) admit(entry *Entry) (bool, error) {
-	if entry.Session == "" {
-		return true, nil
+func (j Journal) lock(ctx context.Context) (func(), error) {
+	if err := os.MkdirAll(j.dir, dirMode); err != nil {
+		return nil, err
 	}
+	return filelock.Acquire(ctx, filepath.Join(j.dir, lockFile))
+}
+
+func (j Journal) admitRefusal(entry *Entry) (bool, error) {
 	rates, err := j.loadRates()
 	if err != nil {
 		return false, err
 	}
-	rate := rates[entry.Session]
-	if windowEnded(rate, entry.Time) {
-		rate.Start, rate.Count = entry.Time, 0
-	}
-	keep := rate.Count < EntriesPerWindow
+	rate := current(rates[entry.Session], entry.Time)
+	keep := rate.Refusals < RefusalsPerWindow
 	if keep {
-		rate.Count++
+		rate.Refusals++
 		entry.Suppressed, rate.Suppressed = rate.Suppressed, 0
 	} else {
 		rate.Suppressed++
 	}
 	rates[entry.Session] = rate
-	for session, other := range rates {
-		if session != entry.Session && windowEnded(other, entry.Time) && (other.Suppressed == 0 || entry.Time.Sub(other.Start) > suppressedKept) {
+	return keep, j.saveRates(prune(rates, entry.Session, entry.Time))
+}
+
+func current(rate sessionRate, now time.Time) sessionRate {
+	if windowEnded(rate, now) {
+		rate.Start, rate.Operations, rate.Refusals = now, 0, 0
+	}
+	return rate
+}
+
+func prune(rates map[string]sessionRate, keep string, now time.Time) map[string]sessionRate {
+	for session, rate := range rates {
+		if session != keep && windowEnded(rate, now) && (rate.Suppressed == 0 || now.Sub(rate.Start) > suppressedKept) {
 			delete(rates, session)
 		}
 	}
-	return keep, j.saveRates(rates)
+	return rates
 }
 
 func windowEnded(rate sessionRate, now time.Time) bool {
-	return now.Sub(rate.Start) >= EntryWindow || now.Before(rate.Start)
+	return now.Sub(rate.Start) >= Window || now.Before(rate.Start)
 }
 
 func (j Journal) ratesPath() string {
-	return filepath.Join(filepath.Dir(j.path), ratesFile)
+	return filepath.Join(j.dir, ratesFile)
 }
 
 func (j Journal) loadRates() (map[string]sessionRate, error) {
@@ -232,19 +305,23 @@ func rotateWhenFull(path string) error {
 }
 
 // Read returns the last entries that match filter, oldest first, at most
-// limit of them, or all of them when limit is 0. It reads newest first and
-// stops once it holds limit entries of each file.
+// limit of them, or all of them when limit is 0. A filter on a session reads
+// that session's files alone. Each file is read newest first, and its reading
+// stops once it holds limit entries.
 func (j Journal) Read(filter Filter, limit int) (Log, error) {
+	files, err := j.files(filter.Session)
+	if err != nil {
+		return Log{}, err
+	}
 	var log Log
-	activity, err := newestEntries(j.path, filter, limit, &log)
-	if err != nil {
-		return Log{}, err
+	var merged []Entry
+	for _, path := range files {
+		found, readErr := newestEntries(path, filter, limit, &log)
+		if readErr != nil {
+			return Log{}, readErr
+		}
+		merged = append(merged, found...)
 	}
-	writes, err := newestEntries(j.writesPath(), filter, limit, &log)
-	if err != nil {
-		return Log{}, err
-	}
-	merged := slices.Concat(activity, writes)
 	slices.SortStableFunc(merged, func(left, right Entry) int { return right.Time.Compare(left.Time) })
 	if limit > 0 && len(merged) > limit {
 		merged = merged[:limit]
@@ -252,6 +329,27 @@ func (j Journal) Read(filter Filter, limit int) (Log, error) {
 	slices.Reverse(merged)
 	log.Entries = merged
 	return log, nil
+}
+
+func (j Journal) files(session string) ([]string, error) {
+	if session != "" {
+		key := fileKey(session)
+		return []string{filepath.Join(j.dir, key+activitySuffix), filepath.Join(j.dir, key+writesSuffix)}, nil
+	}
+	entries, err := os.ReadDir(j.dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, entry := range entries {
+		if name := entry.Name(); strings.HasSuffix(name, activitySuffix) && entry.Type().IsRegular() {
+			files = append(files, filepath.Join(j.dir, name))
+		}
+	}
+	return files, nil
 }
 
 func newestEntries(path string, filter Filter, limit int, log *Log) ([]Entry, error) {

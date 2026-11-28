@@ -3,6 +3,9 @@ package state
 import (
 	"fmt"
 	"maps"
+	"slices"
+
+	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 )
 
 // ReviewPosition is how far the review threads of a session's pull request were handed to its
@@ -11,11 +14,12 @@ import (
 type ReviewPosition struct {
 	Number int
 	Seen   map[string]int
+	Own    []reviewloop.Own
 }
 
 // ReviewPosition returns the review position recorded on the session.
 func (s Session) ReviewPosition() ReviewPosition {
-	return ReviewPosition{Number: s.ReviewNumber, Seen: s.ReviewSeen}
+	return ReviewPosition{Number: s.ReviewNumber, Seen: s.ReviewSeen, Own: s.ReviewOwn}
 }
 
 // SeenOf returns the counts recorded for pull request number, and nil when the position is of
@@ -27,9 +31,10 @@ func (p ReviewPosition) SeenOf(number int) map[string]int {
 	return p.Seen
 }
 
-// Equal reports whether two positions name the same request and the same counts.
+// Equal reports whether two positions name the same request, the same counts and the same
+// replies of the session.
 func (p ReviewPosition) Equal(q ReviewPosition) bool {
-	return p.Number == q.Number && maps.Equal(p.Seen, q.Seen)
+	return p.Number == q.Number && maps.Equal(p.Seen, q.Seen) && slices.Equal(p.Own, q.Own)
 }
 
 // CompareAndSetReviewPosition replaces the review position of the named session by next only when
@@ -56,4 +61,5 @@ func (s *State) CompareAndSetReviewPosition(name string, prev, next ReviewPositi
 func setSessionReviewPosition(session *Session, position ReviewPosition) {
 	session.ReviewNumber = position.Number
 	session.ReviewSeen = position.Seen
+	session.ReviewOwn = position.Own
 }

@@ -38,8 +38,18 @@ type fakePRForge struct {
 	replies     []string
 }
 
-func (f *fakePRForge) ReplyToThread(_ context.Context, _ contracts.ThreadRef, body string) error {
+func (f *fakePRForge) ReplyToThread(_ context.Context, thread contracts.ThreadRef, body string) error {
 	f.replies = append(f.replies, body)
+	for page := range f.threadPages {
+		for index := range f.threadPages[page] {
+			if f.threadPages[page][index].ID == thread.ID() {
+				f.threadPages[page][index].Comments = append(f.threadPages[page][index].Comments, contracts.ReviewComment{
+					Author: contracts.ForgeActor{Login: "herrscher", Association: contracts.AssociationMember},
+					Body:   body,
+				})
+			}
+		}
+	}
 	return nil
 }
 

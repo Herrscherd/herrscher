@@ -3,7 +3,10 @@
 package reviewloop
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -18,6 +21,8 @@ const (
 	MaxCommentsPerThread = 5
 	// MaxBodyBytes bounds the body of one comment, cut at a rune boundary.
 	MaxBodyBytes = 1000
+	// MaxOwnReplies bounds the replies a session keeps recognising as its own.
+	MaxOwnReplies = 20
 	// DataOpen opens the block that holds forge text.
 	DataOpen = "<donnees-revue>"
 	// DataClose closes the block that holds forge text.
@@ -38,6 +43,15 @@ type Item struct {
 type Comment struct {
 	Author string
 	Body   string
+}
+
+// Own identifies a comment that a session posted itself: its thread, its index in
+// that thread, and the digest of its body. The forge gives no identifier for a
+// comment, so these three values stand for it.
+type Own struct {
+	Thread string `json:"thread"`
+	Index  int    `json:"index"`
+	Digest string `json:"digest"`
 }
 
 // Batch is what one observation hands over: the items to deliver, and the
@@ -83,7 +97,7 @@ func (t Trust) Trusts(comment contracts.ReviewComment) bool {
 // already handed over for each, what to deliver next. Resolved threads are
 // skipped. Comments the trust refuses advance the position without being
 // delivered.
-func Plan(threads []contracts.ReviewThread, seen map[string]int, trust Trust) Batch {
+func Plan(threads []contracts.ReviewThread, seen map[string]int, own []Own, trust Trust) Batch {
 	batch := Batch{Seen: make(map[string]int, len(threads))}
 	for _, thread := range threads {
 		before := min(seen[thread.ID], len(thread.Comments))
@@ -94,7 +108,7 @@ func Plan(threads []contracts.ReviewThread, seen map[string]int, trust Trust) Ba
 		fresh := thread.Comments[before:]
 		take := min(len(fresh), MaxCommentsPerThread)
 		batch.Seen[thread.ID] = before + take
-		if item, ok := itemOf(thread, fresh[:take], trust); ok {
+		if item, ok := itemOf(thread, before, fresh[:take], own, trust); ok {
 			batch.Items = append(batch.Items, item)
 		}
 	}
@@ -118,10 +132,10 @@ func Render(items []Item) string {
 	return out.String()
 }
 
-func itemOf(thread contracts.ReviewThread, fresh []contracts.ReviewComment, trust Trust) (Item, bool) {
+func itemOf(thread contracts.ReviewThread, start int, fresh []contracts.ReviewComment, own []Own, trust Trust) (Item, bool) {
 	var comments []Comment
-	for _, comment := range fresh {
-		if !trust.Trusts(comment) {
+	for offset, comment := range fresh {
+		if !trust.Trusts(comment) || isOwn(own, thread.ID, start+offset, comment.Body) {
 			continue
 		}
 		comments = append(comments, Comment{Author: comment.Author.Login, Body: truncate(comment.Body, MaxBodyBytes)})
@@ -130,6 +144,39 @@ func itemOf(thread contracts.ReviewThread, fresh []contracts.ReviewComment, trus
 		return Item{}, false
 	}
 	return Item{Thread: thread.ID, Path: thread.Path, Line: thread.Line, Comments: comments}, true
+}
+
+// Digest returns the digest that identifies the body of a comment.
+func Digest(body string) string {
+	sum := sha256.Sum256([]byte(body))
+	return hex.EncodeToString(sum[:])
+}
+
+// Remember returns own with the comment of threadID whose body is body added, when
+// the threads hold it. The last MaxOwnReplies entries are kept.
+func Remember(own []Own, threads []contracts.ReviewThread, threadID, body string) []Own {
+	digest := Digest(body)
+	for _, thread := range threads {
+		if thread.ID != threadID {
+			continue
+		}
+		for index := len(thread.Comments) - 1; index >= 0; index-- {
+			if Digest(thread.Comments[index].Body) != digest {
+				continue
+			}
+			entry := Own{Thread: threadID, Index: index, Digest: digest}
+			if slices.Contains(own, entry) {
+				return own
+			}
+			next := append(slices.Clone(own), entry)
+			return next[max(0, len(next)-MaxOwnReplies):]
+		}
+	}
+	return own
+}
+
+func isOwn(own []Own, threadID string, index int, body string) bool {
+	return slices.Contains(own, Own{Thread: threadID, Index: index, Digest: Digest(body)})
 }
 
 func truncate(text string, limit int) string {

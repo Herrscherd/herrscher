@@ -269,9 +269,20 @@ at the next change or after a restart.
   token stays in the host.
 - A successful reply observes the session at once, without waiting for a change
   of the pull request. So a person's reply already in the thread, which the
-  position had not yet passed, is handed over right after the agent answers. If
-  the account that posts the reply is a trusted member rather than a bot, the
-  agent's own reply is trusted too and is handed back in that observation.
+  position had not yet passed, is handed over right after the agent answers.
+- The agent's own replies never come back to it, whatever the account that posts
+  them. The host records each reply published by `session pr reply` in the session
+  state, beside the position: the thread, the index of the comment in that thread
+  and a digest of its body. An observation never hands over a recorded comment,
+  whatever its author or role. The forge gives no identifier for a comment, and
+  the reply call returns none either, so a comment is identified by these three
+  values. A later reply of a person in the same thread is handed over as usual.
+- The records are kept per session, and only the last 20 are kept. They are saved
+  with the position, so a restart does not hand them back either. Two limits
+  remain. A person who posts, in the same thread and before the next read, a reply
+  identical to the agent's reply is passed over with it. And when the read that
+  follows the reply does not yet show the reply, no record is made, so the reply
+  may be handed back at the next observation.
 
 ## Repositories to clone
 

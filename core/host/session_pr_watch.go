@@ -342,7 +342,7 @@ func (w *prWatcher) observeReviews(ctx context.Context, group *prGroup, names []
 		w.watches.Add(1)
 		go func() {
 			defer w.watches.Done()
-			w.reviews.observe(ctx, name, group.forge, ref)
+			w.reviews.observe(ctx, name, group.forge, ref, postedReply{})
 		}()
 	}
 }

@@ -178,15 +178,15 @@ func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts
 	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
-	p.observeAfterReply(ctx, target)
+	p.observeAfterReply(ctx, target, thread.ID(), body)
 	return cli.Data(p.messages.Text(target.language, clitext.SessionPRReplied, clitext.Params{clitext.ParamNumber: target.ref.Number()}))
 }
 
-func (p sessionPRs) observeAfterReply(ctx context.Context, target prTarget) {
+func (p sessionPRs) observeAfterReply(ctx context.Context, target prTarget, threadID, body string) {
 	if p.reviews == nil {
 		return
 	}
-	p.reviews.observe(ctx, target.name, target.forge, target.ref)
+	p.reviews.observe(ctx, target.name, target.forge, target.ref, postedReply{thread: threadID, body: body})
 }
 
 func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, dir string) (contracts.ForgeRepoRef, string, error) {

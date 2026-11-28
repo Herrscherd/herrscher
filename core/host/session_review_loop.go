@@ -16,6 +16,11 @@ import (
 
 const envReviewAuthors = "HERRSCHER_REVIEW_AUTHORS"
 
+type postedReply struct {
+	thread string
+	body   string
+}
+
 type reviewLoop struct {
 	messages   *clitext.Messages
 	lang       languageSource
@@ -40,7 +45,7 @@ func reviewTrust() reviewloop.Trust {
 	return reviewloop.NewTrust(splitSet(envx.Getenv(envReviewAuthors)))
 }
 
-func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.Forge, ref contracts.PullRequestRef) {
+func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.Forge, ref contracts.PullRequestRef, posted postedReply) {
 	sess, ok := r.store.FindSession(name)
 	if !ok {
 		return
@@ -53,8 +58,12 @@ func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.
 		}
 		return
 	}
-	batch := reviewloop.Plan(threads, stored.SeenOf(ref.Number()), r.trust)
-	next := state.ReviewPosition{Number: ref.Number(), Seen: batch.Seen}
+	own := stored.Own
+	if posted.thread != "" {
+		own = reviewloop.Remember(own, threads, posted.thread, posted.body)
+	}
+	batch := reviewloop.Plan(threads, stored.SeenOf(ref.Number()), own, r.trust)
+	next := state.ReviewPosition{Number: ref.Number(), Seen: batch.Seen, Own: own}
 	if next.Equal(stored) {
 		return
 	}
@@ -70,7 +79,8 @@ func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.
 		return
 	}
 	slog.Warn("session review message not delivered, no live session", "session", name)
-	if _, err := r.store.CompareAndSetReviewPosition(name, next, stored); err != nil {
+	restored := state.ReviewPosition{Number: stored.Number, Seen: stored.Seen, Own: own}
+	if _, err := r.store.CompareAndSetReviewPosition(name, next, restored); err != nil {
 		slog.Error("session review position not returned", "session", name, "err", err)
 	}
 }

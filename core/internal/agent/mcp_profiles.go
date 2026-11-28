@@ -19,11 +19,13 @@ const mcpServersKey = "mcpServers"
 // RoleWorker is the delegation role of a session a lead spawned. It is the only role known when a session is provisioned: a lead is recognised later, once its workers report.
 const RoleWorker = "worker"
 
-var assignableRoles = []string{RoleWorker}
+func assignableRoles() []string {
+	return []string{RoleWorker}
+}
 
 // AssignableRoles lists the roles the provisioning assigns. They are the only keys an mcp-profiles.json may hold.
 func AssignableRoles() []string {
-	return slices.Clone(assignableRoles)
+	return assignableRoles()
 }
 
 // DelegationRole is the role of a session given the name of the session that spawned it: RoleWorker for a session a lead spawned, empty for a top-level session.
@@ -61,9 +63,9 @@ type UnassignableRoleError struct {
 
 func (e *UnassignableRoleError) Error() string {
 	if e.InProfile {
-		return fmt.Sprintf("%s: role %q is not assignable, accepted roles: %s", mcpProfilesFile, e.Role, strings.Join(assignableRoles, ", "))
+		return fmt.Sprintf("%s: role %q is not assignable, accepted roles: %s", mcpProfilesFile, e.Role, strings.Join(assignableRoles(), ", "))
 	}
-	return fmt.Sprintf("role %q is not assignable, accepted roles: %s", e.Role, strings.Join(assignableRoles, ", "))
+	return fmt.Sprintf("role %q is not assignable, accepted roles: %s", e.Role, strings.Join(assignableRoles(), ", "))
 }
 
 // NullProfileEntryError reports a role whose entry in mcp-profiles.json is null instead of a list of server names.
@@ -81,7 +83,7 @@ type rawMCPServers struct {
 
 // SelectMCP returns the servers of the agent's mcp.json that a session of the given role keeps. Without a profile for the role, or with an empty role, every server is kept and the document is the mcp.json unchanged. The role must be assignable, and the mcp-profiles.json of the agent, when it exists, must be valid for every role.
 func (a Agent) SelectMCP(role string) (MCPSelection, error) {
-	if role != "" && !slices.Contains(assignableRoles, role) {
+	if role != "" && !slices.Contains(assignableRoles(), role) {
 		return MCPSelection{}, &UnassignableRoleError{Role: role}
 	}
 	profiles, err := a.readMCPProfiles()
@@ -102,7 +104,7 @@ func (a Agent) SelectMCP(role string) (MCPSelection, error) {
 func (a Agent) readMCPProfiles() (map[string][]string, error) {
 	raw, err := os.ReadFile(filepath.Join(a.Home, mcpProfilesFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return map[string][]string{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", mcpProfilesFile, err)
@@ -112,7 +114,7 @@ func (a Agent) readMCPProfiles() (map[string][]string, error) {
 		return nil, fmt.Errorf("parse %s: %w", mcpProfilesFile, err)
 	}
 	for _, role := range slices.Sorted(maps.Keys(profiles)) {
-		if !slices.Contains(assignableRoles, role) {
+		if !slices.Contains(assignableRoles(), role) {
 			return nil, &UnassignableRoleError{Role: role, InProfile: true}
 		}
 		if profiles[role] == nil {

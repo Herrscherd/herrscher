@@ -112,13 +112,7 @@ func TestProvisionUnknownProfileServerRollsBackWithLocalizedError(t *testing.T) 
 			if err == nil {
 				t.Fatal("provisioning must fail on an unknown profile server")
 			}
-			var localized *localizedError
-			if !errors.As(err, &localized) {
-				t.Fatalf("error is %T, want a localizedError", err)
-			}
-			if got := fmt.Sprint(localized.Notice().Args[0].Value()); !strings.Contains(got, tc.want) {
-				t.Fatalf("localized detail = %q, want it to contain %q", got, tc.want)
-			}
+			requireLocalizedDetail(t, err, tc.want)
 			if _, statErr := os.Stat(filepath.Join(dir, ".mcp.json")); !os.IsNotExist(statErr) {
 				t.Fatalf(".mcp.json written despite the error: %v", statErr)
 			}
@@ -126,6 +120,17 @@ func TestProvisionUnknownProfileServerRollsBackWithLocalizedError(t *testing.T) 
 				t.Fatalf("worktree not rolled back, removed = %v", wt.removed)
 			}
 		})
+	}
+}
+
+func requireLocalizedDetail(t *testing.T, err error, want string) {
+	t.Helper()
+	var localized *localizedError
+	if !errors.As(err, &localized) {
+		t.Fatalf("error is %T, want a localizedError", err)
+	}
+	if got := fmt.Sprint(localized.Notice().Args[0].Value()); !strings.Contains(got, want) {
+		t.Fatalf("localized detail = %q, want it to contain %q", got, want)
 	}
 }
 

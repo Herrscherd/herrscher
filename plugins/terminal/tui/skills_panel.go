@@ -1,27 +1,22 @@
 package tui
 
 import (
-	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-func skillPanelRoots() []string {
-	var roots []string
-	if home, err := os.UserHomeDir(); err == nil {
-		roots = append(roots, filepath.Join(home, ".claude", "skills"))
-	}
+func skillPanelRoots(cwd string) []string {
+	var extra []string
 	if cfg, err := config.Load(config.DefaultPath()); err == nil && cfg.Skills != nil {
-		roots = append(roots, cfg.Skills.Roots...)
+		extra = cfg.Skills.Roots
 	}
-	return roots
+	return skills.Roots(cwd, extra)
 }
 
 func (m *model) openSkills() {
-	rows := skills.Discover(skillPanelRoots())
+	rows := skills.Discover(skillPanelRoots(m.sessionDir(m.active)))
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	m.skillsRows = rows
 	m.skillsIdx = 0

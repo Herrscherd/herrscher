@@ -416,29 +416,37 @@ servers a session of that role keeps:
 {"worker": ["filesystem", "github"]}
 ```
 
-The file is optional and off by default. Without it, or for a session whose role has no
-entry, or for a session with no role, every server of `mcp.json` is kept, as before. The
-role of a session is the delegation role the coordinator gives it: a session spawned by a
-lead is a `worker`, and a top-level session has no role. A `lead` entry is not applied: a
-lead is only recognised once its workers report, after its session is provisioned, so
-the lead keeps every server.
+The file is optional and off by default. Without it, for a session whose role has no
+entry, and for a session with no role, every server of `mcp.json` is kept, as before.
+The role of a session is the delegation role the coordinator gives it: a session spawned
+by a lead is a `worker`, and a top-level session has no role. `worker` is the only role
+the provisioning assigns, so it is the only key the file accepts. Any other key (`lead`,
+`Worker`, `workers`, a typo) is refused, and so is a `null` entry: the error names the
+key and the accepted roles, and it applies to every session of the agent. A lead keeps
+every server, because a lead is only recognised once its workers report, after its
+session is provisioned.
 
 When a session is provisioned with a role that has an entry, its `.mcp.json` and its
-`.codex/config.toml` both keep only those servers, and the servers of `mcp.json` that are
-left out are not written to either file. Each kept server keeps every field it declares in
-`mcp.json`, `env` and `headers` included. The daemon logs one line, `mcp profile applied`,
-with the session, the role, the kept servers and the dropped ones.
+`.codex/config.toml` both keep only those servers, and the servers left out are written
+to neither file. Each kept server keeps every field it declares in `mcp.json`, `env` and
+`headers` included. The other top-level keys of `mcp.json` are kept as they are, and the
+file is written without HTML escaping. Both files are written with mode `0600`, since
+they can carry `env` values. Only the kept servers are validated, so a dropped server
+never blocks the session. The daemon logs one line, `mcp profile applied`, with the
+session, the role, the kept servers and the dropped ones, and the session's banner names
+the same servers.
 
 An entry that names a server `mcp.json` does not declare is an error, and the session is
 not provisioned: the message names the agent, the role and the server, in the operator's
-language, and nothing is written. A malformed `mcp-profiles.json` is an error too, for any
-session of the agent that has a role.
+language, and nothing is written, not even the git excludes. A malformed
+`mcp-profiles.json` is an error too, for every session of the agent.
 
 `herrscher mcp weight --agent <name> --role <role>` measures the servers a session of that
-role keeps, with the same flags otherwise. The text report ends with the kept and the
-dropped servers of the role, or with the note that no profile matches the role and every
-server is loaded. `--json` reports only the kept servers, and has no note. An unknown server
-in the profile is refused with the same error as at provisioning.
+role keeps, with the same flags otherwise. A role that is not assignable is refused. The
+text report ends with the kept and the dropped servers of the role, or with the note that
+no profile matches the role and every server is loaded. `--json` reports only the kept
+servers, and has no note. `--deep` launches only the kept servers. When `mcp.json` does
+not exist, the report is the same as without a role: an empty list.
 
 ### Lint exclusions
 

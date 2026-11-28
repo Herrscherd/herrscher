@@ -275,10 +275,7 @@ func matchOf(threads []contracts.ReviewThread, own []Own, entry Pending) (Own, b
 			continue
 		}
 		for _, comment := range thread.Comments {
-			if Digest(comment.Body) != entry.Digest || comment.CreatedAt.Before(earliest) {
-				continue
-			}
-			if entry.Login != "" && !strings.EqualFold(comment.Author.Login, entry.Login) {
+			if !replyMatches(comment, entry, earliest) {
 				continue
 			}
 			match := Own{Thread: thread.ID, Digest: entry.Digest, CreatedAt: comment.CreatedAt}
@@ -288,6 +285,13 @@ func matchOf(threads []contracts.ReviewThread, own []Own, entry Pending) (Own, b
 		}
 	}
 	return Own{}, false
+}
+
+func replyMatches(comment contracts.ReviewComment, entry Pending, earliest time.Time) bool {
+	if Digest(comment.Body) != entry.Digest || comment.CreatedAt.Before(earliest) {
+		return false
+	}
+	return entry.Login == "" || strings.EqualFold(comment.Author.Login, entry.Login)
 }
 
 func itemOf(thread contracts.ReviewThread, fresh []contracts.ReviewComment, own []Own, trust Trust) (Item, bool) {

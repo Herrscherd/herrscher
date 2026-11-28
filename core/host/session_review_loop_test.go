@@ -32,6 +32,7 @@ func (r *seedRecorder) seed(_, task string) bool {
 
 type racingStore struct {
 	reviewStore
+
 	before func()
 	at     int
 	calls  int
@@ -47,6 +48,7 @@ func (r *racingStore) CompareAndSetReviewPosition(name string, prev, next state.
 
 type casStore struct {
 	reviewStore
+
 	claimed bool
 	err     error
 }
@@ -63,7 +65,9 @@ func (unknownStore) FindSession(string) (state.Session, bool) {
 	return state.Session{}, false
 }
 
-var ownerActor = contracts.ForgeActor{Login: "alice", Association: contracts.AssociationOwner}
+func ownerActor() contracts.ForgeActor {
+	return contracts.ForgeActor{Login: "alice", Association: contracts.AssociationOwner}
+}
 
 func memberActor(login string) contracts.ForgeActor {
 	return contracts.ForgeActor{Login: login, Association: contracts.AssociationMember}
@@ -110,7 +114,7 @@ func postReply(t *testing.T, reg *cli.Registry, body string) {
 
 func trustedThread() contracts.ReviewThread {
 	return contracts.ReviewThread{ID: "t1", Path: "main.go", Line: 4, Comments: []contracts.ReviewComment{{
-		Author: ownerActor,
+		Author: ownerActor(),
 		Body:   "rename this",
 	}}}
 }
@@ -245,7 +249,7 @@ func TestReplyToAThreadDeliversTheCommentsItLeftOutOfThePosition(t *testing.T) {
 	loop.observe(t.Context(), "alpha", fake, ref)
 
 	fake.threadPages = [][]contracts.ReviewThread{{threadOf(
-		at(ownerActor, "rename this", time.Time{}),
+		at(ownerActor(), "rename this", time.Time{}),
 		at(memberActor("bob"), "also check the error", time.Now()),
 	)}}
 	postReply(t, replyRegistry(t, st, fake, loop), "done")
@@ -390,7 +394,7 @@ func TestDeletedCommentDoesNotHideTheNextHumanComment(t *testing.T) {
 	recorder := &seedRecorder{accept: true}
 	loop, ref := reviewTestLoop(t, st, recorder.seed)
 	base := time.Now().Add(-time.Hour)
-	first := at(ownerActor, "rename this", base)
+	first := at(ownerActor(), "rename this", base)
 	second := at(memberActor("bob"), "also check", base.Add(time.Second))
 	client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{threadOf(first, second)}}}
 	loop.observe(t.Context(), "main", client, ref)
@@ -409,11 +413,11 @@ func TestLegacyCountsConvertToMarksWithoutRedelivery(t *testing.T) {
 	loop, ref := reviewTestLoop(t, st, recorder.seed)
 	base := time.Now().Add(-time.Hour)
 	counted := contracts.ReviewThread{ID: "t1", Path: "main.go", Line: 4, Comments: []contracts.ReviewComment{
-		at(ownerActor, "rename this", base),
+		at(ownerActor(), "rename this", base),
 		at(memberActor("bob"), "later", base.Add(time.Second)),
 	}}
 	uncounted := contracts.ReviewThread{ID: "t2", Path: "other.go", Line: 1, Comments: []contracts.ReviewComment{
-		at(ownerActor, "new thread", base.Add(2*time.Second)),
+		at(ownerActor(), "new thread", base.Add(2*time.Second)),
 	}}
 	if ok, err := st.CompareAndSetReviewPosition("main", state.ReviewPosition{}, state.ReviewPosition{Number: prTestNumber, Legacy: map[string]int{"t1": 2}}); err != nil || !ok {
 		t.Fatalf("legacy position = %v, %v, want written", ok, err)

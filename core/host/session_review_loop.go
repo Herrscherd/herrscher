@@ -57,14 +57,14 @@ func (k *keyedLocks) lock(key string) func() {
 	if k.locks == nil {
 		k.locks = make(map[string]*sync.Mutex)
 	}
-	l, ok := k.locks[key]
+	mutex, ok := k.locks[key]
 	if !ok {
-		l = &sync.Mutex{}
-		k.locks[key] = l
+		mutex = &sync.Mutex{}
+		k.locks[key] = mutex
 	}
 	k.mu.Unlock()
-	l.Lock()
-	return l.Unlock
+	mutex.Lock()
+	return mutex.Unlock
 }
 
 func observationKey(name string, number int) string {
@@ -94,7 +94,7 @@ func (r *reviewLoop) clock() time.Time {
 
 func (r *reviewLoop) expect(name string, number int, entry reviewloop.Pending) (reviewloop.Pending, error) {
 	recorded := entry
-	err := r.update(name, number, func(stored state.ReviewPosition) state.ReviewPosition {
+	err := r.update(name, func(stored state.ReviewPosition) state.ReviewPosition {
 		view := stored.ForRequest(number)
 		recorded.PostedAt = r.clock()
 		return state.ReviewPosition{
@@ -112,7 +112,7 @@ func (r *reviewLoop) expect(name string, number int, entry reviewloop.Pending) (
 }
 
 func (r *reviewLoop) forget(name string, number int, entry reviewloop.Pending) error {
-	return r.update(name, number, func(stored state.ReviewPosition) state.ReviewPosition {
+	return r.update(name, func(stored state.ReviewPosition) state.ReviewPosition {
 		view := stored.ForRequest(number)
 		return state.ReviewPosition{
 			Number:  number,
@@ -124,7 +124,7 @@ func (r *reviewLoop) forget(name string, number int, entry reviewloop.Pending) e
 	})
 }
 
-func (r *reviewLoop) update(name string, number int, edit func(stored state.ReviewPosition) state.ReviewPosition) error {
+func (r *reviewLoop) update(name string, edit func(stored state.ReviewPosition) state.ReviewPosition) error {
 	for range reviewStoreAttempts {
 		sess, ok := r.store.FindSession(name)
 		if !ok {
@@ -165,7 +165,7 @@ func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.
 		slog.Warn("session review message not delivered, no live session", "session", name)
 		return
 	}
-	if err := r.update(name, ref.Number(), r.commit(threads, ref.Number(), batch)); err != nil {
+	if err := r.update(name, r.commit(threads, ref.Number(), batch)); err != nil {
 		slog.Warn("session review position not recorded after delivery, the threads may be handed over again", "session", name, "err", err)
 	}
 }

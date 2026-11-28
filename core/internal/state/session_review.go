@@ -42,12 +42,12 @@ func (p ReviewPosition) ForRequest(number int) ReviewPosition {
 
 // Equal reports whether two positions name the same request and hold the same marks, replies
 // and counts.
-func (p ReviewPosition) Equal(q ReviewPosition) bool {
-	return p.Number == q.Number &&
-		maps.EqualFunc(p.Marks, q.Marks, reviewloop.Mark.Equal) &&
-		slices.EqualFunc(p.Own, q.Own, reviewloop.Own.Equal) &&
-		slices.EqualFunc(p.Pending, q.Pending, reviewloop.Pending.Equal) &&
-		maps.Equal(p.Legacy, q.Legacy)
+func (p ReviewPosition) Equal(other ReviewPosition) bool {
+	return p.Number == other.Number &&
+		maps.EqualFunc(p.Marks, other.Marks, reviewloop.Mark.Equal) &&
+		slices.EqualFunc(p.Own, other.Own, reviewloop.Own.Equal) &&
+		slices.EqualFunc(p.Pending, other.Pending, reviewloop.Pending.Equal) &&
+		maps.Equal(p.Legacy, other.Legacy)
 }
 
 // CompareAndSetReviewPosition replaces the review position of the named session by next only when

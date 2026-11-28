@@ -51,6 +51,7 @@ const (
 	SessionEndLocalDeleted     = "cli.session.end.local_deleted"
 	SessionEndLocalKept        = "cli.session.end.local_kept"
 	SessionEndLocalUnverified  = "cli.session.end.local_unverified"
+	SessionEndLocalCheckedOut  = "cli.session.end.local_checked_out"
 	SessionEndNoPR             = "cli.session.end.no_pr"
 	SessionEndOpen             = "cli.session.end.open"
 	SessionEndDetached         = "cli.session.end.detached"
@@ -146,6 +147,7 @@ func sessionPRKeys() map[Key][]string {
 		SessionEndLocalDeleted:     {ParamBranch},
 		SessionEndLocalKept:        {ParamBranch},
 		SessionEndLocalUnverified:  {ParamBranch},
+		SessionEndLocalCheckedOut:  {ParamBranch, ParamPath},
 		SessionEndNoPR:             {ParamName},
 		SessionEndOpen:             {ParamName, ParamNumber},
 		SessionEndDetached:         {ParamName},

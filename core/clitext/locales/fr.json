@@ -5878,8 +5878,13 @@
   },
   {
     "id": "cli.session.end.local_unverified",
-    "description": "Résultat de session end : la branche locale est conservée car son head n'a pas pu être vérifié face à la pull request sur la forge",
-    "other": "la branche {{.Branch}} est conservée localement : son head n'a pas pu être vérifié face à la pull request sur la forge, elle n'a donc pas été forcée."
+    "description": "Résultat de session end : la branche locale est conservée car son état n'a pas pu être vérifié sûrement",
+    "other": "la branche {{.Branch}} est conservée localement : son état n'a pas pu être vérifié sûrement, elle n'a donc pas été supprimée."
+  },
+  {
+    "id": "cli.session.end.local_checked_out",
+    "description": "Résultat de session end : la branche locale est encore extraite dans un worktree, git l'a donc conservée",
+    "other": "la branche {{.Branch}} est conservée localement : elle est encore extraite dans {{.Path}}."
   },
   {
     "id": "cli.session.end.no_pr",
@@ -5908,8 +5913,8 @@
   },
   {
     "id": "cli.session.end.remote_failed",
-    "description": "Échec : session end a fermé la session mais n'a pas pu supprimer la branche distante",
-    "other": "la branche {{.Branch}} n'a pas pu être supprimée sur origin : {{.Err}}. La session est fermée ; supprime la branche à la main si besoin."
+    "description": "Résultat de session end : la session est fermée mais la branche distante n'a pas pu être supprimée, avec la commande à lancer à la main",
+    "other": "session fermée, mais la branche {{.Branch}} n'a pas pu être supprimée sur origin ({{.Err}}). Supprime-la à la main : git push origin --delete {{.Branch}}"
   },
   {
     "id": "cli.session.pr.state.draft",

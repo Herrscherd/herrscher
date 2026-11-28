@@ -136,40 +136,79 @@ func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, n
 }
 
 func (p sessionPRs) endOutcome(ctx context.Context, name string, target sessionEndTarget) (contracts.Result, error) {
-	branch := clitext.Params{clitext.ParamBranch: escapeLine(target.branch)}
 	closed, err := p.messages.Text(target.language, clitext.SessionEnded, clitext.Params{clitext.ParamName: escapeLine(name)})
 	if err != nil {
 		return contracts.Result{}, err
 	}
 	var remoteKey clitext.Key = clitext.SessionEndRemoteKept
+	remoteParams := branchParams(target)
 	if target.record.State == contracts.PullRequestMerged {
-		if err = p.deleteRemoteBranch(ctx, target); err != nil {
-			return contracts.Result{}, p.messages.Failure(target.language, err, clitext.SessionEndRemoteFailed, clitext.Params{clitext.ParamBranch: escapeLine(target.branch), clitext.ParamErr: escapeLine(err.Error())})
-		}
-		remoteKey = clitext.SessionEndRemoteDeleted
+		remoteKey, remoteParams = p.remoteOutcome(ctx, target)
 	}
-	remote, err := p.messages.Text(target.language, remoteKey, branch)
+	remote, err := p.messages.Text(target.language, remoteKey, remoteParams)
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	local, err := p.messages.Text(target.language, p.deleteLocalBranch(ctx, target), branch)
+	localKey, localParams := p.deleteLocalBranch(ctx, target)
+	local, err := p.messages.Text(target.language, localKey, localParams)
 	if err != nil {
 		return contracts.Result{}, err
 	}
 	return cli.Data(strings.Join([]string{closed, remote, local}, "\n"), nil)
 }
 
-func (p sessionPRs) deleteLocalBranch(ctx context.Context, target sessionEndTarget) clitext.Key {
+func (p sessionPRs) remoteOutcome(ctx context.Context, target sessionEndTarget) (clitext.Key, clitext.Params) {
+	if err := p.deleteRemoteBranch(ctx, target); err != nil {
+		return clitext.SessionEndRemoteFailed, clitext.Params{clitext.ParamBranch: escapeLine(target.branch), clitext.ParamErr: escapeLine(err.Error())}
+	}
+	return clitext.SessionEndRemoteDeleted, branchParams(target)
+}
+
+func branchParams(target sessionEndTarget) clitext.Params {
+	return clitext.Params{clitext.ParamBranch: escapeLine(target.branch)}
+}
+
+func (p sessionPRs) deleteLocalBranch(ctx context.Context, target sessionEndTarget) (clitext.Key, clitext.Params) {
+	path, checkedOut, err := p.checkedOutPath(ctx, target)
+	if err != nil {
+		return clitext.SessionEndLocalUnverified, branchParams(target)
+	}
+	if checkedOut {
+		return clitext.SessionEndLocalCheckedOut, clitext.Params{clitext.ParamBranch: escapeLine(target.branch), clitext.ParamPath: escapeLine(path)}
+	}
 	if target.headMerged && p.forgeHoldsHead(ctx, target) {
-		return p.forceDeleteLocalBranch(ctx, target)
+		return p.forceDeleteLocalBranch(ctx, target), branchParams(target)
 	}
 	if _, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "branch", "-d", target.branch); err != nil {
 		if target.headMerged {
-			return clitext.SessionEndLocalUnverified
+			return clitext.SessionEndLocalUnverified, branchParams(target)
 		}
-		return clitext.SessionEndLocalKept
+		return clitext.SessionEndLocalKept, branchParams(target)
 	}
-	return clitext.SessionEndLocalDeleted
+	return clitext.SessionEndLocalDeleted, branchParams(target)
+}
+
+func (p sessionPRs) checkedOutPath(ctx context.Context, target sessionEndTarget) (string, bool, error) {
+	listed, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", false, err
+	}
+	path, found := worktreeOf(listed, "refs/heads/"+target.branch)
+	return path, found, nil
+}
+
+func worktreeOf(porcelain, ref string) (string, bool) {
+	path := ""
+	for _, line := range strings.Split(porcelain, "\n") {
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			path = rest
+			continue
+		}
+		if line == "branch "+ref {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 func (p sessionPRs) forceDeleteLocalBranch(ctx context.Context, target sessionEndTarget) clitext.Key {

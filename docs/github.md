@@ -228,6 +228,16 @@ command says so, with the reason that its head could not be verified against the
 The same happens when the branch moved between the check and the removal. The host never
 rolls back silently.
 
+Before any local removal, forced or not, the command reads `git worktree list --porcelain`. When
+a worktree still has the branch checked out, nothing is removed, even in the squash case, since
+`git update-ref -d` does not refuse a checked out branch, unlike `git branch -d`. The command
+keeps the branch and names the path of the worktree that holds it.
+
+When the session is closed but the remote branch cannot be deleted (for instance when the
+network fails), `session end` still reports the session as closed, says that the remote branch
+could not be deleted, and prints the command to run by hand: `git push origin --delete <branch>`.
+The command exits without an error, since the session itself was closed.
+
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one
 opened from the command line. Before it commits or pushes anything, the panel checks

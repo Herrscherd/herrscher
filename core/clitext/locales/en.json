@@ -5878,8 +5878,13 @@
   },
   {
     "id": "cli.session.end.local_unverified",
-    "description": "Result of session end: git kept the local branch because the pull request head on the forge could not be checked against it",
-    "other": "branch {{.Branch}} is kept locally: its head could not be verified against the pull request on the forge, so it was not forced."
+    "description": "Result of session end: git kept the local branch because its state could not be verified safely",
+    "other": "branch {{.Branch}} is kept locally: its state could not be verified safely, so it was not deleted."
+  },
+  {
+    "id": "cli.session.end.local_checked_out",
+    "description": "Result of session end: the local branch is still checked out in a worktree, so git kept it",
+    "other": "branch {{.Branch}} is kept locally: it is still checked out in {{.Path}}."
   },
   {
     "id": "cli.session.end.no_pr",
@@ -5908,8 +5913,8 @@
   },
   {
     "id": "cli.session.end.remote_failed",
-    "description": "Failure: session end closed the session but could not delete the remote branch",
-    "other": "branch {{.Branch}} could not be deleted on origin: {{.Err}}. The session is closed; delete the branch by hand if needed."
+    "description": "Result of session end: the session is closed but the remote branch could not be deleted, with the command to run by hand",
+    "other": "session closed, but branch {{.Branch}} could not be deleted on origin ({{.Err}}). Delete it by hand: git push origin --delete {{.Branch}}"
   },
   {
     "id": "cli.session.pr.state.draft",

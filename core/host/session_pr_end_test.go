@@ -444,3 +444,73 @@ func TestSessionEndKeepsTheBranchWhenHeadMovedPastTheMergedHeadWithCommitsNotPus
 		t.Fatal("local branch feat was removed although it holds commits not pushed")
 	}
 }
+
+func TestSessionEndKeepsTheBranchCheckedOutInTheMainCheckout(t *testing.T) {
+	dir, st, head := mergedFeatureFixture(t)
+	pushPullRequestHead(t, dir, head)
+	res, err := endPRs(st, nil).end(t.Context(), "alpha", func(context.Context, string) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat was deleted while the main checkout still has it")
+	}
+	want := endText(t, clitext.SessionEndLocalCheckedOut, clitext.Params{clitext.ParamBranch: "feat", clitext.ParamPath: dir})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not signal the checked out branch", out)
+	}
+}
+
+func TestSessionEndKeepsTheBranchCheckedOutInAWorktree(t *testing.T) {
+	dir, _, head := mergedFeatureFixture(t)
+	gitIn(t.Context(), t, dir, "checkout", "-q", "master")
+	worktree := filepath.Join(t.TempDir(), "wt")
+	gitIn(t.Context(), t, dir, "worktree", "add", "-q", worktree, "feat")
+	st := endState(t, filepath.Join(t.TempDir(), "state.json"), worktree)
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestMerged, HeadSHA: head}); err != nil {
+		t.Fatal(err)
+	}
+	pushPullRequestHead(t, dir, head)
+	res, err := endPRs(st, nil).end(t.Context(), "alpha", func(context.Context, string) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat was deleted while a worktree still has it checked out")
+	}
+	want := endText(t, clitext.SessionEndLocalCheckedOut, clitext.Params{clitext.ParamBranch: "feat", clitext.ParamPath: worktree})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not signal the checked out branch", out)
+	}
+}
+
+func TestSessionEndReportsARemoteBranchThatCouldNotBeDeleted(t *testing.T) {
+	dir, st, head := mergedFeatureFixture(t)
+	pushPullRequestHead(t, dir, head)
+	p := interceptGit(endPRs(st, nil), func(_ context.Context, args []string) (bool, string, error) {
+		if slices.Contains(args, "--heads") {
+			return true, head + "\trefs/heads/feat", nil
+		}
+		if slices.Contains(args, "--delete") {
+			return true, "", errors.New("network down")
+		}
+		return false, "", nil
+	})
+	closed := 0
+	closer := func(context.Context, string) error {
+		closed++
+		gitIn(t.Context(), t, dir, "checkout", "-q", "master")
+		return nil
+	}
+	res, err := p.end(t.Context(), "alpha", closer)
+	if err != nil {
+		t.Fatalf("a session closed before a failed remote deletion was refused: %v", err)
+	}
+	if closed != 1 {
+		t.Fatalf("session closed %d times, want 1", closed)
+	}
+	want := endText(t, clitext.SessionEndRemoteFailed, clitext.Params{clitext.ParamBranch: "feat", clitext.ParamErr: "network down"})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not report the remote branch left behind", out)
+	}
+}

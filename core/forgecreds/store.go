@@ -177,6 +177,7 @@ func (s *Store) Update(ctx context.Context, change func(*Tx) error) error {
 		return fmt.Errorf("lock forge connections: %w", err)
 	}
 	defer release()
+	atomicfile.SweepLogged(s.Path())
 	file, err := s.load()
 	if err != nil {
 		return err

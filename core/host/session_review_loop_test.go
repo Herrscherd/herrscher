@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -501,20 +502,53 @@ func collaboratorThread(login string) contracts.ReviewThread {
 	}}}
 }
 
-func TestRollbackOfAnUndeliveredMessageKeepsTheRivalWrite(t *testing.T) {
+func TestDeliveredMessageIsHandedAgainWhenItsPositionCannotBeRecorded(t *testing.T) {
+	cases := []struct {
+		name  string
+		store func(st *state.State) reviewStore
+	}{
+		{name: "position kept changing", store: func(st *state.State) reviewStore {
+			return casStore{reviewStore: st}
+		}},
+		{name: "state write fails", store: func(st *state.State) reviewStore {
+			return casStore{reviewStore: st, err: errors.New("disk full")}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := reviewTestState(t)
+			recorder := &seedRecorder{accept: true}
+			loop, ref := reviewTestLoop(t, st, recorder.seed)
+			client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread()}}}
+			loop.store = tc.store(st)
+
+			loop.observe(t.Context(), "main", client, ref)
+
+			if sess, _ := st.FindSession("main"); len(sess.ReviewPosition().Marks) != 0 {
+				t.Fatalf("marks = %v, want none recorded when the commit failed", sess.ReviewPosition().Marks)
+			}
+			loop.store = st
+			loop.observe(t.Context(), "main", client, ref)
+
+			if len(recorder.tasks) != 2 || recorder.tasks[0] != recorder.tasks[1] {
+				t.Fatalf("messages = %d, want the same message handed again once the position is recordable", len(recorder.tasks))
+			}
+			if sess, _ := st.FindSession("main"); len(sess.ReviewPosition().Marks) == 0 {
+				t.Fatal("marks still empty after the recovered observation")
+			}
+		})
+	}
+}
+
+func TestUndeliveredMessageLeavesTheThreadUnmarked(t *testing.T) {
 	st := reviewTestState(t)
 	loop, ref := reviewTestLoop(t, st, (&seedRecorder{}).seed)
 	client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread()}}}
-	loop.store = &racingStore{reviewStore: st, before: func() { rivalPending(t, st, "main") }, at: 2}
 
 	loop.observe(t.Context(), "main", client, ref)
 
-	sess, _ := st.FindSession("main")
-	if _, marked := sess.ReviewPosition().Marks["t1"]; marked {
-		t.Fatalf("marks = %v, want the undelivered thread unmarked after the rollback", sess.ReviewPosition().Marks)
-	}
-	if !hasPending(sess, "t7") {
-		t.Fatalf("pending = %v, want the rival's entry kept by the rollback", sess.ReviewPending)
+	if sess, _ := st.FindSession("main"); len(sess.ReviewPosition().Marks) != 0 {
+		t.Fatalf("marks = %v, want none after an undelivered message", sess.ReviewPosition().Marks)
 	}
 }
 
@@ -558,17 +592,31 @@ func TestReplyRefusedWhenItCannotBeTracked(t *testing.T) {
 	}
 }
 
-func TestReplyRemovesItsPendingEntryWhenPublicationFails(t *testing.T) {
-	st := replyTestState(t)
-	loop, _ := reviewTestLoop(t, st, (&seedRecorder{accept: true}).seed)
-	fake := &fakePRForge{replyErr: errors.New("forge refused the reply")}
-
-	_, err := runPR(t, replyRegistry(t, st, fake, loop), verbPRReply, "--name", "alpha", "--thread", "t1", "--body", "done")
-
-	if err == nil {
-		t.Fatal("reply accepted, want the forge failure reported")
+func TestReplyForgetsItsPendingEntryOnlyOnAClearRefusal(t *testing.T) {
+	cases := []struct {
+		name        string
+		replyErr    error
+		wantPending int
+	}{
+		{name: "forge refuses the reply", replyErr: contracts.ErrForgeForbidden, wantPending: 0},
+		{name: "rate limited", replyErr: &contracts.ForgeRateLimitedError{}, wantPending: 0},
+		{name: "reply timed out", replyErr: context.DeadlineExceeded, wantPending: 1},
+		{name: "network failure", replyErr: errors.New("connection reset"), wantPending: 1},
 	}
-	if sess, _ := st.FindSession("alpha"); len(sess.ReviewPending) != 0 {
-		t.Fatalf("pending = %v, want the entry of the unpublished reply removed", sess.ReviewPending)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := replyTestState(t)
+			loop, _ := reviewTestLoop(t, st, (&seedRecorder{accept: true}).seed)
+			fake := &fakePRForge{replyErr: tc.replyErr}
+
+			_, err := runPR(t, replyRegistry(t, st, fake, loop), verbPRReply, "--name", "alpha", "--thread", "t1", "--body", "done")
+
+			if err == nil {
+				t.Fatal("reply accepted, want the forge failure reported")
+			}
+			if sess, _ := st.FindSession("alpha"); len(sess.ReviewPending) != tc.wantPending {
+				t.Fatalf("pending = %v, want %d entries", sess.ReviewPending, tc.wantPending)
+			}
+		})
 	}
 }

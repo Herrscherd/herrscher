@@ -6393,6 +6393,11 @@
     "other": "--limit takes a number from 1 to {{.Count}}"
   },
   {
+    "id": "cli.session.issue.not_found",
+    "description": "Refusal of an issue number the forge does not list as an issue",
+    "other": "no issue #{{.Number}} in {{.Repo}} (the number may name a pull request)"
+  },
+  {
     "id": "cli.host.fault.env_key",
     "description": "Error of env: not a variable name",
     "other": "not a variable name: letters, digits and _, not starting with a digit"

@@ -55,7 +55,7 @@ var (
 	errPRReplyRefused   = sessionPRError{clitext.SessionPRReplyNotRecorded}
 )
 
-var errReplyLoginUnknown = errors.New(string(clitext.SessionPRReplyNotRecorded))
+var errReplyLoginUnknown = sessionPRError{clitext.SessionPRReplyNotRecorded}
 
 type sessionPRs struct {
 	messages    *clitext.Messages
@@ -186,7 +186,9 @@ func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts
 		return contracts.Result{}, p.failure(target.language, err)
 	}
 	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
-		p.forgetReply(target, entry)
+		if refusedByForge(err) {
+			p.forgetReply(target, entry)
+		}
 		return contracts.Result{}, p.failure(target.language, err)
 	}
 	p.observeAfterReply(ctx, target)
@@ -214,6 +216,16 @@ func (p sessionPRs) expectReply(ctx context.Context, target prTarget, threadID, 
 
 func refusedReply(cause error) error {
 	return fmt.Errorf("%w: %w", errPRReplyRefused, cause)
+}
+
+func refusedByForge(err error) bool {
+	var limited *contracts.ForgeRateLimitedError
+	return errors.As(err, &limited) ||
+		errors.Is(err, contracts.ErrForgeUnauthorized) ||
+		errors.Is(err, contracts.ErrForgeForbidden) ||
+		errors.Is(err, contracts.ErrForgeNotFound) ||
+		errors.Is(err, contracts.ErrForgeWrongHost) ||
+		errors.Is(err, contracts.ErrForgeNotConnected)
 }
 
 func (p sessionPRs) forgetReply(target prTarget, entry reviewloop.Pending) {

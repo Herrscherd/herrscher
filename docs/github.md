@@ -246,10 +246,14 @@ at the next change or after a restart.
 - A state written with the former per-thread counts is converted on its first
   observation: each thread it knows is marked at its latest comment, so nothing it
   already held is sent again, and a thread it does not know is handed over in full.
-- Two observations of the same pull request can run at once. Only the one that
-  stores the new position delivers; the other stops without sending anything. If
-  the delivery then fails, because no live session takes the message, the
-  position is put back, and the next observation delivers the threads.
+- The marks of a thread move only once its message is delivered. Observations of
+  the host run one at a time, so two observations never hand the same comments
+  over twice. If no live session takes the message, nothing is recorded and the
+  next observation delivers the threads again.
+- If the message is delivered but the position cannot be recorded (the state
+  write fails, or the position keeps changing after 5 attempts), the comments are
+  not marked, and the next observation hands them over again. A comment can thus
+  reach the agent twice, but never zero times.
 - A reply that a person adds to an existing thread is seen at the next change of
   the pull request or after a restart. The forge feed of the contract reports
   five kinds of change (a review submitted, a new commit, a change of state, a
@@ -286,9 +290,11 @@ at the next change or after a restart.
   is no longer known, or the login of the posting account cannot be read or is
   empty. The reply is then not sent, and the command returns a message saying so.
   The agent can run the same command again with the same reply.
-- If the forge refuses the reply after the entry was recorded, the entry is
-  removed again, by a compare-and-set retried at most 5 times, so the failed
-  reply is not counted as the agent's own.
+- If the forge clearly refuses the reply after the entry was recorded (an
+  unauthorized, forbidden, not found or wrong-host answer, or a rate limit), the
+  entry is removed again, by a compare-and-set retried at most 5 times. A timeout
+  or a network failure does not prove that the reply was not published, so its
+  entry stays and expires after 24 hours, and the reply is not handed back.
 - At each observation, a pending reply is matched with the first comment of the
   same thread that has the same digest, the same login and a creation time at
   least 2 minutes before the publication. That 2-minute margin absorbs the
@@ -306,11 +312,9 @@ at the next change or after a restart.
   than the last one handed over is never handed over. If the state cannot record
   A concurrent write is retried at most 5 times; past that, the observation stops
   with a warning and the next one retries.
-- A rollback after a failed delivery is retried the same way. It restores the marks
-  of the threads of the undelivered message only, and keeps the own and pending
-  entries written in the meantime. If the 5 attempts are exhausted, a warning is
-  logged and the threads stay marked, so their comments wait for the next event
-  of the pull request instead of being sent at once.
+- Recording the position after a delivery is retried the same way, and it keeps
+  the own and pending entries written in the meantime. If the 5 attempts are
+  exhausted, a warning is logged and the threads stay unmarked, as described above.
 - The margin needs a clock in step with the forge. A host clock more than 2
   minutes ahead of the forge makes the matching fail, so the agent's own reply
   comes back to it as a human comment. Keep the clock of the host synchronised

@@ -68,6 +68,7 @@ func (s *PriceSource) Refresh(ctx context.Context) error {
 	s.mu.Lock()
 	s.book, s.fetchedAt = book, s.Now()
 	s.mu.Unlock()
+	atomicfile.SweepLogged(s.Path)
 	return writeAtomic(s.Path, raw)
 }
 

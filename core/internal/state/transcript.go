@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
@@ -47,11 +48,19 @@ func (e TranscriptEntry) ShownText() string {
 	return e.Text
 }
 
+// TranscriptsDir returns the directory that holds the transcripts under dir.
+func TranscriptsDir(dir string) string {
+	return filepath.Join(dir, "transcripts")
+}
+
 // TranscriptPath returns the transcript path for session name under dir
 // (dir/transcripts/<name>.jsonl), beside participants/<name>.log.
 func TranscriptPath(dir, name string) string {
-	return filepath.Join(dir, "transcripts", name+".jsonl")
+	return filepath.Join(TranscriptsDir(dir), name+TranscriptSuffix)
 }
+
+// TranscriptSuffix is the file name suffix of every session transcript.
+const TranscriptSuffix = ".jsonl"
 
 const (
 	transcriptMaxBytes  = 4 << 20
@@ -111,33 +120,15 @@ func compactTranscript(path string) {
 		total += size
 		start = idx
 	}
-	tmp := path + ".tmp"
-	file, err := os.OpenFile(filepath.Clean(tmp), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, privateFileMode)
-	if err != nil {
-		return
-	}
-	writer := bufio.NewWriter(file)
-	for idx := range all[start:] {
-		payload, err := json.Marshal(all[start+idx])
+	var out bytes.Buffer
+	for idx := start; idx < len(all); idx++ {
+		payload, err := json.Marshal(all[idx])
 		if err != nil {
 			continue
 		}
-		if _, err := writer.Write(append(payload, '\n')); err != nil {
-			closeLogged(file)
-			removeLogged(tmp)
-			return
-		}
+		out.Write(append(payload, '\n'))
 	}
-	if err := writer.Flush(); err != nil {
-		closeLogged(file)
-		removeLogged(tmp)
-		return
-	}
-	if err := file.Close(); err != nil {
-		removeLogged(tmp)
-		return
-	}
-	logFailure("rename", os.Rename(tmp, path))
+	logFailure("compact transcript", atomicfile.Write(path, out.Bytes(), privateFileMode))
 }
 
 // ReadTranscript returns entries in file order; when limit > 0, only the last

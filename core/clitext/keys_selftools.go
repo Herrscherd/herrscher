@@ -54,6 +54,7 @@ const (
 	CmdParamSessionIssueLimit   = "cli.help.param.session.issue.limit"
 	SessionIssueTruncated       = "cli.session.issue.truncated"
 	SessionIssueBadLimit        = "cli.session.issue.bad_limit"
+	SessionIssueNotFound        = "cli.session.issue.not_found"
 	CmdHelpEnvRequest           = "cli.help.cmd.env.request"
 	CmdParamEnvReason           = "cli.help.param.env.reason"
 	HostEnvRequested            = "cli.host.env.requested"
@@ -118,6 +119,7 @@ func selfToolsKeys() map[Key][]string {
 		CmdParamSessionIssueLimit:   nil,
 		SessionIssueTruncated:       {ParamCount},
 		SessionIssueBadLimit:        {ParamCount},
+		SessionIssueNotFound:        {ParamNumber, ParamRepo},
 		CmdHelpEnvRequest:           nil,
 		CmdParamEnvReason:           nil,
 		HostEnvRequested:            {ParamKey},

@@ -164,7 +164,10 @@ report in a terminal.
 session works in, through the host's forge connection: the agent never holds a
 token. `--state` takes `open` (the default) or `closed`, `--labels` a comma
 separated list, `--limit` the most issues to list (100 by default, a line says
-when more were left out). `session pr reply --thread <id>` answers one review
+when more were left out). `list` leaves out the pull requests the forge also
+lists among issues, and `--limit` counts only the issues it lists. `show` on a
+number the forge does not list as an issue, a pull request for one, says that
+no issue has that number. `session pr reply --thread <id>` answers one review
 thread of the session's pull request; `session pr comments --json` gives each
 thread's id. An agent runs all of these without asking, as it already opens its
 pull request with `session pr open`: what it writes there is public on the

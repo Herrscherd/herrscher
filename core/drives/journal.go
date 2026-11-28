@@ -417,9 +417,6 @@ func (j Journal) pruneWhenDue(now time.Time) {
 	}
 }
 
-// pruneFiles drops the files of sessions that journaled nothing for
-// JournalRetention, then, while the journal holds more than JournalMaxBytes,
-// the least recently written files, the operator's writes last.
 func (j Journal) pruneFiles(now time.Time) error {
 	files, err := j.journalFiles()
 	if err != nil {

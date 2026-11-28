@@ -56,7 +56,8 @@ func (f *countingPRForge) PullRequest(ctx context.Context, ref contracts.PullReq
 
 func newPRWatchTestWatcher(t *testing.T, st *state.State, client contracts.Forge, clock *prWatchTestClock) *prWatcher {
 	t.Helper()
-	w := newSessionPRWatcher(clitext.NewMessages(), fixedLanguage(i18n.English), st, prForgeOpener(client), nil, &sessionNotices{}, nil)
+	lang := fixedLanguage(i18n.English)
+	w := newSessionPRWatcher(clitext.NewMessages(), lang, st, prForgeOpener(client), nil, &sessionNotices{}, newReviewLoop(clitext.NewMessages(), lang, st, nil))
 	w.clock = clock
 	w.stagger = func() time.Duration { return 0 }
 	t.Cleanup(func() { w.watches.Wait() })

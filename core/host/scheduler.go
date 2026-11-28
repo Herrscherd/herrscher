@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/issuetrigger"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
@@ -29,6 +30,10 @@ type scheduleRunner interface {
 	fireNow(ctx context.Context, name string) error
 }
 
+type issuePoller interface {
+	Poll(ctx context.Context, target issuetrigger.Target) error
+}
+
 type scheduler struct {
 	store    scheduleStore
 	sessions sessionLister
@@ -37,9 +42,13 @@ type scheduler struct {
 	now      func() time.Time
 	interval time.Duration
 
-	mu       sync.Mutex
-	inflight map[string]bool
-	wg       sync.WaitGroup
+	issues       issuePoller
+	issueTargets []issuetrigger.Target
+
+	mu        sync.Mutex
+	inflight  map[string]bool
+	issueLast map[string]time.Time
+	wg        sync.WaitGroup
 }
 
 func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleCreator,
@@ -54,6 +63,13 @@ func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleC
 		interval: interval,
 		inflight: make(map[string]bool),
 	}
+}
+
+func (s *scheduler) withIssues(poller issuePoller, targets []issuetrigger.Target) *scheduler {
+	s.issues = poller
+	s.issueTargets = targets
+	s.issueLast = make(map[string]time.Time)
+	return s
 }
 
 func (s *scheduler) Run(ctx context.Context) {
@@ -95,6 +111,7 @@ func (s *scheduler) wait() { s.wg.Wait() }
 
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
+	s.pollIssues(ctx, now)
 	due := dueCandidates(s.store.SnapshotSchedules(), now)
 	if len(due) == 0 {
 		return
@@ -110,6 +127,47 @@ func (s *scheduler) tick(ctx context.Context) {
 			s.release(name)
 		}
 	}
+}
+
+func (s *scheduler) pollIssues(ctx context.Context, now time.Time) {
+	for idx := range s.issueTargets {
+		target := s.issueTargets[idx]
+		key := "issues:" + target.Repo.String()
+		if !s.beginIssuePoll(key, target.Period, now) {
+			continue
+		}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer s.release(key)
+			fctx, cancel := context.WithTimeout(ctx, fireTimeout)
+			defer cancel()
+			if err := s.issues.Poll(fctx, target); err != nil {
+				slog.Warn("issue trigger: read failed, retrying on the next tick", "repo", target.Repo.String(), "err", err)
+				s.forgetIssuePoll(key)
+			}
+		}()
+	}
+}
+
+func (s *scheduler) beginIssuePoll(key string, period time.Duration, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inflight[key] {
+		return false
+	}
+	if last, polled := s.issueLast[key]; polled && now.Sub(last) < period {
+		return false
+	}
+	s.inflight[key] = true
+	s.issueLast[key] = now
+	return true
+}
+
+func (s *scheduler) forgetIssuePoll(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.issueLast, key)
 }
 
 func dueCandidates(schedules []schedule.Schedule, now time.Time) []schedule.Schedule {

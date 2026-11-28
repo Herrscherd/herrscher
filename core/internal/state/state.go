@@ -181,7 +181,8 @@ type State struct {
 	// (each reply folds its resume token back in): putting them here does not
 	// change the write profile, and they inherit the existing mutex and atomic
 	// write. See schedules.go for the accessors.
-	Schedules []schedule.Schedule `json:"schedules,omitempty"`
+	Schedules     []schedule.Schedule `json:"schedules,omitempty"`
+	IssueTriggers []IssueTriggerState `json:"issueTriggers,omitempty"`
 	// Hosts are the registered places a session can run. They live here for the
 	// same reason schedules do: state.json is already rewritten on every turn, so
 	// this changes no write profile and inherits the existing mutex and atomic

@@ -281,6 +281,71 @@ connected to.
   entry is never cloned from `github.com`, even when a GitHub repository has the
   same path.
 
+## Open sessions from issues
+
+herrscher can open a session for an issue of a connected repository. The
+trigger is off until you list a repository under `issueTriggers` in
+`config.json`, keyed by `host/namespace/name`:
+
+```json
+{
+  "issueTriggers": {
+    "github.com/Herrscherd/herrscher": {
+      "labels": ["herrscher"],
+      "mentions": ["akayashuu"],
+      "period": "10m",
+      "agent": "builder"
+    }
+  }
+}
+```
+
+- `labels` opens a session for each issue that carries one of the labels.
+- `mentions` opens a session for each issue that mentions one of the accounts.
+- `period` is how often the repository is read. It defaults to `10m` and must be
+  at least `1m`.
+- `agent` is the agent the sessions run as. It is optional.
+
+A trigger needs at least one label or one mention. The settings are checked when
+herrscher loads the configuration, and an invalid one stops the start.
+
+The rules that apply to every trigger:
+
+- Only issues whose author is an owner, a member or a collaborator of the
+  repository open a session. Pull requests never do.
+- An issue opens at most one session, even after a restart or when two reads
+  meet. If the session could not be created, the issue is released and the next
+  read tries again. A session that is created but gets no task is not retried.
+- The session name is built from the repository and the issue number:
+  `issue-<namespace>-<repository>-<number>`. Every character of the namespace and
+  repository that is not an ASCII letter, a digit or `_` becomes `-`. If the name
+  would be longer than 64 characters, the text before the number is cut (and its
+  trailing dashes removed) so that the whole name is exactly 64 characters or
+  fewer. The number is always kept. When a session with the name already exists,
+  the issue is skipped and a warning is logged, and no second session is opened.
+- Herrscher remembers the 200 most recently taken issues of each repository. When
+  an older issue is forgotten and updated again, it opens a session again only if
+  its session has been removed. While the session exists, the issue stays linked
+  to it and opens nothing.
+- The session starts with the issue number, its title, its URL and its body,
+  cleaned for the terminal. The trigger posts no comment on the issue.
+- The first read of a repository starts from the moment herrscher first reads
+  it. Issues updated before that moment open no session.
+- Issues are read oldest update first. Each issue handled moves the start of the
+  next read to its update time, so a read that stops early resumes where it left
+  off.
+- A repository is read at most once per `period`. One read opens at most three
+  sessions, and it reads at most 2000 issues.
+- A read that fails does not move the start of the next read. It is retried on
+  the next scheduler tick, one minute later, for as long as the forge keeps
+  failing. The failure is logged as a warning.
+- A session that cannot be created for a lasting reason, such as an unknown
+  agent, is retried on every read, and it blocks the issues that follow it in
+  its repository: the read stops at the failing issue, so the issues after it and
+  the other filters of that repository are not read until the creation succeeds.
+  Herrscher does not skip the issue on its own. Fix the cause, for example the
+  agent name, and the next read carries on.
+
 ## Troubleshooting
 
 - **The App is not available for this host.** Either the host has no herrscher

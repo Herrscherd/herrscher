@@ -238,10 +238,14 @@ at the next change or after a restart.
   `carol,dan`. Logins are compared without regard to case. The list applies to
   every session of the host and is read when the host starts, so a change needs
   a restart. A list per session or per repository is not available yet.
-- The host hands over each comment once. The position of every thread (how many
-  of its comments were handed over) is stored in the session state, so a restart
-  does not send them again. A message that no live session takes is not counted,
-  and it is retried on the next observation.
+- The host hands over each comment once. For each thread, the position stores the
+  creation time of the last comment handed over and the digests of the comments
+  created at that exact instant. A comment created before that time counts as
+  seen, so deleting an earlier comment does not hide the next one. A message that
+  no live session takes is not recorded, and it is retried on the next observation.
+- A state written with the former per-thread counts is converted on its first
+  observation: each thread it knows is marked at its latest comment, so nothing it
+  already held is sent again, and a thread it does not know is handed over in full.
 - Two observations of the same pull request can run at once. Only the one that
   stores the new position delivers; the other stops without sending anything. If
   the delivery then fails, because no live session takes the message, the
@@ -271,18 +275,30 @@ at the next change or after a restart.
   of the pull request. So a person's reply already in the thread, which the
   position had not yet passed, is handed over right after the agent answers.
 - The agent's own replies never come back to it, whatever the account that posts
-  them. The host records each reply published by `session pr reply` in the session
-  state, beside the position: the thread, the index of the comment in that thread
-  and a digest of its body. An observation never hands over a recorded comment,
-  whatever its author or role. The forge gives no identifier for a comment, and
-  the reply call returns none either, so a comment is identified by these three
-  values. A later reply of a person in the same thread is handed over as usual.
-- The records are kept per session, and only the last 20 are kept. They are saved
-  with the position, so a restart does not hand them back either. Two limits
-  remain. A person who posts, in the same thread and before the next read, a reply
-  identical to the agent's reply is passed over with it. And when the read that
-  follows the reply does not yet show the reply, no record is made, so the reply
-  may be handed back at the next observation.
+  them. Before `session pr reply` publishes a reply, the host records it as pending
+  in the session state: the thread, a SHA-256 digest of its body, the time of
+  publication and the login of the posting account. The forge gives no identifier
+  for a comment, and the reply call returns none, so the login and the digest are
+  what identifies it. The record is written before the reply is sent, so an
+  observation running at the same time never misses it.
+- At each observation, a pending reply is matched with the first comment of the
+  same thread that has the same digest, the same login and a creation time at
+  least 2 minutes before the publication. That 2-minute margin absorbs the
+  difference between the clock of the host and the clock of the forge. A match
+  becomes an own comment, identified by its thread, digest and creation time, and
+  it is never handed over.
+- A pending reply that no comment matches stays for at most 24 hours, and at most
+  20 pending replies are kept per session. Own comments are kept to the last 20.
+  Both are saved with the position, so a restart keeps them.
+- Limits. A person who posts, in the same thread, the same body from the same
+  account, after the publication minus the margin, is passed over with the agent's
+  reply. A reply that the forge does not show within 24 hours is forgotten: if it
+  shows up later, it is handed over as a human comment. A comment whose creation
+  time is before the mark counts as seen, so a comment the forge timestamps earlier
+  than the last one handed over is never handed over. If the state cannot record
+  the pending entry, the reply is still posted and may come back to the agent once.
+  A concurrent write is retried at most 5 times; past that, the observation stops
+  with a warning and the next one retries.
 
 ## Repositories to clone
 

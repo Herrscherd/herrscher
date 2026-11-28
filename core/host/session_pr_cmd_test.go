@@ -36,21 +36,50 @@ type fakePRForge struct {
 	checkPages  [][]contracts.Check
 	threadPages [][]contracts.ReviewThread
 	replies     []string
+	replySkew   time.Duration
+	hideReplies bool
+	withheld    []withheldReply
+}
+
+type withheldReply struct {
+	thread  string
+	comment contracts.ReviewComment
 }
 
 func (f *fakePRForge) ReplyToThread(_ context.Context, thread contracts.ThreadRef, body string) error {
 	f.replies = append(f.replies, body)
+	comment := contracts.ReviewComment{
+		Author:    contracts.ForgeActor{Login: "herrscher", Association: contracts.AssociationMember},
+		Body:      body,
+		CreatedAt: time.Now().Add(f.replySkew),
+	}
+	if f.hideReplies {
+		f.withheld = append(f.withheld, withheldReply{thread: thread.ID(), comment: comment})
+		return nil
+	}
+	f.appendComment(thread.ID(), comment)
+	return nil
+}
+
+func (f *fakePRForge) appendComment(threadID string, comment contracts.ReviewComment) {
 	for page := range f.threadPages {
 		for index := range f.threadPages[page] {
-			if f.threadPages[page][index].ID == thread.ID() {
-				f.threadPages[page][index].Comments = append(f.threadPages[page][index].Comments, contracts.ReviewComment{
-					Author: contracts.ForgeActor{Login: "herrscher", Association: contracts.AssociationMember},
-					Body:   body,
-				})
+			if f.threadPages[page][index].ID == threadID {
+				f.threadPages[page][index].Comments = append(f.threadPages[page][index].Comments, comment)
 			}
 		}
 	}
-	return nil
+}
+
+func (f *fakePRForge) reveal() {
+	for _, reply := range f.withheld {
+		f.appendComment(reply.thread, reply.comment)
+	}
+	f.withheld = nil
+}
+
+func (f *fakePRForge) Connection(context.Context) (contracts.ForgeConnection, error) {
+	return contracts.ForgeConnection{Login: "herrscher"}, nil
 }
 
 func (f *fakePRForge) OpenPullRequest(_ context.Context, draft contracts.PullRequestDraft) (contracts.PullRequest, error) {

@@ -119,7 +119,9 @@ type Session struct {
 	PullRequestLatestReview contracts.ReviewID         `json:"pullRequestLatestReview,omitempty"`
 	ReviewNumber            int                        `json:"reviewNumber,omitempty"`
 	ReviewSeen              map[string]int             `json:"reviewSeen,omitempty"`
+	ReviewMarks             map[string]reviewloop.Mark `json:"reviewMarks,omitempty"`
 	ReviewOwn               []reviewloop.Own           `json:"reviewOwn,omitempty"`
+	ReviewPending           []reviewloop.Pending       `json:"reviewPending,omitempty"`
 
 	// ApprovalRules are the rules that bind this session alone, on top of the daemon's.
 	ApprovalRules []string `json:"approvalRules,omitempty"`

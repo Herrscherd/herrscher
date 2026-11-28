@@ -27,7 +27,7 @@ func replyText(cliMessages *clitext.Messages, lang i18n.Language) *clitext.Trans
 	return cliMessages.For(i18n.Resolve(lang))
 }
 
-func namedSessionLanguage(st *state.State, name string, operator i18n.Language) i18n.Language {
+func namedSessionLanguage(st sessionFinder, name string, operator i18n.Language) i18n.Language {
 	sess, ok := st.FindSession(name)
 	if !ok {
 		return i18n.Resolve(operator)

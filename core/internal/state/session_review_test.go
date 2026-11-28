@@ -4,20 +4,23 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 )
 
 func TestCompareAndSetReviewPositionClaimsOnlyFromTheHeldPosition(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
 	must(t, s.AddSession(Session{Name: "main"}))
 	held := ReviewPosition{}
-	claimed := ReviewPosition{Number: 7, Seen: map[string]int{"t1": 1}}
+	claimed := ReviewPosition{Number: 7, Marks: map[string]reviewloop.Mark{"t1": {At: time.Unix(10, 0)}}}
 
 	ok, err := s.CompareAndSetReviewPosition("main", held, claimed)
 	must(t, err)
 	if !ok {
 		t.Fatal("first claim refused, want accepted")
 	}
-	ok, err = s.CompareAndSetReviewPosition("main", held, ReviewPosition{Number: 7, Seen: map[string]int{"t1": 2}})
+	ok, err = s.CompareAndSetReviewPosition("main", held, ReviewPosition{Number: 7, Legacy: map[string]int{"t1": 2}})
 	must(t, err)
 	if ok {
 		t.Fatal("second claim from a stale position accepted, want refused")
@@ -31,7 +34,13 @@ func TestReviewPositionSurvivesReload(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	s := NewState(path)
 	must(t, s.AddSession(Session{Name: "main"}))
-	position := ReviewPosition{Number: 7, Seen: map[string]int{"t1": 3, "t2": 1}}
+	at := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	position := ReviewPosition{
+		Number:  7,
+		Marks:   map[string]reviewloop.Mark{"t1": {At: at, Digests: []string{"d1"}}},
+		Own:     []reviewloop.Own{{Thread: "t1", Digest: "d2", CreatedAt: at}},
+		Pending: []reviewloop.Pending{{Thread: "t1", Digest: "d3", Login: "herrscher", PostedAt: at}},
+	}
 	_, err := s.CompareAndSetReviewPosition("main", ReviewPosition{}, position)
 	must(t, err)
 
@@ -48,7 +57,7 @@ func TestCompareAndSetReviewPositionRollsBackWhenSaveFails(t *testing.T) {
 	must(t, s.AddSession(Session{Name: "main"}))
 	s.write = failEveryWrite
 
-	ok, err := s.CompareAndSetReviewPosition("main", ReviewPosition{}, ReviewPosition{Number: 7, Seen: map[string]int{"t1": 1}})
+	ok, err := s.CompareAndSetReviewPosition("main", ReviewPosition{}, ReviewPosition{Number: 7, Legacy: map[string]int{"t1": 1}})
 	if !errors.Is(err, errInjectedSave) || ok {
 		t.Fatalf("claim = %v, %v, want the save failure and no claim", ok, err)
 	}
@@ -58,12 +67,13 @@ func TestCompareAndSetReviewPositionRollsBackWhenSaveFails(t *testing.T) {
 }
 
 func TestReviewPositionOfAnotherRequestStartsEmpty(t *testing.T) {
-	position := ReviewPosition{Number: 7, Seen: map[string]int{"t1": 3}}
+	position := ReviewPosition{Number: 7, Legacy: map[string]int{"t1": 3}, Pending: []reviewloop.Pending{{Thread: "t1"}}}
 
-	if got := position.SeenOf(8); got != nil {
-		t.Fatalf("SeenOf(8) = %v, want nil for another request", got)
+	other := position.ForRequest(8)
+	if other.Number != 8 || other.Legacy != nil || other.Pending != nil || other.Marks != nil {
+		t.Fatalf("ForRequest(8) = %+v, want an empty position of request 8", other)
 	}
-	if got := position.SeenOf(7); got["t1"] != 3 {
-		t.Fatalf("SeenOf(7) = %v, want the recorded counts", got)
+	if got := position.ForRequest(7); !got.Equal(position) {
+		t.Fatalf("ForRequest(7) = %+v, want the recorded position", got)
 	}
 }

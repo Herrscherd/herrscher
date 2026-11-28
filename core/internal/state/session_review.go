@@ -9,32 +9,45 @@ import (
 )
 
 // ReviewPosition is how far the review threads of a session's pull request were handed to its
-// agent: the number of that request, and for each thread the count of its comments already
-// handed over.
+// agent: the number of that request, the mark of each thread, the replies the session posted and
+// the replies it still waits to see on the forge. Legacy holds the counts of a state written
+// before the marks existed, until the first observation converts them.
 type ReviewPosition struct {
-	Number int
-	Seen   map[string]int
-	Own    []reviewloop.Own
+	Number  int
+	Marks   map[string]reviewloop.Mark
+	Own     []reviewloop.Own
+	Pending []reviewloop.Pending
+	Legacy  map[string]int
 }
 
 // ReviewPosition returns the review position recorded on the session.
 func (s Session) ReviewPosition() ReviewPosition {
-	return ReviewPosition{Number: s.ReviewNumber, Seen: s.ReviewSeen, Own: s.ReviewOwn}
-}
-
-// SeenOf returns the counts recorded for pull request number, and nil when the position is of
-// another request.
-func (p ReviewPosition) SeenOf(number int) map[string]int {
-	if p.Number != number {
-		return nil
+	return ReviewPosition{
+		Number:  s.ReviewNumber,
+		Marks:   s.ReviewMarks,
+		Own:     s.ReviewOwn,
+		Pending: s.ReviewPending,
+		Legacy:  s.ReviewSeen,
 	}
-	return p.Seen
 }
 
-// Equal reports whether two positions name the same request, the same counts and the same
-// replies of the session.
+// ForRequest returns the position as it applies to pull request number: the marks, replies and
+// legacy counts of another request do not apply, so they are left empty.
+func (p ReviewPosition) ForRequest(number int) ReviewPosition {
+	if p.Number == number {
+		return p
+	}
+	return ReviewPosition{Number: number}
+}
+
+// Equal reports whether two positions name the same request and hold the same marks, replies
+// and counts.
 func (p ReviewPosition) Equal(q ReviewPosition) bool {
-	return p.Number == q.Number && maps.Equal(p.Seen, q.Seen) && slices.Equal(p.Own, q.Own)
+	return p.Number == q.Number &&
+		maps.EqualFunc(p.Marks, q.Marks, reviewloop.Mark.Equal) &&
+		slices.EqualFunc(p.Own, q.Own, reviewloop.Own.Equal) &&
+		slices.EqualFunc(p.Pending, q.Pending, reviewloop.Pending.Equal) &&
+		maps.Equal(p.Legacy, q.Legacy)
 }
 
 // CompareAndSetReviewPosition replaces the review position of the named session by next only when
@@ -60,6 +73,8 @@ func (s *State) CompareAndSetReviewPosition(name string, prev, next ReviewPositi
 
 func setSessionReviewPosition(session *Session, position ReviewPosition) {
 	session.ReviewNumber = position.Number
-	session.ReviewSeen = position.Seen
+	session.ReviewMarks = position.Marks
 	session.ReviewOwn = position.Own
+	session.ReviewPending = position.Pending
+	session.ReviewSeen = position.Legacy
 }

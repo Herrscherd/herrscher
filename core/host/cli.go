@@ -268,6 +268,6 @@ func addCheckpointAndPRVerbs(reg *cli.Registry, sessions *sessionTable, options 
 	if err := addCheckpointCommands(reg, sessions.cliMessages, options.live.Get, hostState, sessions); err != nil {
 		return err
 	}
-	reviews := newReviewLoop(sessions.cliMessages, options.live.Get, hostState, sessions.Seed, sessionPRForgeLimit)
+	reviews := newReviewLoop(sessions.cliMessages, options.live.Get, hostState, sessions.Seed)
 	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, GitHubOpener(options.Forge), forgeCredentials(options.Forge), reviews)
 }

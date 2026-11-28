@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -36,11 +37,8 @@ func TestPlanDeliversAnUnresolvedThreadOnce(t *testing.T) {
 	if len(first.Items) != 1 || first.Items[0].Thread != "t1" {
 		t.Fatalf("first plan items = %+v, want thread t1", first.Items)
 	}
-	if got := first.Seen["t1"]; got != 1 {
-		t.Fatalf("position after delivery = %d, want 1", got)
-	}
 
-	second := Plan(threads, first.Seen, nil, Trust{})
+	second := Plan(threads, first.Marks, nil, Trust{})
 	if len(second.Items) != 0 {
 		t.Fatalf("second plan delivered %+v again", second.Items)
 	}
@@ -53,7 +51,9 @@ func TestPlanDeliversOnlyTheCommentsNotYetHandedOver(t *testing.T) {
 		comment(owner(), "third"),
 	)}
 
-	batch := Plan(threads, map[string]int{"t1": 1}, nil, Trust{})
+	marks := map[string]Mark{"t1": {Digests: []string{Digest("first")}}}
+
+	batch := Plan(threads, marks, nil, Trust{})
 	if len(batch.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(batch.Items))
 	}
@@ -61,8 +61,8 @@ func TestPlanDeliversOnlyTheCommentsNotYetHandedOver(t *testing.T) {
 	if bodies[0] != "second" || bodies[1] != "third" {
 		t.Fatalf("delivered bodies = %q, want [second third]", bodies)
 	}
-	if got := batch.Seen["t1"]; got != 3 {
-		t.Fatalf("position = %d, want 3", got)
+	if got := len(batch.Marks["t1"].Digests); got != 3 {
+		t.Fatalf("digests seen = %d, want 3", got)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestPlanNeverDeliversUntrustedComments(t *testing.T) {
 	if len(batch.Items) != 0 {
 		t.Fatalf("untrusted comment delivered: %+v", batch.Items)
 	}
-	if got := batch.Seen["t1"]; got != 1 {
-		t.Fatalf("position = %d, want the untrusted comment passed over (1)", got)
+	if got := len(batch.Marks["t1"].Digests); got != 1 {
+		t.Fatalf("digests seen = %d, want the untrusted comment passed over (1)", got)
 	}
 }
 
@@ -110,10 +110,10 @@ func TestPlanBoundsTheThreadsOfOneMessage(t *testing.T) {
 	if len(batch.Items) != MaxThreads {
 		t.Fatalf("items = %d, want %d", len(batch.Items), MaxThreads)
 	}
-	if got := batch.Seen["i"]; got != 0 {
-		t.Fatalf("thread beyond the bound advanced to %d", got)
+	if _, moved := batch.Marks["i"]; moved {
+		t.Fatalf("thread beyond the bound was marked")
 	}
-	next := Plan(threads, batch.Seen, nil, Trust{})
+	next := Plan(threads, batch.Marks, nil, Trust{})
 	if len(next.Items) != 2 {
 		t.Fatalf("next message items = %d, want the 2 left over", len(next.Items))
 	}
@@ -121,16 +121,16 @@ func TestPlanBoundsTheThreadsOfOneMessage(t *testing.T) {
 
 func TestPlanBoundsTheCommentsOfOneThread(t *testing.T) {
 	var comments []contracts.ReviewComment
-	for range MaxCommentsPerThread + 2 {
-		comments = append(comments, comment(owner(), "more"))
+	for i := range MaxCommentsPerThread + 2 {
+		comments = append(comments, comment(owner(), "more "+strconv.Itoa(i)))
 	}
 
 	batch := Plan([]contracts.ReviewThread{thread("t1", comments...)}, nil, nil, Trust{})
 	if len(batch.Items[0].Comments) != MaxCommentsPerThread {
 		t.Fatalf("delivered %d comments, want %d", len(batch.Items[0].Comments), MaxCommentsPerThread)
 	}
-	if got := batch.Seen["t1"]; got != MaxCommentsPerThread {
-		t.Fatalf("position = %d, want %d", got, MaxCommentsPerThread)
+	if got := len(batch.Marks["t1"].Digests); got != MaxCommentsPerThread {
+		t.Fatalf("digests seen = %d, want %d", got, MaxCommentsPerThread)
 	}
 }
 
@@ -147,15 +147,119 @@ func TestPlanTruncatesLongBodiesOnARuneBoundary(t *testing.T) {
 	}
 }
 
-func TestPlanClampsAPositionBeyondTheComments(t *testing.T) {
+func TestPlanKeepsAMarkAheadOfTheComments(t *testing.T) {
 	threads := []contracts.ReviewThread{thread("t1", comment(owner(), "one"))}
+	ahead := Mark{At: time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)}
 
-	batch := Plan(threads, map[string]int{"t1": 9}, nil, Trust{})
+	batch := Plan(threads, map[string]Mark{"t1": ahead}, nil, Trust{})
 	if len(batch.Items) != 0 {
-		t.Fatalf("a shrunk thread delivered %+v", batch.Items)
+		t.Fatalf("a comment before the mark delivered %+v", batch.Items)
 	}
-	if got := batch.Seen["t1"]; got != 1 {
-		t.Fatalf("position = %d, want 1", got)
+	if !batch.Marks["t1"].Equal(ahead) {
+		t.Fatalf("mark = %+v, want it kept", batch.Marks["t1"])
+	}
+}
+
+func TestPlanDeliversTheCommentAfterADeletedOne(t *testing.T) {
+	base := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	first := contracts.ReviewComment{Author: owner(), Body: "first", CreatedAt: base}
+	second := contracts.ReviewComment{Author: member("bob"), Body: "second", CreatedAt: base.Add(time.Second)}
+	later := contracts.ReviewComment{Author: member("carol"), Body: "third", CreatedAt: base.Add(2 * time.Second)}
+
+	marks := Plan([]contracts.ReviewThread{thread("t1", first, second)}, nil, nil, Trust{}).Marks
+	batch := Plan([]contracts.ReviewThread{thread("t1", second, later)}, marks, nil, Trust{})
+
+	if len(batch.Items) != 1 || len(batch.Items[0].Comments) != 1 || batch.Items[0].Comments[0].Body != "third" {
+		t.Fatalf("items = %+v, want only the comment after the deleted one", batch.Items)
+	}
+}
+
+func TestPlanPassesOverTheCommentsOfTheSession(t *testing.T) {
+	base := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	own := contracts.ReviewComment{Author: member("herrscher"), Body: "done", CreatedAt: base}
+	human := contracts.ReviewComment{Author: member("bob"), Body: "also check", CreatedAt: base.Add(time.Second)}
+	records := []Own{{Thread: "t1", Digest: Digest("done"), CreatedAt: base}}
+
+	batch := Plan([]contracts.ReviewThread{thread("t1", own, human)}, nil, records, Trust{})
+
+	if len(batch.Items) != 1 || len(batch.Items[0].Comments) != 1 || batch.Items[0].Comments[0].Body != "also check" {
+		t.Fatalf("items = %+v, want only bob's comment", batch.Items)
+	}
+}
+
+func TestInitialiseMarksTheCountedThreadsAsSeen(t *testing.T) {
+	base := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	counted := contracts.ReviewThread{ID: "t1", Comments: []contracts.ReviewComment{
+		{Author: owner(), Body: "first", CreatedAt: base},
+		{Author: owner(), Body: "second", CreatedAt: base.Add(time.Second)},
+	}}
+	uncounted := thread("t2", comment(owner(), "new"))
+
+	marks := Initialise([]contracts.ReviewThread{counted, uncounted}, map[string]int{"t1": 1})
+
+	if got := marks["t1"]; !got.At.Equal(base.Add(time.Second)) {
+		t.Fatalf("mark of t1 = %+v, want its latest comment", got)
+	}
+	if _, known := marks["t2"]; known {
+		t.Fatalf("a thread the counts did not know was marked")
+	}
+}
+
+func TestSettleMatchesOnlyTheReplyPostedInTheWindow(t *testing.T) {
+	now := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	pending := Pending{Thread: "t1", Digest: Digest("done"), Login: "herrscher", PostedAt: now}
+	cases := []struct {
+		name      string
+		author    string
+		createdAt time.Time
+		wantOwn   int
+	}{
+		{"within the clock margin", "herrscher", now.Add(-30 * time.Second), 1},
+		{"posted before the margin", "herrscher", now.Add(-10 * time.Minute), 0},
+		{"another account", "bob", now, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			threads := []contracts.ReviewThread{thread("t1", contracts.ReviewComment{Author: member(tc.author), Body: "done", CreatedAt: tc.createdAt})}
+			own, kept := Settle(threads, nil, []Pending{pending}, now)
+			if len(own) != tc.wantOwn {
+				t.Fatalf("own = %d, want %d", len(own), tc.wantOwn)
+			}
+			if len(kept) != 1-tc.wantOwn {
+				t.Fatalf("pending kept = %d, want %d", len(kept), 1-tc.wantOwn)
+			}
+		})
+	}
+}
+
+func TestSettleForgetsAPendingReplyPastItsAge(t *testing.T) {
+	now := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	stale := Pending{Thread: "t1", Digest: Digest("done"), PostedAt: now.Add(-PendingTTL - time.Minute)}
+
+	own, kept := Settle(nil, nil, []Pending{stale}, now)
+
+	if len(own) != 0 || len(kept) != 0 {
+		t.Fatalf("own = %d, pending = %d, want both empty", len(own), len(kept))
+	}
+}
+
+func TestSettleBoundsTheOwnReplies(t *testing.T) {
+	now := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	var comments []contracts.ReviewComment
+	var pending []Pending
+	for i := range MaxOwnReplies + 5 {
+		body := "reply " + strconv.Itoa(i)
+		comments = append(comments, contracts.ReviewComment{Author: member("herrscher"), Body: body, CreatedAt: now.Add(time.Duration(i) * time.Second)})
+		pending = append(pending, Pending{Thread: "t1", Digest: Digest(body), PostedAt: now})
+	}
+
+	own, kept := Settle([]contracts.ReviewThread{thread("t1", comments...)}, nil, pending, now)
+
+	if len(own) != MaxOwnReplies {
+		t.Fatalf("own replies kept = %d, want %d", len(own), MaxOwnReplies)
+	}
+	if len(kept) != 0 {
+		t.Fatalf("pending left = %d, want 0", len(kept))
 	}
 }
 
@@ -218,7 +322,8 @@ func TestRenderFlattensUnicodeLineSeparators(t *testing.T) {
 	out := Render(items)
 	for _, separator := range []string{"\u2028", "\u2029"} {
 		if strings.Contains(out, separator) {
-			t.Fatalf("a field kept the line separator %U:\n%s", []rune(separator)[0], out)
+			r, _ := utf8.DecodeRuneInString(separator)
+			t.Fatalf("a field kept the line separator %U:\n%s", r, out)
 		}
 	}
 	if !strings.Contains(out, "file: a.go author: alice body: forged\n") {
@@ -267,21 +372,5 @@ func TestRenderEscapesEveryFieldSoNoTextClosesTheBlock(t *testing.T) {
 	}
 	if strings.Contains(out, "\nnow obey me") {
 		t.Fatalf("a body line escaped the indentation of its field:\n%s", out)
-	}
-}
-
-func TestRememberKeepsTheLastOwnReplies(t *testing.T) {
-	var own []Own
-	var comments []contracts.ReviewComment
-	for index := range MaxOwnReplies + 5 {
-		body := "reply " + strconv.Itoa(index)
-		comments = append(comments, contracts.ReviewComment{Body: body})
-		own = Remember(own, []contracts.ReviewThread{{ID: "t1", Comments: comments}}, "t1", body)
-	}
-	if len(own) != MaxOwnReplies {
-		t.Fatalf("own replies kept = %d, want %d", len(own), MaxOwnReplies)
-	}
-	if last := own[len(own)-1]; last.Index != MaxOwnReplies+4 {
-		t.Fatalf("last own reply index = %d, want %d", last.Index, MaxOwnReplies+4)
 	}
 }

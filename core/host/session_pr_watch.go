@@ -72,7 +72,7 @@ func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store 
 	return &prWatcher{
 		prs:      newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit),
 		store:    store,
-		reviews:  newReviewLoop(messages, lang, store, seed, sessionPRForgeLimit),
+		reviews:  newReviewLoop(messages, lang, store, seed),
 		clock:    prwatch.SystemClock(),
 		limit:    &prwatch.Limit{},
 		policy:   prWatchPolicy(),
@@ -342,7 +342,7 @@ func (w *prWatcher) observeReviews(ctx context.Context, group *prGroup, names []
 		w.watches.Add(1)
 		go func() {
 			defer w.watches.Done()
-			w.reviews.observe(ctx, name, group.forge, ref, postedReply{})
+			w.reviews.observe(ctx, name, group.forge, ref)
 		}()
 	}
 }

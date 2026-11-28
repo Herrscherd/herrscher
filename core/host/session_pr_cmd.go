@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/forgeport"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
+	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
@@ -175,18 +177,36 @@ func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts
 	if err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
+	p.expectReply(ctx, target, thread.ID(), body)
 	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
-	p.observeAfterReply(ctx, target, thread.ID(), body)
+	p.observeAfterReply(ctx, target)
 	return cli.Data(p.messages.Text(target.language, clitext.SessionPRReplied, clitext.Params{clitext.ParamNumber: target.ref.Number()}))
 }
 
-func (p sessionPRs) observeAfterReply(ctx context.Context, target prTarget, threadID, body string) {
+func (p sessionPRs) expectReply(ctx context.Context, target prTarget, threadID, body string) {
 	if p.reviews == nil {
 		return
 	}
-	p.reviews.observe(ctx, target.name, target.forge, target.ref, postedReply{thread: threadID, body: body})
+	login := ""
+	connection, err := target.forge.Connection(ctx)
+	if err != nil {
+		slog.Warn("session reply login not read, any account may match it", "session", target.name, "err", err)
+	} else {
+		login = connection.Login
+	}
+	entry := reviewloop.Pending{Thread: threadID, Digest: reviewloop.Digest(body), Login: login}
+	if err := p.reviews.expect(target.name, target.ref.Number(), entry); err != nil {
+		slog.Warn("session reply not recorded as pending, it may come back to the agent", "session", target.name, "err", err)
+	}
+}
+
+func (p sessionPRs) observeAfterReply(ctx context.Context, target prTarget) {
+	if p.reviews == nil {
+		return
+	}
+	p.reviews.observe(ctx, target.name, target.forge, target.ref)
 }
 
 func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, dir string) (contracts.ForgeRepoRef, string, error) {

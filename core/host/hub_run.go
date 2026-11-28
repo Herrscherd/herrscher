@@ -196,6 +196,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
+	sched, err := newIssueScheduler(messages, options, cfg.IssueTriggers, store, runningHub, sessions, clock, tick)
+	if err != nil {
+		return err
+	}
 	sockets, err := serveHubSockets(ctx, options.Runtime, instID, runningHub)
 	if err != nil {
 		return err
@@ -206,10 +210,6 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	sched, err := newIssueScheduler(messages, options, cfg.IssueTriggers, store, runningHub, sessions, clock, tick)
-	if err != nil {
-		return err
-	}
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge))

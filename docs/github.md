@@ -299,6 +299,12 @@ The rules that apply to every trigger:
 - A read that fails does not move the start of the next read. It is retried on
   the next scheduler tick, one minute later, for as long as the forge keeps
   failing. The failure is logged as a warning.
+- A session that cannot be created for a lasting reason, such as an unknown
+  agent, is retried on every read, and it blocks the issues that follow it in
+  its repository: the read stops at the failing issue, so the issues after it and
+  the other filters of that repository are not read until the creation succeeds.
+  Herrscher does not skip the issue on its own. Fix the cause, for example the
+  agent name, and the next read carries on.
 
 ## Troubleshooting
 

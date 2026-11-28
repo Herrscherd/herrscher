@@ -50,13 +50,13 @@ func issueTriggerFilters(trigger config.IssueTriggerConfig) ([]issuetrigger.Filt
 }
 
 func issueTriggerTask(messages *hostMessages, lang languageSource) func(contracts.ForgeRepoRef, contracts.Issue) string {
-	delimiters := strings.NewReplacer("<issue>", "&lt;issue&gt;", "</issue>", "&lt;/issue&gt;")
+	brackets := strings.NewReplacer("<", "&lt;", ">", "&gt;")
 	return func(_ contracts.ForgeRepoRef, issue contracts.Issue) string {
 		return messages.text(lang(), "serve.issue_task", map[string]any{
 			"Number": issue.Ref.Number(),
-			"Title":  delimiters.Replace(escapeLine(issue.Title)),
+			"Title":  brackets.Replace(escapeLine(issue.Title)),
 			"URL":    escapeLine(issue.URL),
-			"Body":   delimiters.Replace(escapeLines(issue.Body)),
+			"Body":   brackets.Replace(escapeLines(issue.Body)),
 		})
 	}
 }

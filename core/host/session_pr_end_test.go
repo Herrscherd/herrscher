@@ -498,9 +498,9 @@ func TestSessionEndReportsARemoteBranchThatCouldNotBeDeleted(t *testing.T) {
 		return false, "", nil
 	})
 	closed := 0
-	closer := func(context.Context, string) error {
+	closer := func(ctx context.Context, _ string) error {
 		closed++
-		gitIn(t.Context(), t, dir, "checkout", "-q", "master")
+		gitIn(ctx, t, dir, "checkout", "-q", "master")
 		return nil
 	}
 	res, err := p.end(t.Context(), "alpha", closer)

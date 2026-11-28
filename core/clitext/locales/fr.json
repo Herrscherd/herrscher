@@ -2033,6 +2033,61 @@
     "other": "oublier un hôte (refusé tant que des sessions y tournent)"
   },
   {
+    "id": "cli.help.cmd.host.discover",
+    "description": "Help of the command host discover",
+    "other": "chercher des hôtes sur le réseau local, le tailnet et dans la configuration ssh, sans en ajouter"
+  },
+  {
+    "id": "cli.discover.intro",
+    "description": "Reply of host discover, before the candidates",
+    "other": "rien n'est écrit : lancez l'une de ces commandes pour enregistrer un hôte"
+  },
+  {
+    "id": "cli.discover.none",
+    "description": "Reply of host discover, when nothing was found",
+    "other": "aucun hôte trouvé sur le réseau local, sur le tailnet ni dans la configuration ssh"
+  },
+  {
+    "id": "cli.discover.candidate",
+    "description": "Reply of host discover, one candidate line",
+    "other": "{{.Name}} à {{.Address}}, route {{.Route}}, {{.Trust}}, {{.Fingerprint}}"
+  },
+  {
+    "id": "cli.discover.add_hint",
+    "description": "Reply of host discover, the command that adds a candidate",
+    "other": "à ajouter avec : {{.Command}}"
+  },
+  {
+    "id": "cli.discover.unverified",
+    "description": "Reply of host discover, a candidate is not verified",
+    "other": "non vérifié"
+  },
+  {
+    "id": "cli.discover.fingerprint",
+    "description": "Reply of host discover, a known fingerprint",
+    "other": "empreinte {{.Fingerprint}}"
+  },
+  {
+    "id": "cli.discover.fingerprint_unknown",
+    "description": "Reply of host discover, no fingerprint known",
+    "other": "empreinte inconnue"
+  },
+  {
+    "id": "cli.discover.source_unavailable",
+    "description": "Reply of host discover, a source could not be read",
+    "other": "source {{.Source}} indisponible, ses hôtes ne sont pas listés"
+  },
+  {
+    "id": "cli.discover.add_unsafe",
+    "description": "Reply of host discover, a name or address is not a plain host name, so no command is proposed",
+    "other": "nom d'hôte non standard, à enregistrer à la main"
+  },
+  {
+    "id": "cli.discover.dropped",
+    "description": "Réponse de host discover, candidats écartés au-delà de la limite du réseau local",
+    "other": "{{.Count}} candidat(s) en plus ignoré(s), la limite du réseau local est atteinte"
+  },
+  {
     "id": "cli.help.param.host.add.name",
     "description": "Help of the --name param of the command host add",
     "other": "nom de l'hôte (unique ; `local` est réservé) ; accepte aussi un argument nu"
@@ -3411,6 +3466,26 @@
     "id": "cli.host.fault.host_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (host name missing)",
     "other": "un hôte a besoin d'un nom"
+  },
+  {
+    "id": "cli.host.fault.announce_window",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (announce window)",
+    "other": "la fenêtre d'annonce doit être positive et de dix minutes au plus"
+  },
+  {
+    "id": "cli.host.fault.fingerprint_invalid",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (fingerprint invalid)",
+    "other": "une empreinte fait seize chiffres hexadécimaux minuscules"
+  },
+  {
+    "id": "cli.host.fault.announce_no_address",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (announce no address)",
+    "other": "l'annonce n'a aucune adresse à publier"
+  },
+  {
+    "id": "cli.host.fault.tailscale_status",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (tailscale status)",
+    "other": "tailscale a refusé la requête d'état"
   },
   {
     "id": "cli.host.fault.local_host_reserved",

@@ -50,9 +50,9 @@ func issueNumbered(t *testing.T, number int, title string) contracts.Issue {
 	return contracts.Issue{Ref: ref, Title: title, Body: "steps", URL: "https://github.com/acme/widget/issues/" + title, State: contracts.IssueOpen, Labels: []string{"bug"}}
 }
 
-func pullRequestNumbered(t *testing.T, number int, title string) contracts.Issue {
+func pullRequestNumbered(t *testing.T, number int) contracts.Issue {
 	t.Helper()
-	issue := issueNumbered(t, number, title)
+	issue := issueNumbered(t, number, "pr")
 	issue.IsPullRequest = true
 	return issue
 }
@@ -91,8 +91,8 @@ func TestIssueListReadsEveryPageOfTheSessionsRepository(t *testing.T) {
 func TestIssueListLeavesPullRequestsOut(t *testing.T) {
 	st := prState(t, prFixtureRepo(t), "")
 	fake := &fakeIssueForge{pages: [][]contracts.Issue{
-		{issueNumbered(t, 1, "a"), pullRequestNumbered(t, 2, "pr"), issueNumbered(t, 3, "b")},
-		{pullRequestNumbered(t, 4, "pr"), issueNumbered(t, 5, "c")},
+		{issueNumbered(t, 1, "a"), pullRequestNumbered(t, 2), issueNumbered(t, 3, "b")},
+		{pullRequestNumbered(t, 4), issueNumbered(t, 5, "c")},
 	}}
 	reg := prRegistry(t, st, prForgeOpener(fake))
 
@@ -116,8 +116,8 @@ func TestIssueListLeavesPullRequestsOut(t *testing.T) {
 func TestIssueLimitCountsOnlyIssuesAcrossPages(t *testing.T) {
 	st := prState(t, prFixtureRepo(t), "")
 	fake := &fakeIssueForge{pages: [][]contracts.Issue{
-		{pullRequestNumbered(t, 1, "pr"), pullRequestNumbered(t, 2, "pr"), issueNumbered(t, 3, "a")},
-		{pullRequestNumbered(t, 4, "pr"), issueNumbered(t, 5, "b"), issueNumbered(t, 6, "c")},
+		{pullRequestNumbered(t, 1), pullRequestNumbered(t, 2), issueNumbered(t, 3, "a")},
+		{pullRequestNumbered(t, 4), issueNumbered(t, 5, "b"), issueNumbered(t, 6, "c")},
 	}}
 	reg := prRegistry(t, st, prForgeOpener(fake))
 
@@ -152,7 +152,7 @@ func TestIssueListSaysSoWhenTheLimitCutsAListOfPullRequests(t *testing.T) {
 	st := prState(t, prFixtureRepo(t), "")
 	pages := make([][]contracts.Issue, 0, forge.MaxPages+1)
 	for number := 1; number <= forge.MaxPages+1; number++ {
-		pages = append(pages, []contracts.Issue{pullRequestNumbered(t, number, "pr")})
+		pages = append(pages, []contracts.Issue{pullRequestNumbered(t, number)})
 	}
 	reg := prRegistry(t, st, prForgeOpener(&fakeIssueForge{pages: pages}))
 

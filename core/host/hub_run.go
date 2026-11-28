@@ -152,10 +152,11 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	if specsErr != nil {
 		log.Warn("command help texts not fully rendered", "err", specsErr)
 	}
-	selfTools := measuredSelfTools(reg, loadedConfig(options.ConfigPath), envx.Getenv)
+	configured := loadedConfig(options.ConfigPath)
+	selfTools := measuredSelfTools(reg, configured, envx.Getenv)
 	measured := selfTools()
-	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds, measured.TurnBytes(), measured.Exposure, contextDeltaSetting(envx.Getenv, loadedConfig(options.ConfigPath))))
-	sup.SetLocalPrepare(selfToolsPreparer(selfToolsProvisioner(envx.Getenv, loadedConfig(options.ConfigPath)), log))
+	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds, measured.TurnBytes(), measured.Exposure, contextDeltaSetting(envx.Getenv, configured)))
+	sup.SetLocalPrepare(selfToolsPreparer(selfToolsProvisioner(envx.Getenv, configured), log))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)

@@ -11,8 +11,9 @@ import (
 const blockSeparator = "\n\n"
 
 type injectedBlock struct {
-	part contracts.ContextPart
-	text string
+	part    contracts.ContextPart
+	text    string
+	omitted bool
 }
 
 type turnContext struct {
@@ -33,7 +34,7 @@ func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances) turn
 func (c turnContext) String() string {
 	texts := make([]string, 0, len(c.blocks))
 	for _, block := range c.blocks {
-		if block.text != "" {
+		if block.text != "" && !block.omitted {
 			texts = append(texts, block.text)
 		}
 	}

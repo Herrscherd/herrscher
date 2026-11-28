@@ -152,7 +152,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 		pin = &scopePin{resolve: opts.Scope, current: opts.LaunchProject, agent: opts.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
-		affordances{roster: opts.Roster, caps: opts.Capabilities, selfTools: opts.SelfToolsBytes, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals}, pin)
+		affordances{roster: opts.Roster, caps: opts.Capabilities, selfTools: opts.SelfToolsBytes, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals, ledger: newContextLedger(opts.ContextDelta)}, pin)
 	if err := parent.Err(); err != nil {
 		return err
 	}
@@ -174,6 +174,7 @@ type affordances struct {
 	user      identity.Identity
 	outbox    outboundSettings
 	approvals *approvalChannel
+	ledger    *contextLedger
 }
 
 type scopePin struct {
@@ -327,7 +328,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
 	defer turn.discard()
-	injected := composeTurnContext(memCtx, eng, aff)
+	injected, plan := aff.ledger.plan(event.SessionIncarnation, keepsHistory(backend), resumeToken(backend), event.Text, composeTurnContext(memCtx, eng, aff))
 	prompt := contracts.Prompt{Content: event.Text, Context: injected.String(), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string
@@ -341,9 +342,19 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 			streamed = append(streamed, event.Detail)
 		case backendKindReset:
 			streamed = nil
+			aff.ledger.reset()
+		case contracts.BackendKindNotice:
+			aff.ledger.reset()
+		case backendKindUsage:
+			aff.ledger.observeInput(inputSize(event))
 		}
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
+	if err != nil {
+		aff.ledger.reset()
+	} else {
+		aff.ledger.commit(plan, resumeToken(backend))
+	}
 	var failure error
 	if err != nil {
 		out = settleFailedReply(ctrl, out, err)
@@ -380,6 +391,10 @@ func (s turnEventSink) Emit(event contracts.Event) {
 	event.TurnID = s.identity.TurnID
 	event.Agent = s.identity.Agent
 	s.EventSink.Emit(event)
+}
+
+func inputSize(event contracts.BackendEvent) int {
+	return event.InTokens + event.CacheRead + event.CacheCreate
 }
 
 func resumeToken(backend contracts.Backend) string {

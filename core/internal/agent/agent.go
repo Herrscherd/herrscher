@@ -21,16 +21,17 @@ import (
 )
 
 const (
-	soulFile     = "SOUL.md"
-	userFile     = "USER.md"
-	mcpFile      = "mcp.json"
-	settingsFile = "settings.json"
-	tagsFile     = "TAGS"
-	backendFile  = "backend"
-	cmdFile      = "cmd"
-	hostFile     = "host"
-	modelFile    = "model"
-	accountFile  = "account"
+	soulFile         = "SOUL.md"
+	userFile         = "USER.md"
+	mcpFile          = "mcp.json"
+	settingsFile     = "settings.json"
+	tagsFile         = "TAGS"
+	backendFile      = "backend"
+	cmdFile          = "cmd"
+	hostFile         = "host"
+	modelFile        = "model"
+	accountFile      = "account"
+	contextDeltaFile = "context-delta"
 )
 
 const worktreeToken = "{{WORKTREE}}"
@@ -252,8 +253,19 @@ type Agent struct {
 	// default, not a rule.
 	Host string
 	// Account is the default account profile of this agent's sessions, from <home>/account. Empty = the vendor default.
-	Account string
+	Account      string
+	ContextDelta ContextDelta
 }
+
+// ContextDelta is the per-agent setting of the context delta, from <home>/context-delta. Inherit leaves the daemon's default in force.
+type ContextDelta int
+
+// ContextDelta values: Inherit defers to the daemon default, On and Off override it.
+const (
+	ContextDeltaInherit ContextDelta = iota
+	ContextDeltaOn
+	ContextDeltaOff
+)
 
 // Materialize provisions the agent into a session worktree by writing the files
 // Claude Code and Codex read from its working directory:

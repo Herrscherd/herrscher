@@ -270,13 +270,16 @@ func newHubSupervisor(ctx context.Context, self string, layout RuntimeLayout, ba
 	return sup
 }
 
-func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool, selfToolsBytes int, selfToolsExposure string) []string {
+func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool, selfToolsBytes int, selfToolsExposure string, contextDelta bool) []string {
 	bridgeEnv := append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...)
 	if pair := CapabilityEnvPair(specs, func(family string) bool { return kinds[family] }); pair != "" {
 		bridgeEnv = append(bridgeEnv, pair)
 	}
 	if selfToolsBytes > 0 {
 		bridgeEnv = append(bridgeEnv, EnvSelfToolsBytes+"="+strconv.Itoa(selfToolsBytes), EnvSelfToolsExpose+"="+selfToolsExposure)
+	}
+	if contextDelta {
+		bridgeEnv = append(bridgeEnv, EnvContextDelta+"=1")
 	}
 	return bridgeEnv
 }

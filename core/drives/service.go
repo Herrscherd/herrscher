@@ -261,7 +261,8 @@ func (s Service) Read(ctx context.Context, caller Caller, name, rawPath string) 
 
 // ReadTo copies a file of the drive to dest, inside the session's worktree or
 // at an absolute path for the operator. The copy streams into a staging file
-// beside dest, renamed over it once complete and journaled.
+// beside dest, renamed over it once complete, then journaled; a copy whose
+// entry cannot be written is removed again.
 func (s Service) ReadTo(ctx context.Context, caller Caller, name, rawPath, dest string) (int64, error) {
 	drive, path, err := s.start(ctx, caller, Request{Drive: name, Path: rawPath, Local: dest, Op: OpRead})
 	if err != nil {
@@ -278,13 +279,17 @@ func (s Service) ReadTo(ctx context.Context, caller Caller, name, rawPath, dest 
 	}
 	size, err := s.readFile(ctx, drive, path, staging, CopyBytes)
 	err = errors.Join(err, staging.Close())
-	if finishErr := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); finishErr != nil {
-		discardStaging(root, stagingName)
-		return 0, finishErr
+	if err == nil {
+		err = root.Rename(stagingName, local)
 	}
-	if err := root.Rename(stagingName, local); err != nil {
+	if err != nil {
 		discardStaging(root, stagingName)
-		return 0, err
+	}
+	if finishErr := s.finish(ctx, caller, Entry{Drive: name, Path: path.String(), Op: OpRead, Bytes: size}, err); finishErr != nil {
+		if err == nil {
+			discardStaging(root, local)
+		}
+		return 0, finishErr
 	}
 	return size, nil
 }
@@ -366,8 +371,8 @@ func (s Service) sendFile(ctx context.Context, caller Caller, drive Drive, path 
 	if size > CopyBytes {
 		return 0, false, &TooLargeError{Limit: CopyBytes}
 	}
-	if err := runner.Write(ctx, target, io.LimitReader(file, size), size); err != nil {
-		return 0, true, err
+	if started, err := runner.Write(ctx, target, io.LimitReader(file, size), size); err != nil {
+		return 0, started, err
 	}
 	return size, true, nil
 }
@@ -384,8 +389,8 @@ func (s Service) finish(ctx context.Context, caller Caller, entry Entry, opErr e
 		entry.Bytes = 0
 	}
 	if err := s.append(ctx, caller, entry); err != nil {
+		slog.Warn("drive journal append failed", "drive", entry.Drive, "path", entry.Path, "session", caller.Session, "op", string(entry.Op), "outcome", string(entry.Outcome), "err", err)
 		if opErr != nil {
-			slog.Warn("drive journal append", "drive", entry.Drive, "err", err)
 			return opErr
 		}
 		return &JournalError{Op: entry.Op, Cause: err}

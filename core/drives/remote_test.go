@@ -332,3 +332,95 @@ func TestAnOrphanSecretIsReplacedByTheNextAdd(t *testing.T) {
 func (j Journal) operatorPath() string {
 	return filepath.Join(j.dir, operatorFile+activitySuffix)
 }
+
+func TestTheJournalDropsTheFilesOfIdleSessionsButKeepsTheOperators(t *testing.T) {
+	journal := Open(t.TempDir()).Journal()
+	now := time.Now()
+	for _, entry := range []Entry{
+		{Time: now, Session: "idle", Drive: "gdrive", Op: OpRead, Outcome: OutcomeDone},
+		{Time: now, Session: "busy", Drive: "gdrive", Op: OpRead, Outcome: OutcomeDone},
+		{Time: now, Drive: "gdrive", Op: OpWrite, Outcome: OutcomeDone},
+	} {
+		if err := journal.Append(t.Context(), entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := now.Add(-JournalRetention - time.Hour)
+	for _, name := range []string{fileKey("idle") + activitySuffix, operatorFile + writesSuffix} {
+		if err := os.Chtimes(filepath.Join(journal.dir, name), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := journal.pruneFiles(now); err != nil {
+		t.Fatal(err)
+	}
+	for name, kept := range map[string]bool{fileKey("idle") + activitySuffix: false, fileKey("busy") + activitySuffix: true, operatorFile + writesSuffix: true} {
+		if _, err := os.Stat(filepath.Join(journal.dir, name)); (err == nil) != kept {
+			t.Errorf("%s kept = %v, want %v", name, err == nil, kept)
+		}
+	}
+}
+
+func TestTheJournalSizeCapDropsTheOldestFilesAndTheOperatorsWritesLast(t *testing.T) {
+	journal := Open(t.TempDir()).Journal()
+	if err := os.MkdirAll(journal.dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	big := make([]byte, JournalMaxBytes/3)
+	files := []struct {
+		name string
+		age  time.Duration
+	}{
+		{operatorFile + writesSuffix, 10 * time.Hour},
+		{fileKey("a") + activitySuffix + ".1", 5 * time.Hour},
+		{fileKey("a") + activitySuffix, 4 * time.Hour},
+		{fileKey("b") + activitySuffix, time.Hour},
+	}
+	for _, file := range files {
+		path := filepath.Join(journal.dir, file.name)
+		if err := os.WriteFile(path, big, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		at := now.Add(-file.age)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := journal.pruneFiles(now); err != nil {
+		t.Fatal(err)
+	}
+	for index, file := range files {
+		_, err := os.Stat(filepath.Join(journal.dir, file.name))
+		if kept := err == nil; kept != (index != 1) {
+			t.Errorf("%s kept = %v", file.name, kept)
+		}
+	}
+}
+
+func TestAnUnfilteredReadLooksAtTheMostRecentFilesAlone(t *testing.T) {
+	journal := Open(t.TempDir()).Journal()
+	now := time.Now()
+	for index := range JournalReadFiles + 5 {
+		session := "s" + strconv.Itoa(index)
+		if err := journal.Append(t.Context(), Entry{Time: now, Session: session, Drive: "gdrive", Path: session, Op: OpRead, Outcome: OutcomeDone}); err != nil {
+			t.Fatal(err)
+		}
+		at := now.Add(time.Duration(index-JournalReadFiles-5) * time.Hour)
+		if err := os.Chtimes(filepath.Join(journal.dir, fileKey(session)+activitySuffix), at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	log, err := journal.Read(Filter{}, 0)
+	if err != nil || len(log.Entries) != JournalReadFiles {
+		t.Fatalf("Read = %d entries, %v, want %d", len(log.Entries), err, JournalReadFiles)
+	}
+	for _, entry := range log.Entries {
+		if entry.Path == "s0" {
+			t.Fatal("the least recently written file was read")
+		}
+	}
+	if mine, err := journal.Read(Filter{Session: "s0"}, 0); err != nil || len(mine.Entries) != 1 {
+		t.Fatalf("a filter on the session still reads its file: %+v, %v", mine, err)
+	}
+}

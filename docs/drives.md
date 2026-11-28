@@ -179,8 +179,12 @@ journaled.
 
 Nothing runs unrecorded. An operation is journaled before its result is given:
 a read or a listing whose entry cannot be written returns an error instead of
-what it found, and a copy removes what it staged. A write has already reached
-the drive by then, so it returns an error saying that its entry is missing.
+what it found, and a copy is removed once it has landed. A write has already
+reached the drive by then, so it returns an error saying that its entry is
+missing, and the daemon's log keeps the drive, the path and the session. A
+copy whose rename fails is journaled as failed. A write counts as having
+reached the drive only once rclone has started; one that failed before, on a
+cancelled call or a lock, is journaled as never having left the machine.
 
 The journal lives in `drives/journal/`, with files of its own for each session
 and for you, so a session can only ever rotate its own history away. Writes
@@ -191,6 +195,12 @@ source) go to `<session>.jsonl`. Each file is rotated at 4 MiB and keeps eight
 previous files (`.1` to `.8`). `drive log` reads them newest first and stops
 once it holds the entries it shows; a filter on a session reads that session's
 files alone. A line it cannot read is counted and said under the listing.
+
+The journal is pruned at most once an hour, when an entry is written. The files
+of a session that journaled nothing for 30 days are removed; yours are kept.
+Past 512 MiB in all, the least recently written files go first, and your
+writes last. An unfiltered `drive log` looks at the 64 most recently written
+files; a filter on a session always reads that session's files.
 
 Two caps keep a session from flooding it:
 

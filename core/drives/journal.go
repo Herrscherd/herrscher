@@ -39,6 +39,14 @@ const (
 	sessionPrefix  = "session-"
 	sessionKeyHex  = 16
 	suppressedKept = 24 * time.Hour
+	// JournalRetention is how long the files of a session that journals nothing more are kept; the operator's are kept until the size cap needs their room.
+	JournalRetention = 30 * 24 * time.Hour
+	// JournalMaxBytes caps the whole journal; past it, the oldest files go first, the operator's writes last.
+	JournalMaxBytes = 512 << 20
+	// JournalReadFiles is how many files, the most recently written, an unfiltered read looks at.
+	JournalReadFiles = 64
+	pruneMarker      = "pruned-at"
+	pruneEvery       = time.Hour
 )
 
 // OperationCapError reports a session that ran OperationsPerWindow operations
@@ -198,6 +206,7 @@ func (j Journal) Append(ctx context.Context, entry Entry) error {
 	if rotateErr := rotateWhenFull(target); rotateErr != nil {
 		return rotateErr
 	}
+	j.pruneWhenDue(entry.Time)
 	file, err := os.OpenFile(filepath.Clean(target), os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return err
@@ -336,6 +345,39 @@ func (j Journal) files(session string) ([]string, error) {
 		key := fileKey(session)
 		return []string{filepath.Join(j.dir, key+activitySuffix), filepath.Join(j.dir, key+writesSuffix)}, nil
 	}
+	found, err := j.journalFiles()
+	if err != nil {
+		return nil, err
+	}
+	var current []journalFile
+	for _, file := range found {
+		if strings.HasSuffix(file.path, activitySuffix) {
+			current = append(current, file)
+		}
+	}
+	slices.SortFunc(current, func(left, right journalFile) int { return right.modified.Compare(left.modified) })
+	paths := make([]string, 0, min(len(current), JournalReadFiles))
+	for index := range min(len(current), JournalReadFiles) {
+		paths = append(paths, current[index].path)
+	}
+	return paths, nil
+}
+
+type journalFile struct {
+	path     string
+	size     int64
+	modified time.Time
+}
+
+func (f journalFile) operator() bool {
+	return strings.HasPrefix(filepath.Base(f.path), operatorFile+".")
+}
+
+func (f journalFile) operatorWrites() bool {
+	return strings.HasPrefix(filepath.Base(f.path), operatorFile+writesSuffix)
+}
+
+func (j Journal) journalFiles() ([]journalFile, error) {
 	entries, err := os.ReadDir(j.dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -343,13 +385,77 @@ func (j Journal) files(session string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var files []string
+	var files []journalFile
 	for _, entry := range entries {
-		if name := entry.Name(); strings.HasSuffix(name, activitySuffix) && entry.Type().IsRegular() {
-			files = append(files, filepath.Join(j.dir, name))
+		name := entry.Name()
+		if !entry.Type().IsRegular() || !strings.Contains(name, ".jsonl") {
+			continue
 		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, journalFile{path: filepath.Join(j.dir, name), size: info.Size(), modified: info.ModTime()})
 	}
 	return files, nil
+}
+
+func (j Journal) pruneWhenDue(now time.Time) {
+	marker := filepath.Join(j.dir, pruneMarker)
+	if info, err := os.Stat(marker); err == nil && now.Sub(info.ModTime()) < pruneEvery && !now.Before(info.ModTime()) {
+		return
+	}
+	if err := j.pruneFiles(now); err != nil {
+		slog.Warn("drive journal prune", "err", err)
+	}
+	if err := os.WriteFile(marker, nil, fileMode); err != nil {
+		slog.Warn("drive journal prune marker", "err", err)
+		return
+	}
+	if err := os.Chtimes(marker, now, now); err != nil {
+		slog.Warn("drive journal prune marker", "err", err)
+	}
+}
+
+// pruneFiles drops the files of sessions that journaled nothing for
+// JournalRetention, then, while the journal holds more than JournalMaxBytes,
+// the least recently written files, the operator's writes last.
+func (j Journal) pruneFiles(now time.Time) error {
+	files, err := j.journalFiles()
+	if err != nil {
+		return err
+	}
+	var kept []journalFile
+	var total int64
+	for _, file := range files {
+		if !file.operator() && now.Sub(file.modified) > JournalRetention {
+			if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			continue
+		}
+		kept = append(kept, file)
+		total += file.size
+	}
+	slices.SortFunc(kept, func(left, right journalFile) int {
+		if left.operatorWrites() != right.operatorWrites() {
+			if left.operatorWrites() {
+				return 1
+			}
+			return -1
+		}
+		return left.modified.Compare(right.modified)
+	})
+	for _, file := range kept {
+		if total <= JournalMaxBytes {
+			break
+		}
+		if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		total -= file.size
+	}
+	return nil
 }
 
 func newestEntries(path string, filter Filter, limit int, log *Log) ([]Entry, error) {

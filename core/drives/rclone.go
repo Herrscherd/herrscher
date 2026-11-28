@@ -181,21 +181,27 @@ func (r Rclone) Read(ctx context.Context, target string, dst io.Writer, limit in
 	return copied, err
 }
 
-// Write stores size bytes read from body at target.
-func (r Rclone) Write(ctx context.Context, target string, body io.Reader, size int64) error {
+// Write stores size bytes read from body at target. It reports whether rclone
+// started, which is when anything may have reached the remote: a write that
+// failed before, on a cancelled context, the lock or the start itself, sent
+// nothing.
+func (r Rclone) Write(ctx context.Context, target string, body io.Reader, size int64) (bool, error) {
 	release, err := r.shared(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer release()
 	cmd := r.prepare(ctx, []string{askPasswordOff, "rcat", "--size", strconv.FormatInt(size, 10), "--", target})
 	cmd.Stdin = body
 	errOut := &tailBuffer{limit: stderrBytes}
 	cmd.Stdout, cmd.Stderr = io.Discard, errOut
-	if runErr := cmd.Run(); runErr != nil {
-		return rcloneFailure("rcat", runErr, errOut.String())
+	if err := cmd.Start(); err != nil {
+		return false, &RcloneError{Op: "rcat", Cause: err}
 	}
-	return nil
+	if runErr := cmd.Wait(); runErr != nil {
+		return true, rcloneFailure("rcat", runErr, errOut.String())
+	}
+	return true, nil
 }
 
 // Version is the first line of rclone version.

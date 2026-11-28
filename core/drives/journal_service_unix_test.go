@@ -3,7 +3,10 @@
 package drives
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,5 +129,73 @@ func TestADoneWriteGoesToTheWritesFileUncapped(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(service.Catalog().Journal().dir, fileKey(caller.Session)+writesSuffix))
 	if err != nil || strings.Count(string(raw), "\n") != RefusalsPerWindow+5 {
 		t.Fatalf("writes file holds %d lines, %v, want every write", strings.Count(string(raw), "\n"), err)
+	}
+}
+
+func TestAWriteThatNeverStartedIsUnsent(t *testing.T) {
+	fake, service, caller := journalRig(t)
+	if err := os.WriteFile(filepath.Join(caller.Worktree, "out.md"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := service.Write(ctx, caller, "gdrive", "a.md", "out.md"); err == nil {
+		t.Fatal("a write on a cancelled context succeeded")
+	}
+	if runs := fake.Runs(t); len(runs) != 0 {
+		t.Fatalf("rclone ran: %q", runs)
+	}
+	if _, err := os.Stat(filepath.Join(service.Catalog().Journal().dir, fileKey(caller.Session)+writesSuffix)); err == nil {
+		t.Fatal("a write that never started went to the file of the writes that reached the drive")
+	}
+	log, err := service.Log(Filter{Session: "s1"}, 0)
+	if err != nil || len(log.Entries) != 1 || log.Entries[0].Outcome != OutcomeUnsent {
+		t.Fatalf("journal = %+v, %v, want one unsent write", log.Entries, err)
+	}
+}
+
+func TestAWriteWhoseEntryIsLostIsLoggedWithItsDriveAndPath(t *testing.T) {
+	fake, service, caller := journalRig(t)
+	if err := os.WriteFile(filepath.Join(caller.Worktree, "out.md"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(service.Catalog().Journal().dir, fileKey(caller.Session)+writesSuffix), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	_, err := service.Write(t.Context(), caller, "gdrive", "Neublox/a.md", "out.md")
+	if _, lost := errors.AsType[*JournalError](err); !lost {
+		t.Fatalf("err = %v, want a JournalError", err)
+	}
+	if got := fake.Get(t, "gdrive", "Neublox/a.md"); got != "x" {
+		t.Fatalf("remote = %q, want the write that reached it", got)
+	}
+	for _, want := range []string{"level=WARN", "drive=gdrive", "path=Neublox/a.md", "session=s1"} {
+		if !strings.Contains(logged.String(), want) {
+			t.Errorf("log %q lacks %q", logged.String(), want)
+		}
+	}
+}
+
+func TestACopyWhoseRenameFailsIsJournaledAsFailed(t *testing.T) {
+	fake, service, caller := journalRig(t)
+	fake.Put(t, "gdrive", "a.md", "x")
+	if err := os.MkdirAll(filepath.Join(caller.Worktree, "busy", "inside"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ReadTo(t.Context(), caller, "gdrive", "a.md", "busy"); err == nil {
+		t.Fatal("a copy over a folder succeeded")
+	}
+	log, err := service.Log(Filter{Session: "s1"}, 0)
+	if err != nil || len(log.Entries) != 1 || log.Entries[0].Outcome != OutcomeFailed {
+		t.Fatalf("journal = %+v, %v, want one failed copy", log.Entries, err)
+	}
+	entries, err := os.ReadDir(caller.Worktree)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("worktree holds %v, %v, want the folder alone", entries, err)
 	}
 }

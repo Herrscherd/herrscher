@@ -27,11 +27,11 @@ var (
 )
 
 type sessionEndTarget struct {
-	language i18n.Language
-	record   state.PullRequestRecord
-	branch   string
-	common   string
-	env      []string
+	language   i18n.Language
+	record     state.PullRequestRecord
+	branch     string
+	common     string
+	env        []string
 	headMerged bool
 }
 

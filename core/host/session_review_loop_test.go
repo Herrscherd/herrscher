@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -618,5 +619,87 @@ func TestReplyForgetsItsPendingEntryOnlyOnAClearRefusal(t *testing.T) {
 				t.Fatalf("pending = %v, want %d entries", sess.ReviewPending, tc.wantPending)
 			}
 		})
+	}
+}
+
+func TestRefusedByForgeClassifiesEachClearRefusal(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "unauthorized", err: contracts.ErrForgeUnauthorized, want: true},
+		{name: "forbidden", err: contracts.ErrForgeForbidden, want: true},
+		{name: "not found", err: contracts.ErrForgeNotFound, want: true},
+		{name: "wrong host", err: contracts.ErrForgeWrongHost, want: true},
+		{name: "not connected", err: contracts.ErrForgeNotConnected, want: true},
+		{name: "rate limited", err: &contracts.ForgeRateLimitedError{}, want: true},
+		{name: "empty comment", err: contracts.ErrEmptyComment, want: true},
+		{name: "invalid ref", err: contracts.ErrInvalidRef, want: true},
+		{name: "invalid login", err: contracts.ErrInvalidForgeLogin, want: true},
+		{name: "timeout", err: context.DeadlineExceeded, want: false},
+		{name: "connection reset", err: errors.New("read tcp: connection reset by peer"), want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := fmt.Errorf("reply: %w", tc.err)
+			if got := refusedByForge(wrapped); got != tc.want {
+				t.Fatalf("refusedByForge = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReplyAndObserverShareOneReviewLoop(t *testing.T) {
+	st := reviewTestState(t)
+	var table sessionTable
+	table.cliMessages = clitext.NewMessages()
+	lang := fixedLanguage(i18n.English)
+	loop := table.reviewLoopFor(lang, st)
+	watcher := newSessionPRWatcher(clitext.NewMessages(), lang, st, prForgeOpener(&fakePRForge{}), nil, nil, table.reviewLoopFor(lang, st))
+	if watcher.reviews != loop {
+		t.Fatal("the watcher and the reply command do not share one review loop")
+	}
+	_, ref := reviewTestLoop(t, st, nil)
+
+	gate := make(chan struct{})
+	var mu sync.Mutex
+	var delivered []string
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(delivered)
+	}
+	loop.seed = func(_, task string) bool {
+		mu.Lock()
+		delivered = append(delivered, task)
+		first := len(delivered) == 1
+		mu.Unlock()
+		if first {
+			<-gate
+		}
+		return true
+	}
+	client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread()}}}
+
+	done := make(chan struct{}, 2)
+	go func() {
+		loop.observe(t.Context(), "main", client, ref)
+		done <- struct{}{}
+	}()
+	for i := 0; i < 500 && count() == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	go func() {
+		watcher.reviews.observe(t.Context(), "main", client, ref)
+		done <- struct{}{}
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(gate)
+	<-done
+	<-done
+
+	if count() != 1 {
+		t.Fatalf("messages = %d, want the thread handed over once", count())
 	}
 }

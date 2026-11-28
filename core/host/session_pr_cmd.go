@@ -226,7 +226,10 @@ func refusedByForge(err error) bool {
 		errors.Is(err, contracts.ErrForgeForbidden) ||
 		errors.Is(err, contracts.ErrForgeNotFound) ||
 		errors.Is(err, contracts.ErrForgeWrongHost) ||
-		errors.Is(err, contracts.ErrForgeNotConnected)
+		errors.Is(err, contracts.ErrForgeNotConnected) ||
+		errors.Is(err, contracts.ErrInvalidRef) ||
+		errors.Is(err, contracts.ErrEmptyComment) ||
+		errors.Is(err, contracts.ErrInvalidForgeLogin)
 }
 
 func (p sessionPRs) forgetReply(target prTarget, entry reviewloop.Pending) {

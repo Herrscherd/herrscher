@@ -286,14 +286,19 @@ at the next change or after a restart.
 - A state written with the former per-thread counts is converted on its first
   observation: each thread it knows is marked at its latest comment, so nothing it
   already held is sent again, and a thread it does not know is handed over in full.
-- The marks of a thread move only once its message is delivered. Observations of
-  the host run one at a time, so two observations never hand the same comments
-  over twice. If no live session takes the message, nothing is recorded and the
-  next observation delivers the threads again.
+- The marks of a thread move only once its message is delivered. The reply
+  command and the watcher share one review loop, and the observations of one
+  session and pull request run one at a time on it, so two observations never
+  hand the same comments over twice. Observations of different sessions or pull
+  requests do not wait for each other; each one still reads the forge while it
+  holds its lock, because the plan must match the position it reads. If no live
+  session takes the message, nothing is recorded and the next observation
+  delivers the threads again.
 - If the message is delivered but the position cannot be recorded (the state
   write fails, or the position keeps changing after 5 attempts), the comments are
   not marked, and the next observation hands them over again. A comment can thus
-  reach the agent twice, but never zero times.
+  reach the agent twice, but never zero times. The agent may then publish the
+  same reply twice in the thread, because it answers each delivery it receives.
 - A reply that a person adds to an existing thread is seen at the next change of
   the pull request or after a restart. The forge feed of the contract reports
   five kinds of change (a review submitted, a new commit, a change of state, a

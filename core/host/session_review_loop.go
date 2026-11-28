@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"maps"
 	"sync"
@@ -43,7 +44,31 @@ type reviewLoop struct {
 	seed     func(session, task string) bool
 	trust    reviewloop.Trust
 	now      func() time.Time
-	observed sync.Mutex
+	observed keyedLocks
+}
+
+type keyedLocks struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+func (k *keyedLocks) lock(key string) func() {
+	k.mu.Lock()
+	if k.locks == nil {
+		k.locks = make(map[string]*sync.Mutex)
+	}
+	l, ok := k.locks[key]
+	if !ok {
+		l = &sync.Mutex{}
+		k.locks[key] = l
+	}
+	k.mu.Unlock()
+	l.Lock()
+	return l.Unlock
+}
+
+func observationKey(name string, number int) string {
+	return fmt.Sprintf("%s#%d", name, number)
 }
 
 func newReviewLoop(messages *clitext.Messages, lang languageSource, store reviewStore, seed func(session, task string) bool) *reviewLoop {
@@ -122,8 +147,8 @@ func (r *reviewLoop) update(name string, number int, edit func(stored state.Revi
 }
 
 func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.Forge, ref contracts.PullRequestRef) {
-	r.observed.Lock()
-	defer r.observed.Unlock()
+	unlock := r.observed.lock(observationKey(name, ref.Number()))
+	defer unlock()
 	sess, ok := r.store.FindSession(name)
 	if !ok {
 		return

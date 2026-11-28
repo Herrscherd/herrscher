@@ -49,9 +49,12 @@ func (c ProxyChannel) String() string {
 
 // RunProxy relays stdin and stdout to the daemon socket of channel on this machine.
 // The daemon is the one serving statePath, found with the same instance rule as the
-// operator CLI. Closing stdin ends the request side; the call returns once the daemon
-// closes its side, after closing stdin itself when it implements io.Closer so that a
-// read blocked on it ends. It fails with a daemon-absent error when nothing listens.
+// operator CLI. When stdin ends before the daemon closes, every byte read from it is
+// sent and the daemon then sees end of input. The call returns once the daemon closes
+// its side, or with the context error when ctx ends first; it does not wait for stdin
+// to end, since a blocking read cannot be interrupted, so input not yet read by then is
+// not sent. It closes stdin when it implements io.Closer. It fails with a daemon-absent
+// error when nothing listens.
 func RunProxy(ctx context.Context, layout RuntimeLayout, statePath, optID string, channel ProxyChannel, stdin io.Reader, stdout io.Writer) error {
 	path, err := proxySocketPath(layout, ServedInstanceID(statePath, optID), channel)
 	if err != nil {
@@ -77,19 +80,16 @@ func proxySocketPath(layout RuntimeLayout, instanceID string, channel ProxyChann
 func relayProxy(ctx context.Context, conn net.Conn, stdin io.Reader, stdout io.Writer) error {
 	stop := closeOnDone(ctx, conn)
 	defer stop()
-	requestsDone := make(chan struct{})
-	go relayRequests(conn, stdin, requestsDone)
+	go relayRequests(conn, stdin)
 	_, err := io.Copy(stdout, conn)
 	endRequests(stdin, conn)
-	<-requestsDone
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
 	return err
 }
 
-func relayRequests(conn net.Conn, stdin io.Reader, done chan<- struct{}) {
-	defer close(done)
+func relayRequests(conn net.Conn, stdin io.Reader) {
 	_, err := io.Copy(conn, stdin)
 	logCleanup(ignoreVoluntaryClose(err))
 	logCleanup(ignoreVoluntaryClose(closeWriteSide(conn)))

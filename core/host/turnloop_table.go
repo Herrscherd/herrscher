@@ -106,6 +106,15 @@ func (t *sessionTable) Seed(session, task string) bool {
 	return driver.Seed(task)
 }
 
+func (t *sessionTable) Notify(session string, notice contracts.Notice) bool {
+	driver := t.lookup(session)
+	if driver == nil {
+		return false
+	}
+	driver.notifyGateways(notice, nil)
+	return true
+}
+
 func (t *sessionTable) Submit(ctx context.Context, session string, inbound contracts.Inbound) bool {
 	driver := t.lookup(session)
 	if driver == nil {

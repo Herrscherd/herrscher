@@ -164,7 +164,7 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	issues, truncated, err := forge.CollectUpTo(ctx, limit, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
+	issues, truncated, err := forge.CollectUpTo(ctx, limit, isIssueOnly, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
 		return target.forge.Issues(ctx, target.repo, query, page)
 	})
 	if err != nil {
@@ -278,6 +278,10 @@ func (p sessionPRs) commentIssue(ctx context.Context, input contracts.Input) (co
 		return contracts.Result{}, p.failure(target.language, err)
 	}
 	return cli.Data(p.messages.Text(target.language, clitext.SessionIssueCommented, clitext.Params{clitext.ParamNumber: ref.Number()}))
+}
+
+func isIssueOnly(issue contracts.Issue) bool {
+	return !issue.IsPullRequest
 }
 
 func viewOfIssue(issue contracts.Issue) issueView {

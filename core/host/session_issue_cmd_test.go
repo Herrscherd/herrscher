@@ -44,6 +44,13 @@ func issueNumbered(t *testing.T, number int, title string) contracts.Issue {
 	return contracts.Issue{Ref: ref, Title: title, Body: "steps", URL: "https://github.com/acme/widget/issues/" + title, State: contracts.IssueOpen, Labels: []string{"bug"}}
 }
 
+func pullRequestNumbered(t *testing.T, number int, title string) contracts.Issue {
+	t.Helper()
+	issue := issueNumbered(t, number, title)
+	issue.IsPullRequest = true
+	return issue
+}
+
 func runIssue(t *testing.T, reg *cli.Registry, args ...string) (string, error) {
 	t.Helper()
 	res, err := reg.Dispatch(t.Context(), append([]string{nsSession, verbIssue}, args...))
@@ -72,6 +79,61 @@ func TestIssueListReadsEveryPageOfTheSessionsRepository(t *testing.T) {
 	}
 	if query := fake.queries[0]; query.State != contracts.IssueClosed || !slices.Equal(query.Labels, []string{"bug", "ui"}) {
 		t.Fatalf("query = %+v, want closed issues labelled bug and ui", query)
+	}
+}
+
+func TestIssueListLeavesPullRequestsOut(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	fake := &fakeIssueForge{pages: [][]contracts.Issue{
+		{issueNumbered(t, 1, "a"), pullRequestNumbered(t, 2, "pr"), issueNumbered(t, 3, "b")},
+		{pullRequestNumbered(t, 4, "pr"), issueNumbered(t, 5, "c")},
+	}}
+	reg := prRegistry(t, st, prForgeOpener(fake))
+
+	out, err := runIssue(t, reg, verbIssueList, "--name", "alpha", "--json")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var listing issueListing
+	if err := json.Unmarshal([]byte(out), &listing); err != nil {
+		t.Fatalf("list output %q: %v", out, err)
+	}
+	numbers := make([]int, 0, len(listing.Issues))
+	for _, view := range listing.Issues {
+		numbers = append(numbers, view.Number)
+	}
+	if !slices.Equal(numbers, []int{1, 3, 5}) || listing.Truncated {
+		t.Fatalf("numbers = %v truncated %v, want the issues #1, #3, #5 and no pull request", numbers, listing.Truncated)
+	}
+}
+
+func TestIssueLimitCountsOnlyIssuesAcrossPages(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	fake := &fakeIssueForge{pages: [][]contracts.Issue{
+		{pullRequestNumbered(t, 1, "pr"), pullRequestNumbered(t, 2, "pr"), issueNumbered(t, 3, "a")},
+		{pullRequestNumbered(t, 4, "pr"), issueNumbered(t, 5, "b"), issueNumbered(t, 6, "c")},
+	}}
+	reg := prRegistry(t, st, prForgeOpener(fake))
+
+	out, err := runIssue(t, reg, verbIssueList, "--name", "alpha", "--limit", "2")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if !strings.Contains(out, "#3") || !strings.Contains(out, "#5") || strings.Contains(out, "#6") || strings.Contains(out, "#1") || strings.Contains(out, "#4") {
+		t.Fatalf("list output %q, want #3 and #5 only, the pull requests skipped and the limit reached on issues", out)
+	}
+	if !strings.Contains(out, "--limit") {
+		t.Fatalf("list output %q, want the line naming --limit", out)
+	}
+}
+
+func TestIssueShowRefusesAPullRequestNumberAsNotFound(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	fake := &fakeIssueForge{issue: issueNumbered(t, 7, "seven")}
+	reg := prRegistry(t, st, prForgeOpener(fake))
+
+	if _, err := runIssue(t, reg, verbIssueShow, "--name", "alpha", "--number", "8"); !errors.Is(err, contracts.ErrForgeNotFound) {
+		t.Fatalf("show of a pull request number: %v, want the not-found refusal", err)
 	}
 }
 

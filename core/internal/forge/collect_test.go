@@ -31,7 +31,7 @@ func (l *sizedListing) fetch(_ context.Context, page contracts.PageRequest) (con
 
 func TestCollectUpToAsksEveryPageAtTheSameSizeAndCutsAtTheLimit(t *testing.T) {
 	listing := &sizedListing{}
-	items, truncated, err := CollectUpTo(t.Context(), 150, listing.fetch)
+	items, truncated, err := CollectUpTo(t.Context(), 150, func(int) bool { return true }, listing.fetch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +48,26 @@ func TestCollectUpToAsksEveryPageAtTheSameSizeAndCutsAtTheLimit(t *testing.T) {
 	for _, size := range listing.sizes {
 		if size != contracts.MaxPageLimit {
 			t.Fatalf("page sizes = %v, want every page at %d", listing.sizes, contracts.MaxPageLimit)
+		}
+	}
+}
+
+func TestCollectUpToCountsOnlyTheItemsItKeepsAcrossPages(t *testing.T) {
+	listing := &sizedListing{}
+	isIssue := func(item int) bool { return item%2 == 0 }
+	items, truncated, err := CollectUpTo(t.Context(), 150, isIssue, listing.fetch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 150 || !truncated {
+		t.Fatalf("got %d items, truncated %v, want 150 kept items and truncated", len(items), truncated)
+	}
+	if len(listing.sizes) < 2 {
+		t.Fatalf("fetched %d pages, want several: the rejected items must not end the walk early", len(listing.sizes))
+	}
+	for _, item := range items {
+		if !isIssue(item) {
+			t.Fatalf("item %d was kept, want only the items the predicate accepts", item)
 		}
 	}
 }

@@ -62,7 +62,7 @@ func TestTerminalAcceptErrorRetiresTheSessionAndRebinds(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages(), clitext.NewMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil),
 		withWarnings(warnings),
 	)
 	h.runtime = layout
@@ -113,7 +113,7 @@ func TestNormalStopReportsNothing(t *testing.T) {
 				nil,
 				nil,
 				newApprovalTable(io.Discard),
-				newSessionTable(newHostMessages(), clitext.NewMessages()),
+				newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil),
 				withWarnings(warnings),
 			)
 			h.runtime = layout

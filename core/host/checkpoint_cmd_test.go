@@ -88,7 +88,7 @@ func TestCheckpointsListsMessagesWithTheFilesTheyTouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\nv2b\n")
-	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages()))
+	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 
 	out, err := cli.Plain(reg.Dispatch(ctx, []string{nsSession, verbCheckpoints, "--name", "alpha", "--json"}))
 	if err != nil {
@@ -115,7 +115,7 @@ func TestRewindRestoresCodeAndRefusesConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\n")
-	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages()))
+	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 
 	_, err := reg.Dispatch(ctx, []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "both"})
 	if err == nil || !strings.Contains(err.Error(), "not available") {
@@ -148,7 +148,7 @@ func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "alpha", nil, nil, nil, io.Discard)
 	if !driver.claimTurn() {
 		t.Fatal("the fixture must put a turn in flight")
@@ -260,7 +260,7 @@ func TestRewindConversationResumesAtTheCheckpointPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarter := &fakeRestarter{}
-	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages()))
+	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 
 	if _, err := reg.Dispatch(withRestarter(ctx, restarter), []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "conversation"}); err != nil {
 		t.Fatal(err)

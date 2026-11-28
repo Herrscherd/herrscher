@@ -33,7 +33,7 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 	if err := reg.Add(list); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 	h.runtime = layout
 	h.teardownGrace = time.Hour
 	settling := make(chan struct{})

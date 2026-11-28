@@ -15,7 +15,7 @@ func TestUnderLockRetirementsShareOneGraceInReconcile(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"start-a", "start-b", "start-c"}
-		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 		h.runtime = isolatedRuntimeDir(t)
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})

@@ -10,7 +10,7 @@ import (
 )
 
 func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 
@@ -43,7 +43,7 @@ func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {
 }
 
 func TestPumpExitsOnTeardownWhileAClaimIsHeld(t *testing.T) {
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 	release, ok := sessions.claimIdle("s1")
@@ -84,7 +84,7 @@ func TestInTurnFollowsTheTurnToken(t *testing.T) {
 }
 
 func TestAClaimedSessionIsRefusedButNotWorking(t *testing.T) {
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 	release, ok := sessions.claimIdle("s1")

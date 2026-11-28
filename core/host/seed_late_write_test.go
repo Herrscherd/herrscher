@@ -71,7 +71,7 @@ func (l *stampedLog) snapshot() []string {
 }
 
 func seedSharingSession(backend contracts.Backend, budget time.Duration, log *stampedLog) (string, error) {
-	table := newSessionTable(newHostMessages(), clitext.NewMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	policy := compactPolicy(50, contracts.CompactStageBackend)
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy

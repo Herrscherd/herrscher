@@ -49,22 +49,40 @@ type reviewLoop struct {
 
 type keyedLocks struct {
 	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	locks map[string]*countedLock
+}
+
+type countedLock struct {
+	mutex sync.Mutex
+	users int
 }
 
 func (k *keyedLocks) lock(key string) func() {
 	k.mu.Lock()
 	if k.locks == nil {
-		k.locks = make(map[string]*sync.Mutex)
+		k.locks = make(map[string]*countedLock)
 	}
-	mutex, ok := k.locks[key]
+	entry, ok := k.locks[key]
 	if !ok {
-		mutex = &sync.Mutex{}
-		k.locks[key] = mutex
+		entry = &countedLock{}
+		k.locks[key] = entry
 	}
+	entry.users++
 	k.mu.Unlock()
-	mutex.Lock()
-	return mutex.Unlock
+	entry.mutex.Lock()
+	return func() {
+		entry.mutex.Unlock()
+		k.release(key, entry)
+	}
+}
+
+func (k *keyedLocks) release(key string, entry *countedLock) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	entry.users--
+	if entry.users == 0 {
+		delete(k.locks, key)
+	}
 }
 
 func observationKey(name string, number int) string {

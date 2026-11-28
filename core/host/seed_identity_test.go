@@ -119,7 +119,7 @@ func (c *reentrantSeedCoordinator) Delegate(_ context.Context, req contracts.Del
 func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event, context.Context) {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.json")
 	st := state.NewState(path)
@@ -220,7 +220,7 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 
 func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 

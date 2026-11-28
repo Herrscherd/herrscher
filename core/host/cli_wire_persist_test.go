@@ -42,7 +42,7 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
-	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	warnings := &lockedBuffer{}
 	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), sessions, withWarnings(warnings))
 	h.runtime = layout

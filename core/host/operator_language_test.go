@@ -147,7 +147,7 @@ func TestHubWarningFollowsALiveLanguageChange(t *testing.T) {
 	}
 	live := newOperatorLanguage(i18n.English)
 	var printed bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&printed))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil), withWarnings(&printed))
 	h.language = live.Get
 	h.roleNames()
 	english := printed.String()
@@ -367,7 +367,7 @@ func TestClosedHubReconcileOpensNoSessionQuietly(t *testing.T) {
 		}
 	}
 	var printed bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&printed))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil), withWarnings(&printed))
 	h.runtime = isolatedRuntimeDir(t)
 	h.instanceID = "t18"
 	h.stopLive()
@@ -391,7 +391,7 @@ func TestSessionStartWarningFollowsTheSessionLanguage(t *testing.T) {
 	}
 	live := newOperatorLanguage(i18n.French)
 	var printed bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&printed))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil), withWarnings(&printed))
 	h.language = live.Get
 	h.reconcile(context.Background())
 	params := map[string]any{nameParam: "revue", detailParam: errNoRuntimeLayout}

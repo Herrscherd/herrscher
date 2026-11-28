@@ -18,7 +18,7 @@ func daemonHandoffHub(t *testing.T, withDesk bool) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	partDir := t.TempDir()
 	statePath := filepath.Join(partDir, "state.json")
 	st := state.NewState(statePath)

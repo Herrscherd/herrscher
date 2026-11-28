@@ -32,7 +32,7 @@ func TestStuckBridgesDoNotAddAGracePerSessionToAnUnrelatedCommand(t *testing.T) 
 	synctest.Test(t, func(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"stuck-a", "stuck-b", "stuck-c"}
-		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})
 		defer close(release)
@@ -71,7 +71,7 @@ func TestStuckStopsOfArchivedSessionsShareOneGraceInReconcile(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"dead-a", "dead-b", "dead-c"}
-		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})
 		defer close(release)

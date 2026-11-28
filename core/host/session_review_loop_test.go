@@ -656,11 +656,10 @@ func TestRefusedByForgeClassifiesEachClearRefusal(t *testing.T) {
 
 func TestReplyAndObserverShareOneReviewLoop(t *testing.T) {
 	st := reviewTestState(t)
-	var table sessionTable
-	table.cliMessages = clitext.NewMessages()
 	lang := fixedLanguage(i18n.English)
-	loop := table.reviewLoopFor(lang, st)
-	watcher := newSessionPRWatcher(clitext.NewMessages(), lang, st, prForgeOpener(&fakePRForge{}), nil, nil, table.reviewLoopFor(lang, st))
+	table := newSessionTable(newHostMessages(), clitext.NewMessages(), lang, st)
+	loop := table.reviewLoopFor()
+	watcher := newSessionPRWatcher(clitext.NewMessages(), lang, st, prForgeOpener(&fakePRForge{}), nil, nil, table.reviewLoopFor())
 	if watcher.reviews != loop {
 		t.Fatal("the watcher and the reply command do not share one review loop")
 	}
@@ -705,5 +704,45 @@ func TestReplyAndObserverShareOneReviewLoop(t *testing.T) {
 
 	if count() != 1 {
 		t.Fatalf("messages = %d, want the thread handed over once", count())
+	}
+}
+
+func TestKeyedLocksDropIdleKeys(t *testing.T) {
+	var locks keyedLocks
+	for i := range 100 {
+		locks.lock(observationKey("main", i))()
+	}
+	if len(locks.locks) != 0 {
+		t.Fatalf("idle keys kept in the table: %d", len(locks.locks))
+	}
+	unlock := locks.lock(observationKey("main", 1))
+	if len(locks.locks) != 1 {
+		t.Fatalf("held key missing from the table: %d", len(locks.locks))
+	}
+	unlock()
+	if len(locks.locks) != 0 {
+		t.Fatalf("released key kept in the table: %d", len(locks.locks))
+	}
+}
+
+func TestKeyedLocksHeldPairDoesNotBlockOtherPairs(t *testing.T) {
+	var locks keyedLocks
+	unlockFirst := locks.lock(observationKey("main", 1))
+	defer unlockFirst()
+
+	acquired := make(chan func(), 2)
+	go func() {
+		acquired <- locks.lock(observationKey("main", 2))
+	}()
+	go func() {
+		acquired <- locks.lock(observationKey("other", 1))
+	}()
+	for range 2 {
+		select {
+		case unlock := <-acquired:
+			unlock()
+		case <-time.After(2 * time.Second):
+			t.Fatal("a held pair blocks another pair")
+		}
 	}
 }

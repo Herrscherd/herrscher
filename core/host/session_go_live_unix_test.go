@@ -28,7 +28,7 @@ func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages(), clitext.NewMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil),
 	)
 	h.runtime = layout
 	err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "incarnation"})

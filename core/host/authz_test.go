@@ -196,7 +196,7 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 func operatorRegistryForTest(t *testing.T) *cli.Registry {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	dir := t.TempDir()

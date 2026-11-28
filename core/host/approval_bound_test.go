@@ -16,7 +16,7 @@ import (
 func newLongWaitDesk(t *testing.T) (*approvalDesk, *approvalTable) {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	_, st := approveReg(t, approvalTab, sessionTab)
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)

@@ -122,7 +122,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 
 	options = options.withDefaultGateways(gws)
 	approvals := newApprovalTable(options.Warnings).withRules(store).withMessages(messages, options.languageSource())
-	sessions := newSessionTable(messages, cliMessages)
+	sessions := newSessionTable(messages, cliMessages, options.languageSource(), store)
 	options.health = &healthSource{}
 	options.usage = newUsageSource(messages, partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)
@@ -212,7 +212,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	}()
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.notices, sessions.reviewLoopFor(options.languageSource(), store))
+	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.notices, sessions.reviewLoopFor())
 	prWatchStopped := make(chan struct{})
 	go func() {
 		defer close(prWatchStopped)

@@ -13,7 +13,7 @@ import (
 
 func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -43,7 +43,7 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 
 func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")

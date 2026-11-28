@@ -64,7 +64,7 @@ func newEscalationRig(t *testing.T) escalationRig {
 	}
 	reg := cli.NewRegistry(clitext.NewMessages())
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}

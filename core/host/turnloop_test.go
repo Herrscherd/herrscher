@@ -334,7 +334,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 
 func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	a := &fanRecorder{}
 	a.feed("ping")
 	sock := tmpSock(t)
@@ -359,7 +359,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 }
 
 func TestSeedEnqueuesInput(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	sessionTab.register("beta", d)
 	defer sessionTab.unregister("beta", d)
@@ -516,7 +516,7 @@ func requireSettled(t *testing.T, cond func() bool, what string) {
 }
 
 func TestRunSessionReconnectsAndResumes(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -541,7 +541,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 }
 
 func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -1152,7 +1152,7 @@ func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 }
 
 func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
@@ -1171,14 +1171,14 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 }
 
 func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	if sessionTab.Submit(t.Context(), "nobody-home", contracts.Inbound{Text: "hi"}) {
 		t.Fatal("Submit reported success for an unregistered session")
 	}
 }
 
 func TestSubmitJournalsTheAuthor(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	dir := t.TempDir()
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s2", nil, nil, nil, io.Discard)
 	d.participants = filepath.Join(dir, "participants")

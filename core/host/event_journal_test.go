@@ -345,7 +345,7 @@ func TestDispatchAnnouncesARenameAndAClose(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h := newHub(st, sup, nil, partDir, reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
+	h := newHub(st, sup, nil, partDir, reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil))
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 	events := newJournaledEventSocket(h.eventJournal())

@@ -106,7 +106,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages(), nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()

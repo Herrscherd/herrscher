@@ -7,6 +7,8 @@ const (
 	paramAgent      = "agent"
 	nsSession       = "session"
 	nsApprove       = "approve"
+	verbAllow       = "allow"
+	verbDeny        = "deny"
 	nsSchedule      = "schedule"
 	verbApprove     = "approve"
 	verbSeed        = "seed"

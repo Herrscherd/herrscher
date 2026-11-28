@@ -419,3 +419,24 @@ func awaitPending(t *testing.T, tab *approvalTable, want int) []PendingApproval 
 	}, "the approval registered")
 	return pending
 }
+
+func TestADeviceVerbFromAShellWaitsForAPersonEvenWhenARuleAllowsIt(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		approvalTab := newApprovalTable(io.Discard)
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		pol := approval.Policy{{Decision: approval.Allow, Tool: "Bash", Pattern: "herrscher device*"}}
+		req := approval.Request{Tool: "Bash", Subject: "herrscher device approve ABCDE-FGHJK"}
+		done := make(chan approval.Decision, 1)
+		go func() {
+			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeBypass, 5*time.Second, 0)
+			done <- d
+		}()
+		id := awaitPending(t, approvalTab, 1)[0].ID
+		if !answerApproval(approvalTab, id, approval.Deny) {
+			t.Fatal("answerApproval reported no such request")
+		}
+		if d := <-done; d != approval.Deny {
+			t.Fatalf("got %q: a rule and bypass must not decide a device verb for the person", d)
+		}
+	})
+}

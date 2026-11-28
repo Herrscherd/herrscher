@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
+	"github.com/Herrscherd/herrscher/core/internal/devices"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
@@ -191,7 +192,8 @@ type State struct {
 	// configured nothing gets. Role definitions are not here: they are in
 	// core/internal/authz, so a fifth role is a code change and a review rather
 	// than a file nobody reads.
-	Roles map[string]RoleAssignment `json:"roles,omitempty"`
+	Roles   map[string]RoleAssignment `json:"roles,omitempty"`
+	Devices *devices.Registry         `json:"devices,omitempty"`
 	// SelfRestarts is when each session last restarted the daemon, kept here so the next daemon still knows.
 	SelfRestarts map[string]time.Time `json:"selfRestarts,omitempty"`
 	// RestartResumes are the sessions whose turn asked for the restart, told to carry on once the daemon is back.

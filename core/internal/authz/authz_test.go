@@ -406,3 +406,101 @@ func TestAnObserverReadsWhatASessionReadsAndWritesNothing(t *testing.T) {
 		t.Error("approve ask, asked by the hook at each tool call, counts as a write")
 	}
 }
+
+func TestApproverAnswersApprovalsAndReadsTheRest(t *testing.T) {
+	p := Principal{ID: "chat:1"}
+	for _, path := range [][]string{{"approve", "list"}, {"approve", "allow"}, {"approve", "deny"}, {"session", "list"}, {"models", "list"}} {
+		if ok, why := Decide(req(p, path...), RoleApprover); !ok {
+			t.Fatalf("approver refused %v: %s", path, why)
+		}
+	}
+	for _, path := range [][]string{{"approve", "rule"}, {"approve", "mode"}, {"session", "send"}, {"role", "grant"}, {"host", "rm"}} {
+		if ok, _ := Decide(req(p, path...), RoleApprover); ok {
+			t.Fatalf("approver must not run %v", path)
+		}
+	}
+}
+
+func TestApproverRefusalNamesTheApproverRole(t *testing.T) {
+	ok, why := Decide(req(Principal{ID: "chat:1"}, "approve", "allow"), RoleObserver)
+	if ok {
+		t.Fatal("observer must not answer an approval")
+	}
+	if !strings.Contains(why, "`approver`") {
+		t.Fatalf("refusal must name the role that answers approvals: %s", why)
+	}
+}
+
+func TestDeviceVerbsAreRefusedBelowOperator(t *testing.T) {
+	for _, role := range []Role{RoleObserver, RoleApprover, RoleAgent} {
+		for _, path := range [][]string{{"device", "pair"}, {"device", "list"}, {"device", "approve"}, {"device", "deny"}, {"device", "revoke"}} {
+			if ok, _ := Decide(req(Principal{ID: "chat:1"}, path...), role); ok {
+				t.Fatalf("%s must not run %v", role, path)
+			}
+		}
+	}
+}
+
+func TestOperatorRunsDeviceVerbsButApprovalStaysWithOwner(t *testing.T) {
+	p := Principal{ID: "chat:1"}
+	for _, path := range [][]string{{"device", "pair"}, {"device", "list"}, {"device", "deny"}, {"device", "revoke"}} {
+		if ok, why := Decide(req(p, path...), RoleOperator); !ok {
+			t.Fatalf("operator refused %v: %s", path, why)
+		}
+	}
+	if ok, _ := Decide(req(p, "device", "approve"), RoleOperator); ok {
+		t.Fatal("operator must not approve a device: the signature stays with the owner")
+	}
+	if ok, why := Decide(req(Principal{ID: LocalPrincipal}, "device", "approve"), RoleOwner); !ok {
+		t.Fatalf("owner refused device approve: %s", why)
+	}
+}
+
+func TestOperatorRefusalForApproveNamesOwner(t *testing.T) {
+	_, why := Decide(req(Principal{ID: "chat:1"}, "device", "approve"), RoleOperator)
+	if !strings.Contains(why, "`owner`") {
+		t.Fatalf("refusal must name the owner role: %s", why)
+	}
+}
+
+func TestAgentNeverReachesDevices(t *testing.T) {
+	p := SessionPrincipal("revue")
+	for _, path := range [][]string{{"device", "list"}, {"device", "pair"}, {"device", "approve"}} {
+		if ok, _ := Decide(req(p, path...), RoleAgent); ok {
+			t.Fatalf("agent must not run %v", path)
+		}
+	}
+}
+
+func TestADeviceWithoutAnAssignmentIsAnObserverEvenInAnEmptyTable(t *testing.T) {
+	if got := RoleOf(DevicePrincipal("0123"), nil); got != RoleObserver {
+		t.Fatalf("RoleOf(device, empty table) = %q, want observer: a verified device must never fall back to no role", got)
+	}
+}
+
+func TestADeviceTakesItsGrantedRole(t *testing.T) {
+	assignments := map[string]string{DevicePrefix + "0123": "approver"}
+	if got := RoleOf(DevicePrincipal("0123"), assignments); got != RoleApprover {
+		t.Fatalf("RoleOf(device) = %q, want approver", got)
+	}
+}
+
+func TestApproverIsGrantable(t *testing.T) {
+	if !Grantable("approver") {
+		t.Fatal("approver must be grantable")
+	}
+	if !strings.Contains(strings.Join(GrantableRoles(), " "), "approver") {
+		t.Fatalf("GrantableRoles = %v, want approver listed", GrantableRoles())
+	}
+}
+
+func TestReservedNamesAreNeverClaimedByAGateway(t *testing.T) {
+	for _, id := range []string{LocalPrincipal, SessionPrefix + "revue", DevicePrefix + "0123"} {
+		if !Reserved(id) {
+			t.Fatalf("%q must be reserved", id)
+		}
+	}
+	if Reserved("chat:1") {
+		t.Fatal("a gateway account must not be reserved")
+	}
+}

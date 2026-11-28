@@ -90,6 +90,10 @@ jobs:
           cache: true
       - name: Lock tests on Windows (LockFileEx)
         run: go test -v -count=1 -run '^(TestLock|TestReleasedLock|TestStateLock|TestCacheLock)' ./core/host/
+      - name: File lock package on Windows (LockFileEx, reparse points)
+        run: go test -v -count=1 ./core/internal/filelock/
+      - name: Two authority gates in one process serialise through the lock file
+        run: go test -v -count=1 -run '^TestTwoGatesInOneProcessSerialiseThroughTheLockFile$' ./core/internal/devices/
       - name: Accept retry tests on Windows (transient Win32 codes)
         run: go test -v -count=1 -run '^TestAcceptRetriesEachTransientErrno$' ./core/internal/control/
       - name: Binary swap while older generations still run

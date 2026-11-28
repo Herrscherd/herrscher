@@ -31,7 +31,7 @@ func principalOf(ctx context.Context) authz.Principal {
 	if raw == "" {
 		return authz.Principal{}
 	}
-	if raw == authz.LocalPrincipal || strings.HasPrefix(raw, authz.SessionPrefix) {
+	if authz.Reserved(raw) {
 		return authz.Principal{ID: "unverified:" + raw}
 	}
 	return authz.Principal{ID: raw}
@@ -123,6 +123,7 @@ func notASessionArgs() map[string]bool {
 		"approve rule session":  true,
 		"schedule add name":     true,
 		"schedule rm name":      true,
+		"device pair name":      true,
 		"schedule run name":     true,
 		"schedule pause name":   true,
 		"schedule resume name":  true,
@@ -146,7 +147,7 @@ func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
 	principal := principalOf(ctx)
 	role := authz.RoleOf(principal, h.roleNames())
 	if role == authz.RoleNone {
-		return admission{}, nil
+		return admission{}, h.refuseWithoutRoles(principal, args)
 	}
 	path, input, ok := h.reg.Resolve(args)
 	if !ok {
@@ -168,6 +169,9 @@ func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
 	}
 	allowed, why := authz.Decide(req, role)
 	if allowed {
+		if err := h.refuseUnsafeAnswer(principal, role, path, input); err != nil {
+			return admission{}, err
+		}
 		return h.admitted(principal.Session, path, args, role, req.Contributed)
 	}
 	if authz.Escalable(req, role) && h.desk != nil {
@@ -284,4 +288,55 @@ func inSubtreeOf(store *state.State, caller, target string) bool {
 		cur = parent
 	}
 	return false
+}
+
+func (h *hub) refuseWithoutRoles(principal authz.Principal, args []string) error {
+	if principal.ID == authz.LocalPrincipal {
+		return nil
+	}
+	path, input, ok := h.reg.Resolve(args)
+	if !ok || len(path) == 0 {
+		return nil
+	}
+	switch path[0] {
+	case "device":
+		return h.localized(errDeviceNeedsRoles)
+	case "role":
+		return h.localized(errRoleNeedsLocal)
+	}
+	return h.refuseUnsafeAnswer(principal, authz.RoleNone, path, input)
+}
+
+func (h *hub) refuseUnsafeAnswer(principal authz.Principal, role authz.Role, path []string, input contracts.Input) error {
+	if principal.ID == authz.LocalPrincipal || len(path) != 2 || path[0] != "approve" {
+		return nil
+	}
+	var approvalID string
+	var scope approvalScope
+	switch path[1] {
+	case verbAllow:
+		requested, parsed, err := allowOperands(input)
+		if err != nil {
+			return err
+		}
+		approvalID, scope = requested, parsed
+	case verbDeny:
+		approvalID, scope = firstOf(input.Get("id"), input.Rest), scopeDeny
+	default:
+		return nil
+	}
+	if (scope == scopeSession || scope == scopeAlways) && role != authz.RoleOwner && role != authz.RoleOperator {
+		return h.localized(errScopedAnswerRole)
+	}
+	if h.approvals == nil {
+		return nil
+	}
+	if request, found := h.approvals.requestOf(approvalID); found && approval.RequiresHuman(request) && role != authz.RoleOwner {
+		return h.localized(errHumanAnswerRole)
+	}
+	return nil
+}
+
+func (h *hub) localized(err error) error {
+	return localizeHostError(h.messages, h.cliMessages, h.textLanguage()(), err)
 }

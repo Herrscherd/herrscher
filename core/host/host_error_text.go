@@ -9,6 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/devices"
 	"github.com/Herrscherd/herrscher/core/internal/filelock"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -106,6 +107,12 @@ func hostErrorKeys() []hostErrorKey {
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
 		{errUnsupportedLang, "cli.host.fault.unsupported_lang"},
 		{usage.ErrEmptyValue, "cli.host.fault.usage_empty_value"},
+		{errDeviceIDMissing, clitext.HostDeviceIDMissing},
+		{errDeviceCodeMissing, clitext.HostDeviceCodeMissing},
+		{errDeviceNeedsRoles, clitext.DeviceFaultNeedsRoles},
+		{errScopedAnswerRole, clitext.FaultScopedAnswerRole},
+		{errHumanAnswerRole, clitext.FaultHumanAnswerRole},
+		{errRoleNeedsLocal, clitext.FaultRoleNeedsLocal},
 		{errEnvKey, "cli.host.fault.env_key"},
 		{errEnvValue, "cli.host.fault.env_value"},
 		{errEnvNoFile, "cli.host.fault.env_no_file"},
@@ -126,7 +133,7 @@ func localizeHostError(messages *hostMessages, cliMessages *clitext.Messages, la
 	text := errorTextIn(messages, resolved, err)
 	isLocal := isLocalized(err)
 	translated := false
-	for _, known := range hostErrorKeys() {
+	for _, known := range append(hostErrorKeys(), deviceErrorKeys()...) {
 		if !errors.Is(err, known.sentinel) {
 			continue
 		}
@@ -158,4 +165,36 @@ func commandErrorLanguage(store *state.State, operator i18n.Language, input cont
 		return operator
 	}
 	return namedSessionLanguage(store, name, operator)
+}
+
+func deviceErrorKeys() []hostErrorKey {
+	return []hostErrorKey{
+		{devices.ErrMalformedDeviceID, clitext.DeviceFaultMalformedID},
+		{devices.ErrMalformedCode, clitext.DeviceFaultMalformedCode},
+		{devices.ErrUngrantableRole, clitext.DeviceFaultRole},
+		{devices.ErrPairingOpen, clitext.DeviceFaultWindowOpen},
+		{devices.ErrNoPairingWindow, clitext.DeviceFaultNoWindow},
+		{devices.ErrPairingExpired, clitext.DeviceFaultExpired},
+		{devices.ErrPairingAlreadyRedeemed, clitext.DeviceFaultRedeemed},
+		{devices.ErrNothingPending, clitext.DeviceFaultNothingPending},
+		{devices.ErrWrongCode, clitext.DeviceFaultWrongCode},
+		{devices.ErrTooManyAttempts, clitext.DeviceFaultTooMany},
+		{devices.ErrBadRequest, clitext.DeviceFaultBadRequest},
+		{devices.ErrUnsupportedKey, clitext.DeviceFaultUnsupportedKey},
+		{devices.ErrUnknownDevice, clitext.DeviceFaultUnknown},
+		{devices.ErrAuthorityFiles, clitext.DeviceFaultAuthority},
+		{devices.ErrAuthorityExpired, clitext.DeviceFaultAuthority},
+		{devices.ErrRandomSource, clitext.DeviceFaultRandom},
+		{devices.ErrAuthorityMissing, clitext.DeviceFaultAuthorityMissing},
+		{devices.ErrRequestTooLarge, clitext.DeviceFaultRequestTooLarge},
+		{devices.ErrSigning, clitext.DeviceFaultSigning},
+		{devices.ErrFingerprintMismatch, clitext.DeviceFaultFingerprint},
+		{devices.ErrMalformedFingerprint, clitext.DeviceFaultMalformedFingerprint},
+		{devices.ErrUnsupportedSignature, clitext.DeviceFaultSignature},
+		{devices.ErrDeviceRevoked, clitext.DeviceFaultRevoked},
+		{devices.ErrDeviceExpired, clitext.DeviceFaultInactive},
+		{devices.ErrCertificateExpired, clitext.DeviceFaultCertificateExpired},
+		{devices.ErrCertificateMismatch, clitext.DeviceFaultCertificateMismatch},
+		{devices.ErrUntrustedCertificate, clitext.DeviceFaultUntrusted},
+	}
 }

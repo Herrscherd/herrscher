@@ -110,6 +110,12 @@ func (e *unknownModeError) Error() string {
 	return fmt.Sprintf("unknown mode %q: ask, accept-edits, plan, auto, bypass or strict", e.Mode)
 }
 
+var (
+	errScopedAnswerRole = errors.New("a standing answer, with --always or --session, needs the owner or the operator role")
+	errHumanAnswerRole  = errors.New("a request about herrscher's devices or roles is answered by the owner only")
+	errRoleNeedsLocal   = errors.New("the role verbs need a role table: until one exists only the local operator runs them, so grant the first role from the local shell with `role grant`")
+)
+
 type accessDeniedError struct {
 	Reason string
 }

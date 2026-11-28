@@ -6450,5 +6450,285 @@
     "id": "cli.host.approve.rule_session_added",
     "description": "Reply of approve rule for one session",
     "other": "règle {{.Rule}} ajoutée pour la seule session {{.Name}}"
+  },
+  {
+    "id": "cli.host.device.paired",
+    "description": "Reply of a host command, paired",
+    "other": "code d'appairage {{.Code}}, valable dix minutes. Saisissez-le sur l'appareil, puis lancez `device approve` avec le même code une fois que `device list` affiche l'empreinte que l'appareil affiche. L'appareil recevra le rôle `{{.Role}}`."
+  },
+  {
+    "id": "cli.host.device.approved",
+    "description": "Reply of a host command, approved",
+    "other": "{{.Name}} ({{.ID}}) est approuvé comme `{{.Role}}`. Empreinte de la clé {{.Fingerprint}}."
+  },
+  {
+    "id": "cli.host.device.denied",
+    "description": "Reply of a host command, denied",
+    "other": "fenêtre d'appairage fermée : rien n'a été accordé."
+  },
+  {
+    "id": "cli.host.device.revoked",
+    "description": "Reply of a host command, revoked",
+    "other": "{{.ID}} est révoqué : son certificat n'authentifie plus rien."
+  },
+  {
+    "id": "cli.host.device.none",
+    "description": "Reply of a host command, none",
+    "other": "aucun appareil n'est appairé, et aucune fenêtre d'appairage n'est ouverte."
+  },
+  {
+    "id": "cli.host.device.row",
+    "description": "Reply of a host command, row",
+    "other": "{{.ID}}  {{.Name}}  {{.Role}}  {{.Status}}  vu pour la dernière fois {{.When}}"
+  },
+  {
+    "id": "cli.host.device.pending",
+    "description": "Reply of a host command, pending",
+    "other": "en attente d'approbation : {{.Name}} comme `{{.Role}}`, empreinte de la clé {{.Fingerprint}}"
+  },
+  {
+    "id": "cli.host.device.status_active",
+    "description": "Reply of a host command, status active",
+    "other": "actif"
+  },
+  {
+    "id": "cli.host.device.status_expired",
+    "description": "Reply of a host command, status expired",
+    "other": "expiré"
+  },
+  {
+    "id": "cli.host.device.status_revoked",
+    "description": "Reply of a host command, status revoked",
+    "other": "révoqué"
+  },
+  {
+    "id": "cli.host.fault.device_id_missing",
+    "description": "Error of a host command, device id missing",
+    "other": "nommez un appareil (voir `device list`)"
+  },
+  {
+    "id": "cli.host.fault.device_code_missing",
+    "description": "Error of a host command, device code missing",
+    "other": "nommez le code d'appairage qu'affiche `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_id",
+    "description": "Error of a host command, device malformed id",
+    "other": "un identifiant d'appareil fait 32 caractères hexadécimaux en minuscules, tels qu'affichés par `device list`"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_code",
+    "description": "Error of a host command, device malformed code",
+    "other": "un code d'appairage fait dix lettres et chiffres, tel qu'affiché par `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_role",
+    "description": "Error of a host command, device role",
+    "other": "un appareil ne peut recevoir qu'un rôle que herrscher accorde (voir `role list`)"
+  },
+  {
+    "id": "cli.host.fault.device_window_open",
+    "description": "Error of a host command, device window open",
+    "other": "une fenêtre d'appairage est déjà ouverte : approuvez-la, refusez-la, ou attendez son expiration"
+  },
+  {
+    "id": "cli.host.fault.device_no_window",
+    "description": "Error of a host command, device no window",
+    "other": "aucune fenêtre d'appairage n'est ouverte : ouvrez-en une avec `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_expired",
+    "description": "Error of a host command, device expired",
+    "other": "le code d'appairage a expiré : ouvrez une nouvelle fenêtre avec `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_redeemed",
+    "description": "Error of a host command, device redeemed",
+    "other": "ce code a déjà amené une demande : approuvez-la ou refusez-la"
+  },
+  {
+    "id": "cli.host.fault.device_nothing_pending",
+    "description": "Error of a host command, device nothing pending",
+    "other": "aucun appareil n'a encore utilisé ce code"
+  },
+  {
+    "id": "cli.host.fault.device_wrong_code",
+    "description": "Error of a host command, device wrong code",
+    "other": "le code d'appairage est faux"
+  },
+  {
+    "id": "cli.host.fault.device_too_many",
+    "description": "Error of a host command, device too many",
+    "other": "trop de codes faux : la fenêtre est fermée, ouvrez-en une nouvelle avec `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_bad_request",
+    "description": "Error of a host command, device bad request",
+    "other": "la demande de certificat de l'appareil ne se vérifie pas"
+  },
+  {
+    "id": "cli.host.fault.device_unsupported_key",
+    "description": "Error of a host command, device unsupported key",
+    "other": "la clé de l'appareil doit être ECDSA sur P-256"
+  },
+  {
+    "id": "cli.host.fault.device_unknown",
+    "description": "Error of a host command, device unknown",
+    "other": "aucun appareil n'a cet identifiant (voir `device list`)"
+  },
+  {
+    "id": "cli.host.fault.device_authority",
+    "description": "Error of a host command, device authority",
+    "other": "l'autorité des appareils ne peut être lue ni créée : consultez le journal du daemon"
+  },
+  {
+    "id": "cli.help.cmd.device.pair",
+    "description": "Help of the command device pair",
+    "other": "ouvre une fenêtre d'appairage et affiche son code à usage unique ; le rôle vaut approver par défaut"
+  },
+  {
+    "id": "cli.help.cmd.device.approve",
+    "description": "Help of the command device approve",
+    "other": "affiche la demande en attente, ou avec --fingerprint signe son certificat et accorde son rôle"
+  },
+  {
+    "id": "cli.help.cmd.device.deny",
+    "description": "Help of the command device deny",
+    "other": "ferme la fenêtre d'appairage sans rien accorder"
+  },
+  {
+    "id": "cli.help.cmd.device.list",
+    "description": "Help of the command device list",
+    "other": "liste les appareils appairés, leur rôle et s'ils peuvent se connecter, ainsi que la demande en attente d'approbation"
+  },
+  {
+    "id": "cli.help.cmd.device.revoke",
+    "description": "Help of the command device revoke",
+    "other": "révoque un appareil appairé : son certificat cesse d'authentifier"
+  },
+  {
+    "id": "cli.help.param.device.pair.name",
+    "description": "Help or reply text of a device command, pair name",
+    "other": "un nom lisible pour l'appareil, affiché par `device list`"
+  },
+  {
+    "id": "cli.help.param.device.pair.role",
+    "description": "Help or reply text of a device command, pair role",
+    "other": "le rôle accordé à l'appareil une fois approuvé, parmi les rôles accordables ; approver par défaut"
+  },
+  {
+    "id": "cli.help.param.device.approve.code",
+    "description": "Help or reply text of a device command, approve code",
+    "other": "le code avec lequel l'appareil a été appairé ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.device.deny.code",
+    "description": "Help or reply text of a device command, deny code",
+    "other": "le code de la fenêtre à fermer ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.device.revoke.id",
+    "description": "Help or reply text of a device command, revoke id",
+    "other": "l'appareil à révoquer, tel qu'affiché par `device list` ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.host.device.preview",
+    "description": "Reply or error of a device command: preview",
+    "other": "en attente d'approbation : {{.Name}} comme `{{.Role}}`. Vérifiez que l'appareil affiche l'empreinte {{.Fingerprint}}, puis approuvez avec `device approve <code> --fingerprint {{.Fingerprint}}`. Rien n'est encore signé."
+  },
+  {
+    "id": "cli.host.device.first_grant",
+    "description": "Reply or error of a device command: first grant",
+    "other": "c'est le premier rôle : désormais chaque compte passerelle sans rôle est `observer`, et c'est aussi le cas du compte qui a approuvé cet appareil s'il n'a pas de rôle. Nommez les autres avec `role grant` avant qu'ils ne le découvrent."
+  },
+  {
+    "id": "cli.host.fault.device_random_source",
+    "description": "Reply or error of a device command: device random source",
+    "other": "la source d'aléa du système a échoué : réessayez"
+  },
+  {
+    "id": "cli.host.fault.device_signing",
+    "description": "Reply or error of a device command: device signing",
+    "other": "le certificat de l'appareil n'a pas pu être signé : consultez le journal du daemon"
+  },
+  {
+    "id": "cli.host.fault.device_fingerprint",
+    "description": "Reply or error of a device command: device fingerprint",
+    "other": "l'empreinte ne correspond pas à celle que l'appareil affiche : rien n'a été signé"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_fingerprint",
+    "description": "Reply or error of a device command: device malformed fingerprint",
+    "other": "une empreinte fait seize lettres et chiffres, telle qu'affichée par l'appareil, avec ou sans le tiret"
+  },
+  {
+    "id": "cli.host.fault.device_signature",
+    "description": "Reply or error of a device command: device signature",
+    "other": "la demande de certificat doit être signée en ECDSA avec SHA-256 ou SHA-384"
+  },
+  {
+    "id": "cli.host.fault.device_revoked",
+    "description": "Reply or error of a device command: device revoked",
+    "other": "l'appareil est révoqué"
+  },
+  {
+    "id": "cli.host.fault.device_inactive",
+    "description": "Reply or error of a device command: device inactive",
+    "other": "l'appareil ne s'est pas connecté depuis trente jours"
+  },
+  {
+    "id": "cli.host.fault.device_certificate_expired",
+    "description": "Reply or error of a device command: device certificate expired",
+    "other": "le certificat client est hors de sa période de validité"
+  },
+  {
+    "id": "cli.host.fault.device_certificate_mismatch",
+    "description": "Reply or error of a device command: device certificate mismatch",
+    "other": "le certificat client ne correspond pas à l'enregistrement de l'appareil"
+  },
+  {
+    "id": "cli.host.fault.device_untrusted",
+    "description": "Reply or error of a device command: device untrusted",
+    "other": "le certificat client n'a pas été émis par ce daemon"
+  },
+  {
+    "id": "cli.host.fault.device_needs_roles",
+    "description": "Reply or error of a device command: device needs roles",
+    "other": "les verbes device demandent une table de rôles : attribuez d'abord un rôle avec `role grant`, jusque-là seul l'opérateur local les exécute"
+  },
+  {
+    "id": "cli.help.param.device.approve.fingerprint",
+    "description": "Reply or error of a device command: fingerprint",
+    "other": "l'empreinte courte affichée par l'appareil ; sans elle, approve n'affiche que la demande et ne signe rien"
+  },
+  {
+    "id": "cli.host.device.unnamed",
+    "description": "Reply of a device command: a window without a name",
+    "other": "appareil sans nom"
+  },
+  {
+    "id": "cli.host.fault.scoped_answer_role",
+    "description": "Error of a host command: FaultScopedAnswerRole",
+    "other": "une réponse durable, avec --always ou --session, demande le rôle owner ou operator"
+  },
+  {
+    "id": "cli.host.fault.human_answer_role",
+    "description": "Error of a host command: FaultHumanAnswerRole",
+    "other": "une demande sur les appareils ou les rôles de herrscher n'est tranchée que par owner"
+  },
+  {
+    "id": "cli.host.fault.role_needs_local",
+    "description": "Error of a host command: FaultRoleNeedsLocal",
+    "other": "les verbes role demandent une table de rôles : tant qu'elle n'existe pas, seul l'opérateur local les exécute, attribuez donc le premier rôle depuis le shell local avec `role grant`"
+  },
+  {
+    "id": "cli.host.fault.device_authority_missing",
+    "description": "Error of a device command: device_authority_missing",
+    "other": "l'autorité des appareils manque alors que des appareils sont appairés : rien n'a été reconstruit"
+  },
+  {
+    "id": "cli.host.fault.device_request_too_large",
+    "description": "Error of a device command: device_request_too_large",
+    "other": "la demande de certificat est trop volumineuse"
   }
 ]

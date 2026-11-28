@@ -1,0 +1,143 @@
+package approval
+
+import "testing"
+
+func TestRequiresHumanCatchesEveryWayOfNamingHerrscherAdministration(t *testing.T) {
+	for _, subject := range []string{
+		"herrscher device approve ABCDE-FGHJK",
+		"/bin/herr*  device list",
+		"/bin/herr[s]cher device list",
+		"herrscher device list",
+		"herrscher role grant chat:1 owner",
+		"cd /srv && herrscher device pair",
+		"/usr/bin/herrscher  device revoke 0123",
+		"./herrscher role show chat:1",
+		`"herrscher" device list`,
+		`herr\scher device list`,
+		`herr""scher device list`,
+		`her''rscher device list`,
+		"herrscher session send please check the device",
+		"B=herrscher; $B device list",
+		"x=herr; y=scher; $x$y device list",
+		"x=her; y=rscher; $x$y role show",
+		`eval "herrscher device list"`,
+		`eval 'her''rscher device list'`,
+		"$(printf herrscher) device list",
+		"echo role grant bob owner | xargs herrscher",
+		`printf 'role\ngrant\n' | xargs -d '\n' herrscher`,
+		"echo role grant bob owner | xargs -I{} sh -c 'herrscher {}'",
+		"echo cm9sZSBncmFudCBib2Igb3duZXI= | base64 -d | sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | xargs sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | xargs -0 bash -c",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | xargs -d '\\n' -I {} sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | env sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | env -i FOO=1 bash",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | env -u HOME FOO=1 sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | nice -n 5 sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | nohup sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | timeout 5 sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | timeout -s KILL 5s bash -c",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | stdbuf -oL sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | command sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | exec sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | sudo -u root sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | doas sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | busybox sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | nice xargs env FOO=1 sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64_decode | xargs sh",
+		`printf '\x68\x65\x72\x72' | sh`,
+		`python3 -c 'import subprocess; subprocess.run(["herrscher", "device", "approve", "X"])'`,
+		`node -e 'require("child_process").execFileSync("herrscher", ["device", "list"])'`,
+		`perl -e 'system("herrscher", "device", "list")'`,
+		`grep "herrscher role" docs/remote.md`,
+		"if true; then herrscher device list; fi",
+		"for x in 1; do herrscher device approve X; done",
+		"! herrscher device list",
+		"echo hi\nherrscher device list",
+		"sh <<EOF\nherrscher device list\nEOF",
+		`echo "herrscher device list" | sh`,
+		"timeout 5 herrscher device list",
+		"{her,}rscher device list",
+		"herr{,}scher device list",
+		"x=scher; herr$x device list",
+		`herr$x"scher" device list`,
+		"herr$()scher device list",
+		`herr$'\x73'cher device list`,
+		"herr`\nscher device list",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | python3",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | node",
+		"python3  -c 'import base64; exec(base64.b64decode(\"cHJpbnQoMSk=\"))'",
+		`python3 -c 'import subprocess; subprocess.run(["herr"+"scher","device","list"])'`,
+		`printf '\150\145rrscher device list' | sh`,
+		"echo herring role",
+		`echo "herrscher role" | xargs echo`,
+		`bash -lc "$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)"`,
+		`sh -ec "$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)"`,
+		"python3 - <<'EOF'\nimport base64\nexec(base64.b64decode('cHJpbnQoMSk='))\nEOF",
+		`node --eval="$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)"`,
+		`php -r "$(echo cHJpbnQoMSk= | base64 -d)"`,
+		`bash -lc "$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		`sh -ec "$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		`bash -c "$(echo aGVycnNjaGVyIHJvbGUgZ3JhbnQgY2hhdDoxIG93bmVy | base64 -d)"`,
+		"python3 - <<'EOF'\nimport base64\nprint(base64.b64decode('aGVycnNjaGVyIGRldmljZSBsaXN0'))\nEOF",
+		`node --eval="$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		`php -r "$(echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d)"`,
+		"echo aGVycnNjaGVyIGRldmljZSBsaXN0 | base64 -d | xargs sh -c",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | (sh)",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d |& sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d && echo ok | sh",
+		`echo "$(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d)" | bash`,
+		"echo cm9sZQ==\n| base64 -d | sh",
+	} {
+		if !RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
+			t.Fatalf("%q must need a person", subject)
+		}
+	}
+}
+
+func TestRequiresHumanLeavesOrdinaryCommandsToTheRules(t *testing.T) {
+	for _, subject := range []string{
+		"herrscher session list",
+		"herrscher approve list",
+		"herrscher session send hello",
+		"git status",
+		"echo device",
+		"echo $HOME",
+		"cd $HOME && git status",
+		"grep role $LOG",
+		"ls $DIR && cat devices.txt",
+		`echo "$HOME/device"`,
+		"echo $(date) > device.log",
+		"echo $X herring fischer",
+		"echo ls | sh",
+		"echo cm9sZQ== | base64 -d",
+		"echo role grant bob owner | xargs echo",
+		"echo cm9sZQ== | base64 -d | xargs echo",
+		"echo cm9sZQ== | base64 -d | timeout 5 cat",
+		"echo cm9sZQ== | base64 -d | env -i FOO=1 cat",
+		"go test ./...",
+		"go test ./... | tr -d '\\r' && bash scripts/ci.sh",
+		"printf '%s\\n' a | sort && sh ./run.sh",
+		"echo a | sort; sh ./run.sh",
+		"echo a | grep -c sh",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d || sh",
+	} {
+		if RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
+			t.Fatalf("%q must stay under the rules", subject)
+		}
+	}
+	if RequiresHuman(Request{Tool: "Edit", Subject: "herrscher device list"}) {
+		t.Fatal("only shell commands are administered this way")
+	}
+}
+
+func TestRequiresHumanStopsAtTheDocumentedLimits(t *testing.T) {
+	for _, subject := range []string{
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d > /tmp/x; bash /tmp/x",
+		"echo Y2F0IC9ldGMvcGFzc3dk | base64 -d > /tmp/x\nsh /tmp/x",
+	} {
+		if RequiresHuman(Request{Tool: "Bash", Subject: subject}) {
+			t.Fatalf("%q is a documented limit and must stay under the rules", subject)
+		}
+	}
+}

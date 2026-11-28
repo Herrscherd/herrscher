@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -136,4 +137,74 @@ func TestReviewAuthorsSettingReachesTheTrust(t *testing.T) {
 	if trust.Trusts(unlisted) {
 		t.Fatal("a collaborator not named in HERRSCHER_REVIEW_AUTHORS is accepted")
 	}
+}
+
+func TestReplyToAThreadDeliversTheCommentsItLeftOutOfThePosition(t *testing.T) {
+	dir := prFixtureRepo(t)
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	openPRSession(t, st, "alpha", dir, prTestNumber)
+	recorder := &seedRecorder{accept: true}
+	loop := newReviewLoop(clitext.NewMessages(), fixedLanguage(i18n.English), st, recorder.seed, time.Minute)
+	ref, err := contracts.NewPullRequestRef(prRepoRef(t), prTestNumber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakePRForge{threadPages: [][]contracts.ReviewThread{{trustedThread("t1")}}}
+	loop.observe(t.Context(), "alpha", fake, ref)
+
+	fake.threadPages = [][]contracts.ReviewThread{{{ID: "t1", Path: "main.go", Line: 4, Comments: []contracts.ReviewComment{
+		{Author: contracts.ForgeActor{Login: "alice", Association: contracts.AssociationOwner}, Body: "rename this"},
+		{Author: contracts.ForgeActor{Login: "bob", Association: contracts.AssociationMember}, Body: "also check the error"},
+	}}}}
+	reg := cli.NewRegistry(clitext.NewMessages())
+	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, prForgeOpener(fake), nil, loop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runPR(t, reg, verbPRReply, "--name", "alpha", "--thread", "t1", "--body", "done"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(fake.replies) != 1 {
+		t.Fatalf("replies posted = %d, want 1", len(fake.replies))
+	}
+	if len(recorder.tasks) != 2 || !strings.Contains(recorder.tasks[1], "also check the error") {
+		t.Fatalf("after the reply, messages = %q, want the new member comment delivered without a change of the pull request", recorder.tasks)
+	}
+}
+
+func TestReviewAuthorsReachTheAgentOnlyWhenListed(t *testing.T) {
+	cases := []struct {
+		name   string
+		listed string
+		want   int
+	}{
+		{name: "listed collaborator", listed: "carol", want: 1},
+		{name: "unlisted collaborator", listed: "dan", want: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(envReviewAuthors, tc.listed)
+			st := reviewTestState(t)
+			recorder := &seedRecorder{accept: true}
+			loop := newReviewLoop(clitext.NewMessages(), fixedLanguage(i18n.English), st, recorder.seed, time.Minute)
+			ref, err := contracts.NewPullRequestRef(prRepoRef(t), prTestNumber)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := &fakePRForge{threadPages: [][]contracts.ReviewThread{{collaboratorThread("carol")}}}
+
+			loop.observe(t.Context(), "main", client, ref)
+
+			if len(recorder.tasks) != tc.want {
+				t.Fatalf("messages = %d, want %d", len(recorder.tasks), tc.want)
+			}
+		})
+	}
+}
+
+func collaboratorThread(login string) contracts.ReviewThread {
+	return contracts.ReviewThread{ID: "t2", Path: "main.go", Line: 9, Comments: []contracts.ReviewComment{{
+		Author: contracts.ForgeActor{Login: login, Association: contracts.AssociationCollaborator},
+		Body:   "please rename",
+	}}}
 }

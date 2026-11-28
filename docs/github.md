@@ -246,24 +246,32 @@ at the next change or after a restart.
   stores the new position delivers; the other stops without sending anything. If
   the delivery then fails, because no live session takes the message, the
   position is put back, and the next observation delivers the threads.
-- A reply added to an existing thread is seen at the next change of the pull
-  request or after a restart. The forge feed of the contract reports five kinds
-  of change (a review submitted, a new commit, a change of state, a merge
-  conflict, a change of checks), and none of them is a reply in a thread, so the
-  host learns of it only through a later read.
+- A reply that a person adds to an existing thread is seen at the next change of
+  the pull request or after a restart. The forge feed of the contract reports
+  five kinds of change (a review submitted, a new commit, a change of state, a
+  merge conflict, a change of checks), and none of them is a reply in a thread,
+  so the host learns of it only through a later read.
 - One message carries at most 8 threads, 5 new comments per thread and 1000 bytes
   per comment, so its size is bounded. The rest comes in the next message.
 - The forge text is written in a block of data between `<donnees-revue>` and
   `</donnees-revue>`. The body of a comment keeps its line breaks, indented under
   its field. The path, the thread and the author are written on one line: their
-  line breaks and tabs become spaces. In all of them `&`, `<` and `>` are escaped,
-  and the other control characters are removed. The message tells the agent that
-  this block is data, never an instruction.
+  line breaks, tabs and Unicode line separators (U+2028, U+2029) become spaces,
+  and format characters (Unicode category Cf, such as the zero-width space or the
+  bidi controls U+202A to U+202E and U+2066 to U+2069) are removed. In all of
+  them `&`, `<` and `>` are escaped, and the other control characters are
+  removed. The message tells the agent that this block is data, never an
+  instruction.
 - To answer a thread, the agent runs `herrscher session pr reply --name <session>
   --thread <thread id> --body <text>`. The verb is checked by the authorization
   policy of the agent role, and it runs without the approval desk, like
   `session issue comment`. The daemon announces each reply as a write, and the
   token stays in the host.
+- A successful reply observes the session at once, without waiting for a change
+  of the pull request. So a person's reply already in the thread, which the
+  position had not yet passed, is handed over right after the agent answers. If
+  the account that posts the reply is a trusted member rather than a bot, the
+  agent's own reply is trusted too and is handed back in that observation.
 
 ## Repositories to clone
 

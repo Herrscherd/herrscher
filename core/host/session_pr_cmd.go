@@ -59,6 +59,7 @@ type sessionPRs struct {
 	credentials contracts.ForgeCredentials
 	refreshes   *refreshLocks
 	forgeLimit  time.Duration
+	reviews     *reviewLoop
 }
 
 type prTarget struct {
@@ -102,8 +103,10 @@ type prCommentView struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials) error {
-	return newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit).addTo(reg)
+func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, reviews *reviewLoop) error {
+	prs := newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit)
+	prs.reviews = reviews
+	return prs.addTo(reg)
 }
 
 func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration) sessionPRs {
@@ -175,7 +178,15 @@ func (p sessionPRs) reply(ctx context.Context, input contracts.Input) (contracts
 	if err := target.forge.ReplyToThread(ctx, thread, body); err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
+	p.observeAfterReply(ctx, target)
 	return cli.Data(p.messages.Text(target.language, clitext.SessionPRReplied, clitext.Params{clitext.ParamNumber: target.ref.Number()}))
+}
+
+func (p sessionPRs) observeAfterReply(ctx context.Context, target prTarget) {
+	if p.reviews == nil {
+		return
+	}
+	p.reviews.observe(ctx, target.name, target.forge, target.ref)
 }
 
 func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, dir string) (contracts.ForgeRepoRef, string, error) {

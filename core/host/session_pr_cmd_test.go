@@ -35,6 +35,12 @@ type fakePRForge struct {
 	pullErr     error
 	checkPages  [][]contracts.Check
 	threadPages [][]contracts.ReviewThread
+	replies     []string
+}
+
+func (f *fakePRForge) ReplyToThread(_ context.Context, _ contracts.ThreadRef, body string) error {
+	f.replies = append(f.replies, body)
+	return nil
 }
 
 func (f *fakePRForge) OpenPullRequest(_ context.Context, draft contracts.PullRequestDraft) (contracts.PullRequest, error) {
@@ -132,7 +138,7 @@ func prState(t *testing.T, dir, language string) *state.State {
 func prRegistry(t *testing.T, st *state.State, opener forgeOpener) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil); err != nil {
+	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	return reg

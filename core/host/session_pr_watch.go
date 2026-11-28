@@ -72,7 +72,7 @@ func newSessionPRWatcher(messages *clitext.Messages, lang languageSource, store 
 	return &prWatcher{
 		prs:      newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit),
 		store:    store,
-		reviews:  &reviewLoop{messages: messages, lang: lang, store: store, seed: seed, forgeLimit: sessionPRForgeLimit, trust: reviewTrust()},
+		reviews:  newReviewLoop(messages, lang, store, seed, sessionPRForgeLimit),
 		clock:    prwatch.SystemClock(),
 		limit:    &prwatch.Limit{},
 		policy:   prWatchPolicy(),

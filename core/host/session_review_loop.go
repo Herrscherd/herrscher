@@ -25,6 +25,17 @@ type reviewLoop struct {
 	trust      reviewloop.Trust
 }
 
+func newReviewLoop(messages *clitext.Messages, lang languageSource, store *state.State, seed func(session, task string) bool, forgeLimit time.Duration) *reviewLoop {
+	return &reviewLoop{
+		messages:   messages,
+		lang:       lang,
+		store:      store,
+		seed:       seed,
+		forgeLimit: forgeLimit,
+		trust:      reviewTrust(),
+	}
+}
+
 func reviewTrust() reviewloop.Trust {
 	return reviewloop.NewTrust(splitSet(envx.Getenv(envReviewAuthors)))
 }

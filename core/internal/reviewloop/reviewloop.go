@@ -148,8 +148,11 @@ func inline(text string) string {
 }
 
 func flatten(symbol rune) rune {
-	if symbol == '\n' || symbol == '\r' || symbol == '\t' {
+	if symbol == '\n' || symbol == '\r' || symbol == '\t' || symbol == '\u2028' || symbol == '\u2029' {
 		return ' '
+	}
+	if unicode.Is(unicode.Cf, symbol) {
+		return -1
 	}
 	return symbol
 }

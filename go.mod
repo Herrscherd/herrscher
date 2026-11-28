@@ -9,10 +9,10 @@ require (
 	github.com/Herrscherd/herrscher-antigravity-backend v0.1.1
 	github.com/Herrscherd/herrscher-claude-backend v0.19.1
 	github.com/Herrscherd/herrscher-codex-backend v0.11.1
-	github.com/Herrscherd/herrscher-contracts v0.50.0
+	github.com/Herrscherd/herrscher-contracts v0.52.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.9.1
 	github.com/Herrscherd/herrscher-discord-gateway v0.34.0
-	github.com/Herrscherd/herrscher-github-forge v0.5.0
+	github.com/Herrscherd/herrscher-github-forge v0.7.0
 	github.com/Herrscherd/herrscher-grok-backend v0.1.1
 	github.com/Herrscherd/herrscher-jev-compactor v0.4.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0

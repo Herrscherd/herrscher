@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -164,7 +165,7 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	issues, truncated, err := forge.CollectUpTo(ctx, limit, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
+	issues, truncated, err := forge.CollectUpTo(ctx, limit, isIssueOnly, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
 		return target.forge.Issues(ctx, target.repo, query, page)
 	})
 	if err != nil {
@@ -179,9 +180,6 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 	if input.JSON {
 		return cli.Data(marshalJSON(issueListing{Issues: views, Truncated: truncated}))
 	}
-	if len(views) == 0 {
-		return cli.Data(p.messages.Text(target.language, clitext.SessionIssueNone, clitext.Params{clitext.ParamRepo: target.repo.String()}))
-	}
 	lines := make([]string, 0, len(views))
 	for _, view := range views {
 		lines = append(lines, "#"+strconv.Itoa(view.Number)+"\t"+view.State+"\t"+escapeLine(view.Title)+"\t"+view.URL)
@@ -192,6 +190,9 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 			return contracts.Result{}, err
 		}
 		lines = append(lines, more)
+	}
+	if len(lines) == 0 {
+		return cli.Data(p.messages.Text(target.language, clitext.SessionIssueNone, clitext.Params{clitext.ParamRepo: target.repo.String()}))
 	}
 	return cli.Data(strings.Join(lines, "\n"), nil)
 }
@@ -224,6 +225,9 @@ func (p sessionPRs) showIssue(ctx context.Context, input contracts.Input) (contr
 		return contracts.Result{}, err
 	}
 	issue, err := target.forge.Issue(ctx, ref)
+	if errors.Is(err, contracts.ErrForgeNotFound) {
+		return contracts.Result{}, p.messages.Failure(target.language, err, clitext.SessionIssueNotFound, clitext.Params{clitext.ParamNumber: ref.Number(), clitext.ParamRepo: target.repo.String()})
+	}
 	if err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
 	}
@@ -278,6 +282,10 @@ func (p sessionPRs) commentIssue(ctx context.Context, input contracts.Input) (co
 		return contracts.Result{}, p.failure(target.language, err)
 	}
 	return cli.Data(p.messages.Text(target.language, clitext.SessionIssueCommented, clitext.Params{clitext.ParamNumber: ref.Number()}))
+}
+
+func isIssueOnly(issue contracts.Issue) bool {
+	return !issue.IsPullRequest
 }
 
 func viewOfIssue(issue contracts.Issue) issueView {

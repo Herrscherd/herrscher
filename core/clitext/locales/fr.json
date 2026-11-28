@@ -3223,6 +3223,21 @@
     "other": "le profil MCP du rôle « {{.Role}} » de l'agent « {{.Agent}} » nomme le serveur « {{.Server}} », que son mcp.json ne déclare pas"
   },
   {
+    "id": "cli.host.err.mcp_profile_role",
+    "description": "Réponse d'une commande d'hôte, le fichier de profils MCP d'un agent nomme un rôle non assignable",
+    "other": "le fichier de profils MCP de l'agent « {{.Agent}} » nomme le rôle « {{.Role}} », qui n'est pas assignable (rôles acceptés : {{.Accepted}})"
+  },
+  {
+    "id": "cli.host.err.mcp_profile_null",
+    "description": "Réponse d'une commande d'hôte, le profil MCP d'un rôle est null au lieu d'une liste de noms de serveurs",
+    "other": "le fichier de profils MCP de l'agent « {{.Agent}} » donne au rôle « {{.Role}} » une entrée null, une liste de noms de serveurs est attendue"
+  },
+  {
+    "id": "cli.host.err.mcp_role",
+    "description": "Réponse d'une commande d'hôte, le rôle demandé n'est pas assignable",
+    "other": "rôle non assignable : « {{.Role}} » (rôles acceptés : {{.Accepted}})"
+  },
+  {
     "id": "cli.host.err.provision_agent",
     "description": "Reply of a host command, err provision agent",
     "other": "provisionnement de l'agent \"{{.Agent}}\" : {{.Err}}"

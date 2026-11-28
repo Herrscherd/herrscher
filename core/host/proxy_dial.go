@@ -31,7 +31,8 @@ type ProxyConn struct {
 
 // DialProxy starts the ssh process that carries channel from the daemon of target.
 // bin is the herrscher binary on target, the one host add recorded; an empty bin
-// falls back to herrscher on the login PATH.
+// falls back to herrscher on the login PATH. The caller closes the returned connection
+// with Close, which is what ends the ssh process when the daemon keeps the channel open.
 func DialProxy(ctx context.Context, target, bin string, channel ProxyChannel) (*ProxyConn, error) {
 	if bin == "" {
 		bin = proxyLoginBin

@@ -103,8 +103,13 @@ daemon: the proxy forwards whatever token the client sends and never creates one
 
 Ending a channel:
 
-- Closing stdin ends the request side. The daemon sees end of input on its socket.
-- The proxy returns when the daemon closes its side, with status 0.
+- Closing stdin ends the request side. When stdin ends before the daemon closes,
+  every byte read from it is sent first, and the daemon then sees end of input on
+  its socket.
+- The proxy returns when the daemon closes its side, with status 0. It does not wait
+  for stdin to end: a read still blocked on stdin, such as a terminal or a pipe that
+  stays open, is left behind with the process, and input not yet read by then is not
+  sent.
 - When no daemon listens for the channel, the proxy prints that the daemon does
   not answer on this machine and exits with status 1. The client learns the
   daemon is absent from that exit status, not from a socket that hangs.

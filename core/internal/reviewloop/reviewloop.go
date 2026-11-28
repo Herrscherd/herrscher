@@ -47,11 +47,43 @@ type Batch struct {
 	Seen  map[string]int
 }
 
+// Trust decides which comment authors reach the agent. The zero value trusts the
+// owner and the members of the repository only.
+type Trust struct {
+	logins map[string]bool
+}
+
+// NewTrust returns a Trust that also accepts the listed logins, whatever their
+// association with the repository. Logins are compared without regard to case.
+func NewTrust(logins map[string]bool) Trust {
+	trusted := make(map[string]bool, len(logins))
+	for login, listed := range logins {
+		if listed {
+			trusted[strings.ToLower(login)] = true
+		}
+	}
+	return Trust{logins: trusted}
+}
+
+// Trusts reports whether a comment may reach the agent. A bot never does. Any
+// other author does when it is the owner or a member of the repository, or when
+// its login is listed.
+func (t Trust) Trusts(comment contracts.ReviewComment) bool {
+	author := comment.Author
+	if author.Bot || author.Login == "" {
+		return false
+	}
+	if author.Association == contracts.AssociationOwner || author.Association == contracts.AssociationMember {
+		return true
+	}
+	return t.logins[strings.ToLower(author.Login)]
+}
+
 // Plan selects, from the threads of a pull request and the number of comments
 // already handed over for each, what to deliver next. Resolved threads are
-// skipped. Comments from untrusted authors advance the position without being
+// skipped. Comments the trust refuses advance the position without being
 // delivered.
-func Plan(threads []contracts.ReviewThread, seen map[string]int) Batch {
+func Plan(threads []contracts.ReviewThread, seen map[string]int, trust Trust) Batch {
 	batch := Batch{Seen: make(map[string]int, len(threads))}
 	for _, thread := range threads {
 		before := min(seen[thread.ID], len(thread.Comments))
@@ -62,32 +94,23 @@ func Plan(threads []contracts.ReviewThread, seen map[string]int) Batch {
 		fresh := thread.Comments[before:]
 		take := min(len(fresh), MaxCommentsPerThread)
 		batch.Seen[thread.ID] = before + take
-		if item, ok := itemOf(thread, fresh[:take]); ok {
+		if item, ok := itemOf(thread, fresh[:take], trust); ok {
 			batch.Items = append(batch.Items, item)
 		}
 	}
 	return batch
 }
 
-// Trusted reports whether a comment may reach the agent: its author is the
-// owner or a member of the repository, and not a bot.
-func Trusted(comment contracts.ReviewComment) bool {
-	author := comment.Author
-	if author.Bot || author.Login == "" {
-		return false
-	}
-	return author.Association == contracts.AssociationOwner || author.Association == contracts.AssociationMember
-}
-
 // Render writes the items as one block of data. Every forge field is escaped,
-// so no text can close the block or pass for an instruction.
+// so no text can close the block or pass for an instruction. The fields kept on
+// one line are flattened first, so no text can start a line of its own.
 func Render(items []Item) string {
 	var out strings.Builder
 	out.WriteString(DataOpen + "\n")
 	for _, item := range items {
-		fmt.Fprintf(&out, "thread: %s\nfile: %s\nline: %d\n", escape(item.Thread), escape(item.Path), item.Line)
+		fmt.Fprintf(&out, "thread: %s\nfile: %s\nline: %d\n", inline(item.Thread), inline(item.Path), item.Line)
 		for _, comment := range item.Comments {
-			fmt.Fprintf(&out, "author: %s\nbody: %s\n", escape(comment.Author), indent(escape(comment.Body)))
+			fmt.Fprintf(&out, "author: %s\nbody: %s\n", inline(comment.Author), indent(escape(comment.Body)))
 		}
 		out.WriteString("\n")
 	}
@@ -95,10 +118,10 @@ func Render(items []Item) string {
 	return out.String()
 }
 
-func itemOf(thread contracts.ReviewThread, fresh []contracts.ReviewComment) (Item, bool) {
+func itemOf(thread contracts.ReviewThread, fresh []contracts.ReviewComment, trust Trust) (Item, bool) {
 	var comments []Comment
 	for _, comment := range fresh {
-		if !Trusted(comment) {
+		if !trust.Trusts(comment) {
 			continue
 		}
 		comments = append(comments, Comment{Author: comment.Author.Login, Body: truncate(comment.Body, MaxBodyBytes)})
@@ -118,6 +141,17 @@ func truncate(text string, limit int) string {
 		cut--
 	}
 	return text[:cut] + truncationMark
+}
+
+func inline(text string) string {
+	return escape(strings.Map(flatten, text))
+}
+
+func flatten(symbol rune) rune {
+	if symbol == '\n' || symbol == '\r' || symbol == '\t' {
+		return ' '
+	}
+	return symbol
 }
 
 func escape(text string) string {

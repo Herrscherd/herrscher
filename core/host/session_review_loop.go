@@ -8,10 +8,13 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/reviewloop"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
+
+const envReviewAuthors = "HERRSCHER_REVIEW_AUTHORS"
 
 type reviewLoop struct {
 	messages   *clitext.Messages
@@ -19,6 +22,11 @@ type reviewLoop struct {
 	store      *state.State
 	seed       func(session, task string) bool
 	forgeLimit time.Duration
+	trust      reviewloop.Trust
+}
+
+func reviewTrust() reviewloop.Trust {
+	return reviewloop.NewTrust(splitSet(envx.Getenv(envReviewAuthors)))
 }
 
 func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.Forge, ref contracts.PullRequestRef) {
@@ -34,7 +42,7 @@ func (r *reviewLoop) observe(ctx context.Context, name string, client contracts.
 		}
 		return
 	}
-	batch := reviewloop.Plan(threads, stored.SeenOf(ref.Number()))
+	batch := reviewloop.Plan(threads, stored.SeenOf(ref.Number()), r.trust)
 	next := state.ReviewPosition{Number: ref.Number(), Seen: batch.Seen}
 	if next.Equal(stored) {
 		return

@@ -124,3 +124,16 @@ func TestReviewLoopAdvancesPastUntrustedThreadsWithoutAMessage(t *testing.T) {
 		t.Fatalf("position = %v, want t9 passed over", got.ReviewSeen)
 	}
 }
+
+func TestReviewAuthorsSettingReachesTheTrust(t *testing.T) {
+	t.Setenv(envReviewAuthors, "carol, Dan")
+	trust := reviewTrust()
+	listed := contracts.ReviewComment{Author: contracts.ForgeActor{Login: "carol", Association: contracts.AssociationCollaborator}, Body: "x"}
+	unlisted := contracts.ReviewComment{Author: contracts.ForgeActor{Login: "eve", Association: contracts.AssociationCollaborator}, Body: "x"}
+	if !trust.Trusts(listed) {
+		t.Fatal("a collaborator named in HERRSCHER_REVIEW_AUTHORS is refused")
+	}
+	if trust.Trusts(unlisted) {
+		t.Fatal("a collaborator not named in HERRSCHER_REVIEW_AUTHORS is accepted")
+	}
+}

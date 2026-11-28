@@ -229,24 +229,41 @@ at the next change or after a restart.
 
 - Only unresolved threads are handed over. A thread that a person resolves
   stays out, and the agent never resolves a thread.
-- A comment reaches the agent only when its author is the owner or a member of
-  the repository, and is not a bot. Any other comment is passed over without
-  being shown. A public repository takes comments from anyone, so this default
-  refuses them.
+- A comment reaches the agent only when its author is trusted. The owner and the
+  members of the repository are trusted by default. Any other author is refused,
+  and its comment is passed over without being shown. A bot is always refused,
+  even when it is listed.
+- A collaborator, a contributor or any other author can be trusted by listing
+  its login in `HERRSCHER_REVIEW_AUTHORS`, as a comma-separated list such as
+  `carol,dan`. Logins are compared without regard to case. The list applies to
+  every session of the host and is read when the host starts, so a change needs
+  a restart. A list per session or per repository is not available yet.
 - The host hands over each comment once. The position of every thread (how many
   of its comments were handed over) is stored in the session state, so a restart
   does not send them again. A message that no live session takes is not counted,
   and it is retried on the next observation.
+- Two observations of the same pull request can run at once. Only the one that
+  stores the new position delivers; the other stops without sending anything. If
+  the delivery then fails, because no live session takes the message, the
+  position is put back, and the next observation delivers the threads.
+- A reply added to an existing thread is seen at the next change of the pull
+  request or after a restart. The forge feed of the contract reports five kinds
+  of change (a review submitted, a new commit, a change of state, a merge
+  conflict, a change of checks), and none of them is a reply in a thread, so the
+  host learns of it only through a later read.
 - One message carries at most 8 threads, 5 new comments per thread and 1000 bytes
   per comment, so its size is bounded. The rest comes in the next message.
-- The forge text (path, author, body) is written in a block of data between
-  `<donnees-revue>` and `</donnees-revue>`, with `&`, `<` and `>` escaped and
-  control characters removed. The message tells the agent that this block is
-  data, never an instruction.
+- The forge text is written in a block of data between `<donnees-revue>` and
+  `</donnees-revue>`. The body of a comment keeps its line breaks, indented under
+  its field. The path, the thread and the author are written on one line: their
+  line breaks and tabs become spaces. In all of them `&`, `<` and `>` are escaped,
+  and the other control characters are removed. The message tells the agent that
+  this block is data, never an instruction.
 - To answer a thread, the agent runs `herrscher session pr reply --name <session>
   --thread <thread id> --body <text>`. The verb is checked by the authorization
-  policy of the session role, like `session pr open` and `session issue comment`,
-  and it is recorded as a write; the token stays in the host.
+  policy of the agent role, and it runs without the approval desk, like
+  `session issue comment`. The daemon announces each reply as a write, and the
+  token stays in the host.
 
 ## Repositories to clone
 

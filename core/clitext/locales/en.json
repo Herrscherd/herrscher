@@ -5877,6 +5877,11 @@
     "other": "branch {{.Branch}} is kept locally: git refused to delete it, as it is not merged."
   },
   {
+    "id": "cli.session.end.local_unverified",
+    "description": "Result of session end: git kept the local branch because the pull request head on the forge could not be checked against it",
+    "other": "branch {{.Branch}} is kept locally: its head could not be verified against the pull request on the forge, so it was not forced."
+  },
+  {
     "id": "cli.session.end.no_pr",
     "description": "Failure: session end on a session with no pull request",
     "other": "session {{.Name}} has no pull request recorded."

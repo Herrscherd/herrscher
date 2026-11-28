@@ -5877,6 +5877,11 @@
     "other": "la branche {{.Branch}} est conservée localement : git a refusé de la supprimer, car elle n'est pas fusionnée."
   },
   {
+    "id": "cli.session.end.local_unverified",
+    "description": "Résultat de session end : la branche locale est conservée car son head n'a pas pu être vérifié face à la pull request sur la forge",
+    "other": "la branche {{.Branch}} est conservée localement : son head n'a pas pu être vérifié face à la pull request sur la forge, elle n'a donc pas été forcée."
+  },
+  {
     "id": "cli.session.end.no_pr",
     "description": "Échec : session end sur une session sans pull request",
     "other": "la session {{.Name}} n'a aucune pull request enregistrée."

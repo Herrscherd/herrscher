@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -294,7 +295,8 @@ func TestPRDoesNotClaimAnEndWithoutAPublisher(t *testing.T) {
 	}
 }
 
-func TestSessionEndAcceptsASquashMergedPullRequest(t *testing.T) {
+func mergedFeatureFixture(t *testing.T) (string, *state.State, string) {
+	t.Helper()
 	dir := prFixtureRepo(t)
 	st := endState(t, filepath.Join(t.TempDir(), "state.json"), dir)
 	head, err := endGit(t, dir, "rev-parse", "HEAD")
@@ -310,12 +312,52 @@ func TestSessionEndAcceptsASquashMergedPullRequest(t *testing.T) {
 	gitIn(t.Context(), t, dir, "checkout", "-q", "feat")
 	gitIn(t.Context(), t, dir, "push", "-q", originRemote, "--delete", "feat")
 	gitIn(t.Context(), t, dir, "update-ref", "-d", "refs/remotes/origin/feat")
+	return dir, st, head
+}
 
-	closer := func(ctx context.Context, _ string) error {
+func masterCloser(t *testing.T, dir string) func(context.Context, string) error {
+	return func(ctx context.Context, _ string) error {
 		gitIn(ctx, t, dir, "checkout", "-q", "master")
 		return nil
 	}
-	if _, err := endPRs(st, nil).end(t.Context(), "alpha", closer); err != nil {
+}
+
+func pushPullRequestHead(t *testing.T, dir, head string) {
+	t.Helper()
+	gitIn(t.Context(), t, dir, "push", "-q", originRemote, head+":"+pullRequestHeadRef(prTestNumber))
+}
+
+func endOutput(t *testing.T, res contracts.Result) string {
+	t.Helper()
+	out, err := cli.Plain(res, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+type gitIntercept func(ctx context.Context, args []string) (handled bool, out string, err error)
+
+func interceptGit(p sessionPRs, intercept gitIntercept) sessionPRs {
+	real := p.git
+	p.git = func(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+		if handled, out, err := intercept(ctx, args); handled {
+			return out, err
+		}
+		return real(ctx, dir, env, args...)
+	}
+	return p
+}
+
+func isPullRequestHeadRead(args []string) bool {
+	return slices.Contains(args, "ls-remote") && slices.Contains(args, pullRequestHeadRef(prTestNumber))
+}
+
+func TestSessionEndAcceptsASquashMergedPullRequest(t *testing.T) {
+	dir, st, head := mergedFeatureFixture(t)
+	pushPullRequestHead(t, dir, head)
+	res, err := endPRs(st, nil).end(t.Context(), "alpha", masterCloser(t, dir))
+	if err != nil {
 		t.Fatalf("a squash-merged session was refused: %v", err)
 	}
 	if localHasBranch(t, dir, "feat") {
@@ -323,5 +365,82 @@ func TestSessionEndAcceptsASquashMergedPullRequest(t *testing.T) {
 	}
 	if remoteHasBranch(t, dir, "feat") {
 		t.Fatal("remote branch feat still exists after a squash-merged end")
+	}
+	want := endText(t, clitext.SessionEndLocalDeleted, clitext.Params{clitext.ParamBranch: "feat"})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not report the forced local deletion", out)
+	}
+}
+
+func TestSessionEndKeepsTheLocalBranchWhenTheForgeRefDiffers(t *testing.T) {
+	dir, st, _ := mergedFeatureFixture(t)
+	p := interceptGit(endPRs(st, nil), func(_ context.Context, args []string) (bool, string, error) {
+		if !isPullRequestHeadRead(args) {
+			return false, "", nil
+		}
+		return true, "0000000000000000000000000000000000000001\t" + pullRequestHeadRef(prTestNumber), nil
+	})
+	res, err := p.end(t.Context(), "alpha", masterCloser(t, dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat was deleted although the forge ref differs from HEAD")
+	}
+	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not signal the kept branch", out)
+	}
+}
+
+func TestSessionEndKeepsTheLocalBranchWhenTheForgeRefCannotBeRead(t *testing.T) {
+	dir, st, _ := mergedFeatureFixture(t)
+	p := interceptGit(endPRs(st, nil), func(_ context.Context, args []string) (bool, string, error) {
+		if !isPullRequestHeadRead(args) {
+			return false, "", nil
+		}
+		return true, "", errors.New("ls-remote refused")
+	})
+	res, err := p.end(t.Context(), "alpha", masterCloser(t, dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat was deleted although the forge ref could not be read")
+	}
+	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not signal the kept branch", out)
+	}
+}
+
+func TestSessionEndKeepsTheLocalBranchWhenItMovedBeforeDeletion(t *testing.T) {
+	dir, st, head := mergedFeatureFixture(t)
+	pushPullRequestHead(t, dir, head)
+	p := interceptGit(endPRs(st, nil), func(ctx context.Context, args []string) (bool, string, error) {
+		if slices.Contains(args, "update-ref") {
+			gitIn(ctx, t, dir, "update-ref", "refs/heads/feat", "master")
+		}
+		return false, "", nil
+	})
+	res, err := p.end(t.Context(), "alpha", masterCloser(t, dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat was deleted although it moved after the forge check")
+	}
+	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not signal the kept branch", out)
+	}
+}
+
+func TestSessionEndKeepsTheBranchWhenHeadMovedPastTheMergedHeadWithCommitsNotPushed(t *testing.T) {
+	dir, st, _ := mergedFeatureFixture(t)
+	commitFrame(t, dir, "after merge\n")
+	endRefusal(t, st, errSessionEndUnpushed)
+	if !localHasBranch(t, dir, "feat") {
+		t.Fatal("local branch feat was removed although it holds commits not pushed")
 	}
 }

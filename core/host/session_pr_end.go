@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -30,6 +31,7 @@ type sessionEndTarget struct {
 	language   i18n.Language
 	record     state.PullRequestRecord
 	branch     string
+	head       string
 	common     string
 	env        []string
 	headMerged bool
@@ -81,7 +83,7 @@ func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarge
 	if err != nil {
 		return sessionEndTarget{}, err
 	}
-	branch, err := prGit(ctx, dir, nil, "symbolic-ref", "--quiet", "--short", "HEAD")
+	branch, err := p.git(ctx, dir, nil, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil || branch == "" {
 		return sessionEndTarget{}, p.messages.Failure(language, errSessionEndDetached, errSessionEndDetached.key, clitext.Params{clitext.ParamName: escapeLine(name)})
 	}
@@ -89,7 +91,7 @@ func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarge
 	if err != nil {
 		return sessionEndTarget{}, p.failure(language, err)
 	}
-	head, err := prGit(ctx, dir, nil, "rev-parse", "HEAD")
+	head, err := p.git(ctx, dir, nil, "rev-parse", "HEAD")
 	if err != nil {
 		return sessionEndTarget{}, p.failure(language, err)
 	}
@@ -97,7 +99,7 @@ func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarge
 	if refusal := p.refuseUnsaved(ctx, language, name, branch, dir, headMerged); refusal != nil {
 		return sessionEndTarget{}, refusal
 	}
-	common, err := prGit(ctx, dir, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	common, err := p.git(ctx, dir, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
 		return sessionEndTarget{}, p.failure(language, err)
 	}
@@ -105,7 +107,7 @@ func (p sessionPRs) endTarget(ctx context.Context, name string) (sessionEndTarge
 	if err != nil {
 		return sessionEndTarget{}, p.failure(language, err)
 	}
-	return sessionEndTarget{language: language, record: record, branch: branch, common: common, env: env, headMerged: headMerged}, nil
+	return sessionEndTarget{language: language, record: record, branch: branch, head: head, common: common, env: env, headMerged: headMerged}, nil
 }
 
 func mergedAtHead(record state.PullRequestRecord, head string) bool {
@@ -113,7 +115,7 @@ func mergedAtHead(record state.PullRequestRecord, head string) bool {
 }
 
 func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, name, branch, dir string, headOnForge bool) error {
-	status, err := prGit(ctx, dir, nil, "status", "--porcelain")
+	status, err := p.git(ctx, dir, nil, "status", "--porcelain")
 	if err != nil {
 		return p.failure(language, err)
 	}
@@ -123,7 +125,7 @@ func (p sessionPRs) refuseUnsaved(ctx context.Context, language i18n.Language, n
 	if headOnForge {
 		return nil
 	}
-	unpushed, err := prGit(ctx, dir, nil, "rev-list", "--count", "HEAD", "--not", "--remotes")
+	unpushed, err := p.git(ctx, dir, nil, "rev-list", "--count", "HEAD", "--not", "--remotes")
 	if err != nil {
 		return p.failure(language, err)
 	}
@@ -141,7 +143,7 @@ func (p sessionPRs) endOutcome(ctx context.Context, name string, target sessionE
 	}
 	var remoteKey clitext.Key = clitext.SessionEndRemoteKept
 	if target.record.State == contracts.PullRequestMerged {
-		if err = deleteRemoteBranch(ctx, target); err != nil {
+		if err = p.deleteRemoteBranch(ctx, target); err != nil {
 			return contracts.Result{}, p.messages.Failure(target.language, err, clitext.SessionEndRemoteFailed, clitext.Params{clitext.ParamBranch: escapeLine(target.branch), clitext.ParamErr: escapeLine(err.Error())})
 		}
 		remoteKey = clitext.SessionEndRemoteDeleted
@@ -150,29 +152,56 @@ func (p sessionPRs) endOutcome(ctx context.Context, name string, target sessionE
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	var localKey clitext.Key = clitext.SessionEndLocalDeleted
-	deleteFlag := "-d"
-	if target.headMerged {
-		deleteFlag = "-D"
-	}
-	if _, err = prGit(ctx, target.common, nil, "--git-dir="+target.common, "branch", deleteFlag, target.branch); err != nil {
-		localKey = clitext.SessionEndLocalKept
-	}
-	local, err := p.messages.Text(target.language, localKey, branch)
+	local, err := p.messages.Text(target.language, p.deleteLocalBranch(ctx, target), branch)
 	if err != nil {
 		return contracts.Result{}, err
 	}
 	return cli.Data(strings.Join([]string{closed, remote, local}, "\n"), nil)
 }
 
-func deleteRemoteBranch(ctx context.Context, target sessionEndTarget) error {
-	listed, err := prGit(ctx, target.common, target.env, "--git-dir="+target.common, "ls-remote", "--heads", originRemote, "refs/heads/"+target.branch)
+func (p sessionPRs) deleteLocalBranch(ctx context.Context, target sessionEndTarget) clitext.Key {
+	if target.headMerged && p.forgeHoldsHead(ctx, target) {
+		return p.forceDeleteLocalBranch(ctx, target)
+	}
+	if _, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "branch", "-d", target.branch); err != nil {
+		if target.headMerged {
+			return clitext.SessionEndLocalUnverified
+		}
+		return clitext.SessionEndLocalKept
+	}
+	return clitext.SessionEndLocalDeleted
+}
+
+func (p sessionPRs) forceDeleteLocalBranch(ctx context.Context, target sessionEndTarget) clitext.Key {
+	ref := "refs/heads/" + target.branch
+	if _, err := p.git(ctx, target.common, nil, "--git-dir="+target.common, "update-ref", "-d", ref, target.head); err != nil {
+		return clitext.SessionEndLocalUnverified
+	}
+	return clitext.SessionEndLocalDeleted
+}
+
+func (p sessionPRs) forgeHoldsHead(ctx context.Context, target sessionEndTarget) bool {
+	ref := pullRequestHeadRef(target.record.Number)
+	listed, err := p.git(ctx, target.common, target.env, "--git-dir="+target.common, "ls-remote", originRemote, ref)
+	if err != nil {
+		return false
+	}
+	fields := strings.Fields(listed)
+	return len(fields) == 2 && fields[0] == target.head && fields[1] == ref
+}
+
+func pullRequestHeadRef(number int) string {
+	return "refs/pull/" + strconv.Itoa(number) + "/head"
+}
+
+func (p sessionPRs) deleteRemoteBranch(ctx context.Context, target sessionEndTarget) error {
+	listed, err := p.git(ctx, target.common, target.env, "--git-dir="+target.common, "ls-remote", "--heads", originRemote, "refs/heads/"+target.branch)
 	if err != nil {
 		return err
 	}
 	if listed == "" {
 		return nil
 	}
-	_, err = prGit(ctx, target.common, target.env, "--git-dir="+target.common, "push", "--quiet", originRemote, "--delete", target.branch)
+	_, err = p.git(ctx, target.common, target.env, "--git-dir="+target.common, "push", "--quiet", originRemote, "--delete", target.branch)
 	return err
 }

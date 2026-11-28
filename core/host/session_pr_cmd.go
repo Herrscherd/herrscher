@@ -59,6 +59,7 @@ type sessionPRs struct {
 	refreshes   *refreshLocks
 	forgeLimit  time.Duration
 	notices     *sessionNotices
+	git         gitRunner
 }
 
 type prTarget struct {
@@ -107,7 +108,7 @@ func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang langu
 }
 
 func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration, notices *sessionNotices) sessionPRs {
-	return sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks(), forgeLimit: forgeLimit, notices: notices}
+	return sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks(), forgeLimit: forgeLimit, notices: notices, git: prGit}
 }
 
 func (p sessionPRs) addTo(reg *cli.Registry) error {

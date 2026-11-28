@@ -212,19 +212,21 @@ pull request, when its worktree is on a detached HEAD, when the worktree has
 uncommitted changes, and when some commits are not on any remote branch. The remote
 branch is deleted only when the pull request was merged, and only if it still exists
 on the remote (GitHub often deletes it already). The local branch is deleted with
-`git branch -d`, so git keeps it when it is not merged, and the command says so.
+`git branch -d`, so git keeps it when it is not merged, and the command says so, except in the
+squash case described below.
 
-A pull request merged by squash keeps its commits on the forge only under the head
-it was merged from. When it is merged and HEAD is still that head, the unpushed
-check does not refuse, and the local branch is deleted with `git branch -D`, since
-git never sees its commits in the default branch. Uncommitted changes still refuse.
+A pull request merged by squash is not an ancestor of the default branch, so `git branch -d`
+refuses its local branch. When it is merged and HEAD is still the head the pull request was
+merged from, the unpushed check does not refuse, and the local branch is removed only when
+the forge confirms that it still holds that head: `git ls-remote origin refs/pull/<number>/head`
+must return exactly HEAD. The removal then runs `git update-ref -d` with HEAD as the expected
+value, so git refuses it if the branch moved after the check. Uncommitted changes still refuse.
 
-The squash check compares HEAD with the head SHA the host read at its last refresh of the
-pull request. That SHA can be stale: when the branch was force-pushed after the last
-refresh, HEAD no longer matches it, and the squash case does not apply: the unpushed
-check runs as usual, and `git branch -d` keeps the local branch. GitHub keeps every commit of a pull request under
-`refs/pull/<number>/head`, even after the branch is force-pushed or deleted, so no commit
-the pull request merged is lost on the forge. The `-D` only removes the local branch.
+When the forge ref differs from HEAD, is absent, or cannot be read, the local branch is not
+forced: `git branch -d` is tried instead. If that fails too, the local branch is kept and the
+command says so, with the reason that its head could not be verified against the pull request.
+The same happens when the branch moved between the check and the removal. The host never
+rolls back silently.
 
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one

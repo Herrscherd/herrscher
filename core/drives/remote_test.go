@@ -367,7 +367,6 @@ func TestTheJournalSizeCapDropsTheOldestFilesAndTheOperatorsWritesLast(t *testin
 		t.Fatal(err)
 	}
 	now := time.Now()
-	big := make([]byte, JournalMaxBytes/3)
 	files := []struct {
 		name string
 		age  time.Duration
@@ -379,7 +378,10 @@ func TestTheJournalSizeCapDropsTheOldestFilesAndTheOperatorsWritesLast(t *testin
 	}
 	for _, file := range files {
 		path := filepath.Join(journal.dir, file.name)
-		if err := os.WriteFile(path, big, 0o600); err != nil {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Truncate(path, JournalMaxBytes/3); err != nil {
 			t.Fatal(err)
 		}
 		at := now.Add(-file.age)

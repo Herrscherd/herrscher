@@ -32,6 +32,11 @@ func NewPullRequestRecord(number int, pull contracts.PullRequest) PullRequestRec
 	}
 }
 
+// Ended reports whether the pull request is merged or closed.
+func (r PullRequestRecord) Ended() bool {
+	return r.Number > 0 && (r.State == contracts.PullRequestClosed || r.State == contracts.PullRequestMerged)
+}
+
 // Known reports whether the record names a pull request with a positive number and a state
 // the forge reports. Only a known record can be shown as a [contracts.SessionPullRequest].
 func (r PullRequestRecord) Known() bool {

@@ -198,6 +198,21 @@ pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in
 output or errors.
 
+When the pull request of a session is merged or closed, the host announces it once
+in the session, and the announcement is kept in the state file so a restart does not
+repeat it. It names the command that closes the session:
+`herrscher session end --name <session>`. The host never closes a session or deletes
+a branch on its own: the human runs that command.
+
+`herrscher session end --name <session>` closes the session, removes its worktree
+through the same path as `session close`, and deletes its branches. It refuses, before
+it changes anything, when the pull request is still open, when the session has no
+pull request, when its worktree is on a detached HEAD, when the worktree has
+uncommitted changes, and when some commits are not on any remote branch. The remote
+branch is deleted only when the pull request was merged, and only if it still exists
+on the remote (GitHub often deletes it already). The local branch is deleted with
+`git branch -d`, so git keeps it when it is not merged, and the command says so.
+
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one
 opened from the command line. Before it commits or pushes anything, the panel checks

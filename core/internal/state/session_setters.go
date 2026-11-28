@@ -241,6 +241,27 @@ func (s *State) RefreshPullRequest(name string, record PullRequestRecord) error 
 	return s.writePullRequestLocked(idx, record)
 }
 
+// ClaimPullRequestEnd marks the end of the session pull request as announced, once per pull request.
+func (s *State) ClaimPullRequestEnd(name string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.sessionIndexLocked(name)
+	if !ok {
+		return false, fmt.Errorf("%w: %q", errNoSession, name)
+	}
+	sess := &s.Sessions[idx]
+	if !sess.PullRequestRecord().Ended() || sess.PullRequestEndNotified == sess.PullRequest {
+		return false, nil
+	}
+	previous := sess.PullRequestEndNotified
+	sess.PullRequestEndNotified = sess.PullRequest
+	if err := s.saveLocked(); err != nil {
+		sess.PullRequestEndNotified = previous
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *State) sessionIndexLocked(name string) (int, bool) {
 	for idx := range s.Sessions {
 		if s.Sessions[idx].Name == name {

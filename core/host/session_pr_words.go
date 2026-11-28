@@ -1,11 +1,15 @@
 package host
 
 import (
+	"time"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
+
+const resetUnknown = "unknown time"
 
 func (p sessionPRs) stateWord(language i18n.Language, state contracts.PullRequestState) (string, error) {
 	if _, err := state.MarshalText(); err != nil {
@@ -77,4 +81,11 @@ func (p sessionPRs) conclusionWord(language i18n.Language, conclusion contracts.
 
 func (p sessionPRs) unknownWord(language i18n.Language, value string) (string, error) {
 	return p.messages.Text(language, clitext.SessionPRUnknownValue, clitext.Params{clitext.ParamValue: value})
+}
+
+func resetText(reset time.Time) string {
+	if reset.IsZero() {
+		return resetUnknown
+	}
+	return reset.UTC().Format(time.RFC3339)
 }

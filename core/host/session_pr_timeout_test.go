@@ -33,7 +33,7 @@ func (silentPRForge) PullRequest(ctx context.Context, _ contracts.PullRequestRef
 func prRegistryWithSilentLimit(t *testing.T, st *state.State, opener forgeOpener) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := newSessionPRs(clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil, prSilentForgeLimit).addTo(reg); err != nil {
+	if err := newSessionPRs(clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil, prSilentForgeLimit, nil).addTo(reg); err != nil {
 		t.Fatal(err)
 	}
 	return reg

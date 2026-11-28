@@ -115,7 +115,7 @@ func (p sessionPRs) refresh(ctx context.Context, target prTarget) (contracts.Pul
 		return contracts.PullRequest{}, false, p.failure(target.language, err)
 	}
 	record := state.NewPullRequestRecord(target.ref.Number(), pullRequest)
-	if err := p.store.RefreshPullRequest(target.name, record); err != nil {
+	if err := p.recordPullRequest(target.name, record); err != nil {
 		slog.Warn("session pull request state not saved", "session", target.name, "err", err)
 		return pullRequest, true, nil
 	}

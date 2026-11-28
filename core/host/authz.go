@@ -94,6 +94,7 @@ func sessionArgs() map[string]string {
 		"session undo":          paramName,
 		"session fork":          paramName,
 		"session pr open":       paramName,
+		"session end":           paramName,
 		"session pr status":     paramName,
 		"session pr checks":     paramName,
 		"session pr comments":   paramName,

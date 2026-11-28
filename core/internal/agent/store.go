@@ -158,6 +158,20 @@ func readAccount(home string) string {
 	return strings.TrimSpace(string(buf))
 }
 
+func readContextDelta(home string) ContextDelta {
+	buf, err := os.ReadFile(filepath.Join(home, contextDeltaFile))
+	if err != nil {
+		return ContextDeltaInherit
+	}
+	switch strings.ToLower(strings.TrimSpace(string(buf))) {
+	case "on", "1", "true", "yes":
+		return ContextDeltaOn
+	case "off", "0", "false", "no":
+		return ContextDeltaOff
+	}
+	return ContextDeltaInherit
+}
+
 func readHost(home string) string {
 	buf, err := os.ReadFile(filepath.Join(home, hostFile))
 	if err != nil {
@@ -290,7 +304,7 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)}, true
+	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home), ContextDelta: readContextDelta(home)}, true
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -303,7 +317,7 @@ func (s *Store) List() ([]Agent, error) {
 	var out []Agent
 	for _, name := range names {
 		home := filepath.Join(s.root, name)
-		out = append(out, Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)})
+		out = append(out, Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home), ContextDelta: readContextDelta(home)})
 	}
 	return out, nil
 }

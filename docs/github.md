@@ -198,6 +198,46 @@ pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in
 output or errors.
 
+When the pull request of a session is merged or closed, the host announces it once
+in the session, and the announcement is kept in the state file so a restart does not
+repeat it. It names the command that closes the session:
+`herrscher session end --name <session>`. The host never closes a session or deletes
+a branch on its own: the operator, or a steward session, runs that command, and an
+agent session cannot.
+
+`herrscher session end --name <session>` closes the session, removes its worktree
+through the same path as `session close`, and deletes its branches. It refuses, before
+it changes anything, when the pull request is still open, when the session has no
+pull request, when its worktree is on a detached HEAD, when the worktree has
+uncommitted changes, and when some commits are not on any remote branch. The remote
+branch is deleted only when the pull request was merged, and only if it still exists
+on the remote (GitHub often deletes it already). The local branch is deleted with
+`git branch -d`, so git keeps it when it is not merged, and the command says so, except in the
+squash case described below.
+
+A pull request merged by squash is not an ancestor of the default branch, so `git branch -d`
+refuses its local branch. When it is merged and HEAD is still the head the pull request was
+merged from, the unpushed check does not refuse, and the local branch is removed only when
+the forge confirms that it still holds that head: `git ls-remote origin refs/pull/<number>/head`
+must return exactly HEAD. The removal then runs `git update-ref -d` with HEAD as the expected
+value, so git refuses it if the branch moved after the check. Uncommitted changes still refuse.
+
+When the forge ref differs from HEAD, is absent, or cannot be read, the local branch is not
+forced: `git branch -d` is tried instead. If that fails too, the local branch is kept and the
+command says so, with the reason that its state could not be verified safely.
+The same happens when the branch moved between the check and the removal. The host never
+rolls back silently.
+
+Before any local removal, forced or not, the command reads `git worktree list --porcelain`. When
+a worktree still has the branch checked out, nothing is removed, even in the squash case, since
+`git update-ref -d` does not refuse a checked out branch, unlike `git branch -d`. The command
+keeps the branch and names the path of the worktree that holds it.
+
+When the session is closed but the remote branch cannot be deleted (for instance when the
+network fails), `session end` still reports the session as closed, says that the remote branch
+could not be deleted, and prints the command to run by hand: `git push origin --delete <branch>`.
+The command exits without an error, since the session itself was closed.
+
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one
 opened from the command line. Before it commits or pushes anything, the panel checks

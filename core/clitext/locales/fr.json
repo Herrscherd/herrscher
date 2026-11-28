@@ -5832,6 +5832,91 @@
     "other": "session {{.Name}} : la pull request #{{.Number}} a été lue sur la forge, mais son état n'a pas pu être enregistré dans la session"
   },
   {
+    "id": "cli.help.cmd.session.end",
+    "description": "Aide de la commande session end",
+    "other": "fermer une session dont la pull request est fusionnée ou fermée, et retirer son worktree et sa branche"
+  },
+  {
+    "id": "cli.help.param.session.end.name",
+    "description": "Aide du paramètre --name de la commande session end",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.session.pr.ended_merged",
+    "description": "Notice : la pull request d'une session a été fusionnée, l'opérateur peut fermer la session",
+    "other": "session {{.Name}} : la pull request #{{.Number}} a été fusionnée. Pour fermer la session et retirer son worktree et sa branche, lance : herrscher session end --name {{.Name}}"
+  },
+  {
+    "id": "cli.session.pr.ended_closed",
+    "description": "Notice : la pull request d'une session a été fermée sans fusion, l'opérateur peut fermer la session",
+    "other": "session {{.Name}} : la pull request #{{.Number}} a été fermée sans fusion. Pour fermer la session et retirer son worktree et sa branche, lance : herrscher session end --name {{.Name}}"
+  },
+  {
+    "id": "cli.session.end.done",
+    "description": "Résultat de session end : la session est fermée et son worktree retiré",
+    "other": "la session {{.Name}} est fermée et son worktree est retiré."
+  },
+  {
+    "id": "cli.session.end.remote_deleted",
+    "description": "Résultat de session end : la branche a été supprimée sur origin",
+    "other": "la branche {{.Branch}} est supprimée sur origin."
+  },
+  {
+    "id": "cli.session.end.remote_kept",
+    "description": "Résultat de session end : la branche est conservée sur origin, sa pull request n'a pas été fusionnée",
+    "other": "la branche {{.Branch}} est conservée sur origin : la pull request n'a pas été fusionnée."
+  },
+  {
+    "id": "cli.session.end.local_deleted",
+    "description": "Résultat de session end : la branche locale a été supprimée",
+    "other": "la branche {{.Branch}} est supprimée localement."
+  },
+  {
+    "id": "cli.session.end.local_kept",
+    "description": "Résultat de session end : git a conservé la branche locale, avec sa raison",
+    "other": "la branche {{.Branch}} est conservée localement : git a refusé de la supprimer, car elle n'est pas fusionnée."
+  },
+  {
+    "id": "cli.session.end.local_unverified",
+    "description": "Résultat de session end : la branche locale est conservée car son état n'a pas pu être vérifié sûrement",
+    "other": "la branche {{.Branch}} est conservée localement : son état n'a pas pu être vérifié sûrement, elle n'a donc pas été supprimée."
+  },
+  {
+    "id": "cli.session.end.local_checked_out",
+    "description": "Résultat de session end : la branche locale est encore extraite dans un worktree, git l'a donc conservée",
+    "other": "la branche {{.Branch}} est conservée localement : elle est encore extraite dans {{.Path}}."
+  },
+  {
+    "id": "cli.session.end.no_pr",
+    "description": "Échec : session end sur une session sans pull request",
+    "other": "la session {{.Name}} n'a aucune pull request enregistrée."
+  },
+  {
+    "id": "cli.session.end.open",
+    "description": "Échec : session end sur une session dont la pull request est encore ouverte",
+    "other": "la pull request #{{.Number}} de la session {{.Name}} est encore ouverte : ferme la session une fois qu'elle est fusionnée ou fermée."
+  },
+  {
+    "id": "cli.session.end.detached",
+    "description": "Échec : session end sur un worktree en HEAD détaché",
+    "other": "la session {{.Name}} est en HEAD détaché, sa branche ne peut pas être lue."
+  },
+  {
+    "id": "cli.session.end.dirty",
+    "description": "Échec : session end sur un worktree avec des changements non commités",
+    "other": "la session {{.Name}} a des changements non commités dans son worktree : commite-les ou abandonne-les d'abord."
+  },
+  {
+    "id": "cli.session.end.unpushed",
+    "description": "Échec : session end sur une branche avec des commits sur aucune branche distante",
+    "other": "la branche {{.Branch}} a des commits qui ne sont sur aucune branche distante : pousse-les d'abord."
+  },
+  {
+    "id": "cli.session.end.remote_failed",
+    "description": "Résultat de session end : la session est fermée mais la branche distante n'a pas pu être supprimée, avec la commande à lancer à la main",
+    "other": "session fermée, mais la branche {{.Branch}} n'a pas pu être supprimée sur origin ({{.Err}}). Supprime-la à la main : git push origin --delete {{.Branch}}"
+  },
+  {
     "id": "cli.session.pr.state.draft",
     "description": "Mot d'état de pull request pour un brouillon",
     "other": "brouillon"

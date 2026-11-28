@@ -132,7 +132,7 @@ func prState(t *testing.T, dir, language string) *state.State {
 func prRegistry(t *testing.T, st *state.State, opener forgeOpener) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil); err != nil {
+	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	return reg

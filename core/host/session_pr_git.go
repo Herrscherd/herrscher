@@ -80,6 +80,8 @@ func defaultBranch(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(ref, originRemote+"/"), nil
 }
 
+type gitRunner func(ctx context.Context, dir string, env []string, args ...string) (string, error)
+
 func prGit(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := runner.Local{}.Command(ctx, dir, append([]string{"git"}, args...)...)
 	if env != nil {

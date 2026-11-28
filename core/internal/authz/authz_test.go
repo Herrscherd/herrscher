@@ -406,3 +406,32 @@ func TestAnObserverReadsWhatASessionReadsAndWritesNothing(t *testing.T) {
 		t.Error("approve ask, asked by the hook at each tool call, counts as a write")
 	}
 }
+
+func TestSessionEndIsRefusedToAgentAndFollowsSessionClose(t *testing.T) {
+	path := []string{"session", "end"}
+	if ok, _ := Decide(req(SessionPrincipal("revue"), path...), RoleAgent); ok {
+		t.Fatal("agent must not end a session")
+	}
+	if ok, why := Decide(req(Principal{ID: "chat:1"}, path...), RoleOperator); !ok {
+		t.Fatalf("operator refused session end: %s", why)
+	}
+	if ok, why := Decide(req(SessionPrincipal("revue"), path...), RoleSteward); !ok {
+		t.Fatalf("steward refused session end: %s", why)
+	}
+	closePath := []string{"session", "close"}
+	for _, c := range []struct {
+		name      string
+		principal Principal
+		role      Role
+	}{
+		{"agent", SessionPrincipal("revue"), RoleAgent},
+		{"steward", SessionPrincipal("revue"), RoleSteward},
+		{"operator", Principal{ID: "chat:1"}, RoleOperator},
+	} {
+		closeOK, _ := Decide(req(c.principal, closePath...), c.role)
+		endOK, _ := Decide(req(c.principal, path...), c.role)
+		if endOK != closeOK {
+			t.Fatalf("%s: session end allowed=%v, session close allowed=%v", c.name, endOK, closeOK)
+		}
+	}
+}

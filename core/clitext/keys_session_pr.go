@@ -11,6 +11,8 @@ const (
 	CmdParamSessionPRBody    = "cli.help.param.session.pr.body"
 	CmdParamSessionPRBase    = "cli.help.param.session.pr.base"
 	CmdParamSessionPRDraft   = "cli.help.param.session.pr.draft"
+	CmdHelpSessionEnd        = "cli.help.cmd.session.end"
+	CmdParamSessionEndName   = "cli.help.param.session.end.name"
 
 	SessionPROpened            = "cli.session.pr.opened"
 	SessionPROpenedUnrecorded  = "cli.session.pr.opened_unrecorded"
@@ -41,6 +43,21 @@ const (
 	SessionPRPagesExceeded     = "cli.session.pr.pages_exceeded"
 	SessionPRFailed            = "cli.session.pr.failed"
 	SessionPRUnknownValue      = "cli.session.pr.unknown_value"
+	SessionPREndedMerged       = "cli.session.pr.ended_merged"
+	SessionPREndedClosed       = "cli.session.pr.ended_closed"
+	SessionEnded               = "cli.session.end.done"
+	SessionEndRemoteDeleted    = "cli.session.end.remote_deleted"
+	SessionEndRemoteKept       = "cli.session.end.remote_kept"
+	SessionEndLocalDeleted     = "cli.session.end.local_deleted"
+	SessionEndLocalKept        = "cli.session.end.local_kept"
+	SessionEndLocalUnverified  = "cli.session.end.local_unverified"
+	SessionEndLocalCheckedOut  = "cli.session.end.local_checked_out"
+	SessionEndNoPR             = "cli.session.end.no_pr"
+	SessionEndOpen             = "cli.session.end.open"
+	SessionEndDetached         = "cli.session.end.detached"
+	SessionEndDirty            = "cli.session.end.dirty"
+	SessionEndUnpushed         = "cli.session.end.unpushed"
+	SessionEndRemoteFailed     = "cli.session.end.remote_failed"
 
 	SessionPRStateDraft        = "cli.session.pr.state.draft"
 	SessionPRStateUnknown      = "cli.session.pr.state.unknown"
@@ -90,6 +107,8 @@ func sessionPRKeys() map[Key][]string {
 		CmdParamSessionPRBody:    nil,
 		CmdParamSessionPRBase:    nil,
 		CmdParamSessionPRDraft:   nil,
+		CmdHelpSessionEnd:        nil,
+		CmdParamSessionEndName:   nil,
 
 		SessionPROpened:            {ParamName, ParamNumber, ParamURL},
 		SessionPROpenedUnrecorded:  {ParamName, ParamNumber, ParamURL, ParamErr},
@@ -120,6 +139,21 @@ func sessionPRKeys() map[Key][]string {
 		SessionPRPagesExceeded:     {ParamPages},
 		SessionPRFailed:            {ParamErr},
 		SessionPRUnknownValue:      {ParamValue},
+		SessionPREndedMerged:       {ParamName, ParamNumber},
+		SessionPREndedClosed:       {ParamName, ParamNumber},
+		SessionEnded:               {ParamName},
+		SessionEndRemoteDeleted:    {ParamBranch},
+		SessionEndRemoteKept:       {ParamBranch},
+		SessionEndLocalDeleted:     {ParamBranch},
+		SessionEndLocalKept:        {ParamBranch},
+		SessionEndLocalUnverified:  {ParamBranch},
+		SessionEndLocalCheckedOut:  {ParamBranch, ParamPath},
+		SessionEndNoPR:             {ParamName},
+		SessionEndOpen:             {ParamName, ParamNumber},
+		SessionEndDetached:         {ParamName},
+		SessionEndDirty:            {ParamName},
+		SessionEndUnpushed:         {ParamBranch},
+		SessionEndRemoteFailed:     {ParamBranch, ParamErr},
 
 		SessionPRStateDraft:        nil,
 		SessionPRStateUnknown:      nil,

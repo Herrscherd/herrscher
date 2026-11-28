@@ -5832,6 +5832,91 @@
     "other": "session {{.Name}}: pull request #{{.Number}} was read from the forge, but its state could not be saved in the session"
   },
   {
+    "id": "cli.help.cmd.session.end",
+    "description": "Help of the command session end",
+    "other": "close a session whose pull request is merged or closed, and remove its worktree and branch"
+  },
+  {
+    "id": "cli.help.param.session.end.name",
+    "description": "Help of the --name param of the session end command",
+    "other": "session name"
+  },
+  {
+    "id": "cli.session.pr.ended_merged",
+    "description": "Notice: the pull request of a session was merged, the operator can end the session",
+    "other": "session {{.Name}}: pull request #{{.Number}} was merged. To close the session and remove its worktree and branch, run: herrscher session end --name {{.Name}}"
+  },
+  {
+    "id": "cli.session.pr.ended_closed",
+    "description": "Notice: the pull request of a session was closed without merge, the operator can end the session",
+    "other": "session {{.Name}}: pull request #{{.Number}} was closed without merge. To close the session and remove its worktree and branch, run: herrscher session end --name {{.Name}}"
+  },
+  {
+    "id": "cli.session.end.done",
+    "description": "Result of session end: the session is closed and its worktree removed",
+    "other": "session {{.Name}} is closed and its worktree is removed."
+  },
+  {
+    "id": "cli.session.end.remote_deleted",
+    "description": "Result of session end: the branch was deleted on origin",
+    "other": "branch {{.Branch}} is deleted on origin."
+  },
+  {
+    "id": "cli.session.end.remote_kept",
+    "description": "Result of session end: the branch is kept on origin because its pull request was not merged",
+    "other": "branch {{.Branch}} is kept on origin: its pull request was not merged."
+  },
+  {
+    "id": "cli.session.end.local_deleted",
+    "description": "Result of session end: the local branch was deleted",
+    "other": "branch {{.Branch}} is deleted locally."
+  },
+  {
+    "id": "cli.session.end.local_kept",
+    "description": "Result of session end: git kept the local branch, with its reason",
+    "other": "branch {{.Branch}} is kept locally: git refused to delete it, as it is not merged."
+  },
+  {
+    "id": "cli.session.end.local_unverified",
+    "description": "Result of session end: git kept the local branch because its state could not be verified safely",
+    "other": "branch {{.Branch}} is kept locally: its state could not be verified safely, so it was not deleted."
+  },
+  {
+    "id": "cli.session.end.local_checked_out",
+    "description": "Result of session end: the local branch is still checked out in a worktree, so git kept it",
+    "other": "branch {{.Branch}} is kept locally: it is still checked out in {{.Path}}."
+  },
+  {
+    "id": "cli.session.end.no_pr",
+    "description": "Failure: session end on a session with no pull request",
+    "other": "session {{.Name}} has no pull request recorded."
+  },
+  {
+    "id": "cli.session.end.open",
+    "description": "Failure: session end on a session whose pull request is still open",
+    "other": "pull request #{{.Number}} of session {{.Name}} is still open: end the session once it is merged or closed."
+  },
+  {
+    "id": "cli.session.end.detached",
+    "description": "Failure: session end on a worktree with a detached HEAD",
+    "other": "session {{.Name}} is on a detached HEAD, so its branch cannot be read."
+  },
+  {
+    "id": "cli.session.end.dirty",
+    "description": "Failure: session end on a worktree with uncommitted changes",
+    "other": "session {{.Name}} has uncommitted changes in its worktree: commit or discard them first."
+  },
+  {
+    "id": "cli.session.end.unpushed",
+    "description": "Failure: session end on a branch with commits on no remote branch",
+    "other": "branch {{.Branch}} has commits on no remote branch: push them first."
+  },
+  {
+    "id": "cli.session.end.remote_failed",
+    "description": "Result of session end: the session is closed but the remote branch could not be deleted, with the command to run by hand",
+    "other": "session closed, but branch {{.Branch}} could not be deleted on origin ({{.Err}}). Delete it by hand: git push origin --delete {{.Branch}}"
+  },
+  {
     "id": "cli.session.pr.state.draft",
     "description": "Pull request state word of a draft",
     "other": "draft"

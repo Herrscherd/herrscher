@@ -300,6 +300,7 @@ func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID strin
 		return nil, err
 	}
 	hubCore.eventPublisher = events.Publish
+	hubCore.sessions.notices.bind(events.Publish)
 	eventsReleased := acceptEvents(ctx, eventsListener, events)
 	commandsReleased := acceptCommands(ctx, commandsListener, hubCore.operatorCommands(), defaultCommandReadTimeout, hubCore.teardownGrace, hubCore.warnCommandHandlerOverrun).released
 	return allReleased(eventsReleased, commandsReleased), nil

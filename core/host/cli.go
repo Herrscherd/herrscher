@@ -268,5 +268,5 @@ func addCheckpointAndPRVerbs(reg *cli.Registry, sessions *sessionTable, options 
 	if err := addCheckpointCommands(reg, sessions.cliMessages, options.live.Get, hostState, sessions); err != nil {
 		return err
 	}
-	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, GitHubOpener(options.Forge), forgeCredentials(options.Forge))
+	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, GitHubOpener(options.Forge), forgeCredentials(options.Forge), sessions.notices)
 }

@@ -1,3 +1,5 @@
+// Package runner decides where a command runs: here, or on another machine.
+// It is the only place in core that knows ssh exists.
 package runner
 
 import (
@@ -6,6 +8,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
 // Runner builds the command that runs argv with dir as its working directory,
@@ -42,6 +46,9 @@ func (Local) Describe() string { return "local" }
 func (Local) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 	return exec.CommandContext(ctx, "cp", "-f", src, dst)
 }
+
+// GitSSHCommand is the ssh git runs to reach a remote when it must neither prompt nor wait long for the host.
+const GitSSHCommand = "ssh -o BatchMode=yes -o ConnectTimeout=10"
 
 // SSH runs commands on Target. It carries no state of its own: one value can be
 // built per launch, from a host record.
@@ -114,9 +121,9 @@ func (s SSH) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 
 func script(dir string, argv []string) string {
 	if dir == "" {
-		return "exec " + quoteArgv(argv)
+		return "exec " + shellquote.Join(argv)
 	}
-	return "cd " + shellQuote(dir) + " && exec " + quoteArgv(argv)
+	return "cd " + shellquote.Quote(dir) + " && exec " + shellquote.Join(argv)
 }
 
 // ErrTargetDash reports an ssh target that would be read as an option.

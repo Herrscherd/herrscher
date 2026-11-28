@@ -1,7 +1,8 @@
 // Package checkpoint keeps the history of a session's worktree as git commits,
 // one per user message, so the worktree can be rewound to any of them and the
 // rewind undone. It owns that git plumbing and nothing else: the caller decides
-// when a checkpoint is taken and which worktree it belongs to.
+// when a checkpoint is taken, which worktree it belongs to, and the key its refs
+// are filed under.
 package checkpoint
 
 import (
@@ -41,18 +42,18 @@ const (
 )
 
 var (
-	// ErrNoCheckpoint is returned when a session has no checkpoint with the asked number.
+	// ErrNoCheckpoint is returned when a key has no checkpoint with the asked number.
 	ErrNoCheckpoint = errors.New("no checkpoint")
 	// ErrNoUndo is returned when there is no rewind to undo.
 	ErrNoUndo = errors.New("nothing to undo")
-	// ErrBadSession is returned for a session name that cannot name a git ref.
-	ErrBadSession = errors.New("invalid session name")
+	// ErrBadKey is returned for a key that cannot name a git ref.
+	ErrBadKey = errors.New("invalid checkpoint key")
 	// ErrOutsideWorktree is returned when a checkpoint would touch a path outside its worktree.
 	ErrOutsideWorktree = errors.New("path outside worktree")
 )
 
 // Store serializes the git operations of one process, so that two checkpoints
-// of a session cannot take the same number. Its zero value is ready to use, and
+// under one key cannot take the same number. Its zero value is ready to use, and
 // a Store must not be copied after its first use.
 type Store struct {
 	mu sync.Mutex
@@ -65,7 +66,7 @@ type Meta struct {
 	Conversation string
 }
 
-// Entry is one checkpoint of a session, as listed by [Store.List].
+// Entry is one checkpoint under a key, as listed by [Store.List].
 type Entry struct {
 	Index        int
 	Commit       string
@@ -82,15 +83,15 @@ type Change struct {
 	Removed int
 }
 
-// Take records the current state of dir as the next checkpoint of session. It
-// returns an error wrapping [ErrBadSession] for a name that cannot name a ref.
-func (s *Store) Take(ctx context.Context, dir, session string, meta Meta) (Entry, error) {
-	if err := validSession(session); err != nil {
+// Take records the current state of dir as the next checkpoint under key. It
+// returns an error wrapping [ErrBadKey] for a key that cannot name a ref.
+func (s *Store) Take(ctx context.Context, dir, key string, meta Meta) (Entry, error) {
+	if err := validKey(key); err != nil {
 		return Entry{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entries, err := listLocked(ctx, dir, session)
+	entries, err := listLocked(ctx, dir, key)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -99,28 +100,28 @@ func (s *Store) Take(ctx context.Context, dir, session string, meta Meta) (Entry
 	if err != nil {
 		return Entry{}, err
 	}
-	_, err = git(ctx, dir, nil, nil, "update-ref", checkpointRef(session, index), commit)
+	_, err = git(ctx, dir, nil, nil, "update-ref", checkpointRef(key, index), commit)
 	if err != nil {
 		return Entry{}, err
 	}
 	return Entry{Index: index, Commit: commit, Turn: meta.Turn, Text: meta.Text, Conversation: meta.Conversation, At: time.Now().UTC()}, nil
 }
 
-// List returns the checkpoints of session, oldest first. It returns no entries
-// when the session has none.
-func (s *Store) List(ctx context.Context, dir, session string) ([]Entry, error) {
-	if err := validSession(session); err != nil {
+// List returns the checkpoints under key, oldest first. It returns no entries
+// when the key has none.
+func (s *Store) List(ctx context.Context, dir, key string) ([]Entry, error) {
+	if err := validKey(key); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return listLocked(ctx, dir, session)
+	return listLocked(ctx, dir, key)
 }
 
-// Get returns checkpoint number index of session. It returns an error wrapping
+// Get returns checkpoint number index under key. It returns an error wrapping
 // [ErrNoCheckpoint] when there is none with that number.
-func (s *Store) Get(ctx context.Context, dir, session string, index int) (Entry, error) {
-	entries, err := s.List(ctx, dir, session)
+func (s *Store) Get(ctx context.Context, dir, key string, index int) (Entry, error) {
+	entries, err := s.List(ctx, dir, key)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -129,7 +130,7 @@ func (s *Store) Get(ctx context.Context, dir, session string, index int) (Entry,
 			return entry, nil
 		}
 	}
-	return Entry{}, fmt.Errorf("%w: %s #%d", ErrNoCheckpoint, session, index)
+	return Entry{}, fmt.Errorf("%w: %s #%d", ErrNoCheckpoint, key, index)
 }
 
 // Current returns the tree of dir as it is now, without recording it.
@@ -148,49 +149,49 @@ func Changes(ctx context.Context, dir, from, to string) ([]Change, error) {
 	return parseNumstat(out), nil
 }
 
-// Restore rewinds the worktree of session to checkpoint index. It first records
-// the state it replaces, so [Store.Undo] can bring it back. It returns the
-// checkpoint restored.
-func (s *Store) Restore(ctx context.Context, dir, session string, index int) (Entry, error) {
-	target, err := s.Get(ctx, dir, session, index)
+// Restore rewinds the worktree dir to checkpoint index under key. It first
+// records the state it replaces, so [Store.Undo] can bring it back. It returns
+// the checkpoint restored.
+func (s *Store) Restore(ctx context.Context, dir, key string, index int) (Entry, error) {
+	target, err := s.Get(ctx, dir, key, index)
 	if err != nil {
 		return Entry{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := restoreLocked(ctx, dir, undoRefRoot+session, target.Commit); err != nil {
+	if err := restoreLocked(ctx, dir, undoRef(key), target.Commit); err != nil {
 		return Entry{}, err
 	}
 	return target, nil
 }
 
-// Undo brings back the state that the last [Store.Restore] of session replaced.
+// Undo brings back the state that the last [Store.Restore] under key replaced.
 // It returns an error wrapping [ErrNoUndo] when no restore is pending.
-func (s *Store) Undo(ctx context.Context, dir, session string) error {
-	if err := validSession(session); err != nil {
+func (s *Store) Undo(ctx context.Context, dir, key string) error {
+	if err := validKey(key); err != nil {
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	undoRef := undoRefRoot + session
-	previous, err := resolveRef(ctx, dir, undoRef)
+	ref := undoRef(key)
+	previous, err := resolveRef(ctx, dir, ref)
 	if err != nil {
 		return err
 	}
 	if previous == "" {
-		return fmt.Errorf("%w: %s", ErrNoUndo, session)
+		return fmt.Errorf("%w: %s", ErrNoUndo, key)
 	}
-	return restoreLocked(ctx, dir, undoRef, previous)
+	return restoreLocked(ctx, dir, ref, previous)
 }
 
 // HasUndo reports whether [Store.Undo] would find a restore to undo.
-func (s *Store) HasUndo(ctx context.Context, dir, session string) bool {
-	if validSession(session) != nil {
+func (s *Store) HasUndo(ctx context.Context, dir, key string) bool {
+	if validKey(key) != nil {
 		return false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ref, err := resolveRef(ctx, dir, undoRefRoot+session)
+	ref, err := resolveRef(ctx, dir, undoRef(key))
 	return err == nil && ref != ""
 }
 
@@ -312,8 +313,8 @@ func treeOf(ctx context.Context, dir, commit string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func listLocked(ctx context.Context, dir, session string) ([]Entry, error) {
-	prefix := checkpointRefRoot + session + "/"
+func listLocked(ctx context.Context, dir, key string) ([]Entry, error) {
+	prefix := checkpointPrefix(key)
 	out, err := git(ctx, dir, nil, nil, "for-each-ref", "--format="+entryFormat, prefix)
 	if err != nil {
 		return nil, err
@@ -331,8 +332,16 @@ func resolveRef(ctx context.Context, dir, ref string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func checkpointRef(session string, index int) string {
-	return checkpointRefRoot + session + "/" + strconv.Itoa(index)
+func checkpointRef(key string, index int) string {
+	return checkpointPrefix(key) + strconv.Itoa(index)
+}
+
+func checkpointPrefix(key string) string {
+	return checkpointRefRoot + key + "/"
+}
+
+func undoRef(key string) string {
+	return undoRefRoot + key
 }
 
 func nextIndex(entries []Entry) int {
@@ -383,9 +392,9 @@ func removeInside(dir, rel string) error {
 	return errors.Join(removeErr, root.Close())
 }
 
-func validSession(session string) error {
-	if session == "" || strings.ContainsAny(session, "/\x00") || session == "." || session == ".." {
-		return fmt.Errorf("%w: %q", ErrBadSession, session)
+func validKey(key string) error {
+	if key == "" || strings.ContainsAny(key, "/\x00") || key == "." || key == ".." {
+		return fmt.Errorf("%w: %q", ErrBadKey, key)
 	}
 	return nil
 }

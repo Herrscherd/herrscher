@@ -28,9 +28,6 @@ func SafeSessionName(session string) string {
 }
 
 func instancePrefix(instanceID string) string {
-	if instanceID == "" {
-		return ""
-	}
 	return SafeSessionName(instanceID) + instanceSeparator
 }
 

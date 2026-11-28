@@ -281,7 +281,9 @@ directory from the environment instead.
 
 Neublox, or any other client that follows the events of an instance, must call
 `host.EventsSocketPath(instanceID)` to find that socket rather than rebuild the name.
-The function is documented in the `core/host` package godoc.
+The instance id is required: take it from `host.ServedInstanceID(statePath, optID)`, which
+reads the id the daemon wrote into its state. An empty id names no daemon, and the function
+then returns an empty path. The function is documented in the `core/host` package godoc.
 
 Upgrade note: sockets moved from `/tmp` to the per-user directory described above.
 Clients built before this version must be updated to find the sockets through

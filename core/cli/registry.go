@@ -425,32 +425,36 @@ func Localize(messages *clitext.Messages, err error, lang i18n.Language) error {
 	if err == nil || !errors.As(err, &noticed) {
 		return err
 	}
-	text, renderErr := renderNoticeText(messages, noticed.Notice(), orEnglish(lang))
+	text, renderErr := renderNoticeText(messages, noticed.Notice(), keptBranchOf(err), orEnglish(lang))
 	if renderErr != nil {
 		return err
 	}
 	return renderedError{text: text, err: err}
 }
 
-func renderNoticeText(messages *clitext.Messages, notice contracts.Notice, lang i18n.Language) (string, error) {
+// KeptBranchError is a refusal that leaves a branch in place, which its rendering names.
+type KeptBranchError interface {
+	error
+	KeptBranch() string
+}
+
+func keptBranchOf(err error) string {
+	if kept, ok := errors.AsType[KeptBranchError](err); ok {
+		return kept.KeptBranch()
+	}
+	return ""
+}
+
+func renderNoticeText(messages *clitext.Messages, notice contracts.Notice, keptBranch string, lang i18n.Language) (string, error) {
 	text, err := contracts.NewRenderer().Render(lang, notice)
-	if err != nil || notice.Code != contracts.CodeSessionCloseDirty {
+	if err != nil || notice.Code != contracts.CodeSessionCloseDirty || keptBranch == "" {
 		return text, err
 	}
-	kept, err := messages.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: "session/" + noticeArg(notice, clitext.ParamName)})
+	kept, err := messages.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: keptBranch})
 	if err != nil {
 		return "", err
 	}
 	return text + "\n" + kept, nil
-}
-
-func noticeArg(notice contracts.Notice, name string) string {
-	for _, arg := range notice.Args {
-		if value, ok := arg.Value().(string); ok && arg.Name() == name {
-			return value
-		}
-	}
-	return ""
 }
 
 // Handler adapts a text handler to the Result form a command runs.

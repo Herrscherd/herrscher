@@ -1,0 +1,31 @@
+{
+  "home": {
+    "id": "1180000000000000001",
+    "type": "forum"
+  },
+  "workspace": "/srv/work",
+  "sessions": [
+    {
+      "id": "s_triage",
+      "incarnation": "inc_TRIAGE00000000000000000",
+      "name": "triage",
+      "channelID": "1180000000000000201",
+      "type": "thread",
+      "cmd": "claude",
+      "resumeToken": "6f1c2a10-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "s_local",
+      "incarnation": "inc_LOCAL000000000000000000",
+      "name": "local",
+      "channelID": "",
+      "type": "",
+      "cmd": "codex",
+      "gateways": [
+        "terminal"
+      ]
+    }
+  ],
+  "statusMessageID": "1180000000000000999",
+  "instanceID": "alice"
+}

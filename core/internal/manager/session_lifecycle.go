@@ -2,12 +2,15 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -19,6 +22,9 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	if !exists {
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
+	if sharedErr := h.refuseSharedFolder(sess); sharedErr != nil {
+		return contracts.Result{}, sharedErr
+	}
 	wtRoot, repoRoot, err := h.worktreesOn(sess.Host)
 	if err != nil {
 		return contracts.Result{}, err
@@ -27,18 +33,9 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		return contracts.Result{}, err
 	}
 	repo := repoFor(repoRoot, sess.Project)
-	if sess.Worktree != "" && sess.Scratch {
-		if err := wtRoot.RemoveScratch(repo, name); err != nil {
-			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
-			return contracts.Result{}, err
-		}
-	}
-	if sess.Worktree != "" && !sess.Scratch {
-		force := input.Bool("force")
-		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
-			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
-			return contracts.Result{}, newDirtyWorktreeError(name, err)
-		}
+	if err := h.removeWorkspace(ctx, wtRoot, repo, sess, input.Bool("force")); err != nil {
+		h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
+		return contracts.Result{}, err
 	}
 	note := h.tidyChannel(ctx, sess)
 	if err := h.persisted(func() error { return h.st.RemoveSession(name) }); err != nil {
@@ -52,6 +49,38 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		return contracts.DataResult(h.text(clitext.SessionClosed, clitext.Params{clitext.ParamName: name}) + note), nil
 	}
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
+}
+
+func (h *Handler) refuseSharedFolder(sess state.Session) error {
+	holder, shared := h.folderHolder(sess.Name, worktree.Placement{Host: sess.Host, Path: sess.Worktree})
+	if !shared {
+		return nil
+	}
+	english := fmt.Sprintf("close session %q: %v: %s is also the folder %s of session %q", sess.Name, ErrWorkspaceShared, sess.Worktree, holder.Worktree, holder.Name)
+	params := clitext.Params{clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamOwner: strconv.Quote(holder.Name), clitext.ParamPath: strconv.Quote(sess.Worktree), clitext.ParamFrom: strconv.Quote(holder.Worktree), clitext.ParamFile: h.st.Path()}
+	return localize(h.messages, h.currentLanguage(), english, clitext.HostErrWorkspaceShared, params, ErrWorkspaceShared)
+}
+
+func (h *Handler) removeWorkspace(ctx context.Context, worktrees Worktrees, repo string, sess state.Session, force bool) error {
+	switch {
+	case sess.Worktree == "":
+		return nil
+	case sess.Scratch:
+		return worktrees.RemoveScratchAt(repo, sess.Worktree)
+	}
+	err := worktrees.RemoveAt(ctx, repo, sess.Worktree, force)
+	if err == nil || errors.Is(err, worktree.ErrOutsideRoot) {
+		return err
+	}
+	return newDirtyWorktreeError(sess.Name, h.keptBranch(ctx, worktrees, sess.Worktree), err)
+}
+
+func (h *Handler) keptBranch(ctx context.Context, worktrees Worktrees, path string) string {
+	branch, err := worktree.SessionBranch(ctx, worktrees, path)
+	if err != nil {
+		h.log.Warn("worktree branch unreadable", "path", path, "err", err)
+	}
+	return branch
 }
 
 func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {

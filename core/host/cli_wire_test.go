@@ -28,9 +28,15 @@ func (stoppingWorktrees) Create(context.Context, string, string, string) (string
 
 func (stoppingWorktrees) PreExisting(context.Context, string, string) bool { return false }
 
+func (stoppingWorktrees) Path(string, string) string { return "" }
+
 func (stoppingWorktrees) Branch(string) string { return "" }
 
-func (stoppingWorktrees) Remove(context.Context, string, string, bool) error {
+func (stoppingWorktrees) BranchAt(context.Context, string) (string, error) {
+	return "", errStopAfterGuard
+}
+
+func (stoppingWorktrees) RemoveAt(context.Context, string, string, bool) error {
 	return errStopAfterGuard
 }
 
@@ -38,7 +44,7 @@ func (stoppingWorktrees) Scratch(string, string) (string, error) { return "", er
 
 func (stoppingWorktrees) ScratchPath(string, string) string { return "" }
 
-func (stoppingWorktrees) RemoveScratch(string, string) error { return errStopAfterGuard }
+func (stoppingWorktrees) RemoveScratchAt(string, string) error { return errStopAfterGuard }
 
 func TestWiredManagerRefusesAnUnknownAccount(t *testing.T) {
 	home := t.TempDir()

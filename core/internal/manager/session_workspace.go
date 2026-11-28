@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
+	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 const cloneTimeout = 10 * time.Minute
@@ -99,6 +102,9 @@ func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo
 	if req.shared {
 		return workspace{}, nil
 	}
+	if err := h.claimWorkspace(req, worktrees.Path(repo, req.name)); err != nil {
+		return workspace{}, err
+	}
 	reused := worktrees.PreExisting(ctx, repo, req.name)
 	path, err := worktrees.Create(ctx, repo, req.name, req.base)
 	if err != nil {
@@ -107,12 +113,35 @@ func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo
 	return workspace{path: path, reused: reused}, nil
 }
 
+func (h *Handler) claimWorkspace(req createRequest, path string) error {
+	sess, taken := h.folderHolder(req.name, worktree.Placement{Host: req.hostName, Path: path})
+	if taken {
+		english := fmt.Sprintf("session %q: %v: %s belongs to session %q", req.name, ErrWorkspaceTaken, path, sess.Name)
+		params := clitext.Params{clitext.ParamName: strconv.Quote(req.name), clitext.ParamOwner: strconv.Quote(sess.Name), clitext.ParamPath: strconv.Quote(path)}
+		return localize(h.messages, h.currentLanguage(), english, clitext.HostErrWorkspaceTaken, params, ErrWorkspaceTaken)
+	}
+	return nil
+}
+
+func (h *Handler) folderHolder(name string, place worktree.Placement) (state.Session, bool) {
+	sessions := h.st.SnapshotSessions()
+	for idx := range sessions {
+		if sessions[idx].Name != name && place.Same(worktree.Placement{Host: sessions[idx].Host, Path: sessions[idx].Worktree}) {
+			return sessions[idx], true
+		}
+	}
+	return state.Session{}, false
+}
+
 func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktrees Worktrees, repo string, space *workspace) error {
 	agentName := req.runtime.agent
 	if req.shared {
 		return &SharedAgentError{Agent: agentName}
 	}
 	if space.path == "" {
+		if err := h.claimWorkspace(*req, worktrees.ScratchPath(repo, req.name)); err != nil {
+			return err
+		}
 		if _, statErr := os.Stat(worktrees.ScratchPath(repo, req.name)); statErr == nil {
 			space.reused = true
 		}
@@ -145,12 +174,12 @@ func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, re
 		return
 	}
 	if space.scratch {
-		if rmErr := worktrees.RemoveScratch(repo, name); rmErr != nil {
+		if rmErr := worktrees.RemoveScratchAt(repo, space.path); rmErr != nil {
 			h.log.Warn("scratch rollback failed", "session", name, "err", rmErr)
 		}
 		return
 	}
-	if rmErr := worktrees.Remove(context.WithoutCancel(ctx), repo, name, true); rmErr != nil {
+	if rmErr := worktrees.RemoveAt(context.WithoutCancel(ctx), repo, space.path, true); rmErr != nil {
 		h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
 	}
 }

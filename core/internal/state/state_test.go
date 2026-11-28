@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -28,9 +29,31 @@ func TestLoadStateBackfillsSessionID(t *testing.T) {
 	}
 }
 
+func TestLoadStateLeavesAnOldFormatFileAsItWas(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	legacy := []byte(`{"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess, _ := loaded.FindSession("alpha"); sess.Incarnation == "" {
+		t.Fatal("session alpha has no incarnation in memory")
+	}
+	onDisk, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(onDisk, legacy) {
+		t.Fatalf("loading a format 0 file rewrote it:\n%s", onDisk)
+	}
+}
+
 func TestLoadStateBackfillsAndPersistsSessionIncarnation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
-	legacy := `{"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`
+	legacy := `{"format":1,"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`
 	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +210,6 @@ func TestQualifiedName(t *testing.T) {
 		want       string
 	}{
 		{"namespaced", "alice", "foo", "alice__foo"},
-		{"legacy-empty-id", "", "foo", "foo"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -227,21 +249,6 @@ func TestSetWorkspacePersists(t *testing.T) {
 	}
 	if reloaded.Workspace != "/home/u/dev" {
 		t.Fatalf("workspace not persisted: %q", reloaded.Workspace)
-	}
-}
-
-func TestWorkspaceRootFallsBack(t *testing.T) {
-	s := NewState(t.TempDir() + "/s.json")
-	if got := s.WorkspaceRoot(); got != "" {
-		t.Fatalf("empty state should give empty root, got %q", got)
-	}
-	s.Repo = "/legacy/repo"
-	if got := s.WorkspaceRoot(); got != "/legacy/repo" {
-		t.Fatalf("should fall back to Repo, got %q", got)
-	}
-	must(t, s.SetWorkspace("/ws"))
-	if got := s.WorkspaceRoot(); got != "/ws" {
-		t.Fatalf("Workspace should win, got %q", got)
 	}
 }
 
@@ -351,25 +358,6 @@ func TestSetBudgetWritesAllFieldsAndPersists(t *testing.T) {
 
 	if err := st.SetBudget("ghost", 1, 1, 1, 1, "cost"); err != nil {
 		t.Fatalf("SetBudget on unknown session should be a no-op, got err: %v", err)
-	}
-}
-
-func TestIsLegacy(t *testing.T) {
-	cases := []struct {
-		name string
-		sess Session
-		want bool
-	}{
-		{"channel, no stored set", Session{ChannelID: "c1"}, true},
-		{"channel with stored set", Session{ChannelID: "c1", Gateways: []string{"chat"}}, false},
-		{"no channel", Session{}, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.sess.IsLegacy(); got != tc.want {
-				t.Errorf("IsLegacy() = %v, want %v", got, tc.want)
-			}
-		})
 	}
 }
 

@@ -17,7 +17,9 @@ func unwritableState(t *testing.T) *state.State {
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return state.NewState(filepath.Join(blocker, "state.json"))
+	st := state.NewState(filepath.Join(blocker, "state.json"))
+	st.InstanceID = testInstance
+	return st
 }
 
 func TestSessionCreateRollsBackWhenPersistFails(t *testing.T) {
@@ -26,8 +28,8 @@ func TestSessionCreateRollsBackWhenPersistFails(t *testing.T) {
 		home      state.HomeRef
 		channelID string
 	}{
-		{name: "category", home: state.HomeRef{ID: "cat1", Type: "category"}, channelID: "new-demo"},
-		{name: "forum", home: state.HomeRef{ID: "f1", Type: "forum"}, channelID: "post-demo"},
+		{name: "category", home: state.HomeRef{ID: "cat1", Type: "category"}, channelID: "new-inst__demo"},
+		{name: "forum", home: state.HomeRef{ID: "f1", Type: "forum"}, channelID: "post-inst__demo"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,7 +43,7 @@ func TestSessionCreateRollsBackWhenPersistFails(t *testing.T) {
 			if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
 				t.Fatal("expected a persist error")
 			}
-			if len(wt.removed) != 1 || wt.removed[0] != "demo" {
+			if len(wt.removed) != 1 || wt.removed[0] != wt.path {
 				t.Fatalf("worktree must be rolled back, removed = %+v", wt.removed)
 			}
 			if len(d.archived) != 1 || d.archived[0] != tc.channelID {

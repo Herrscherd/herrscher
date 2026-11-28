@@ -63,8 +63,8 @@ func TestManagerNoticesCarryTheirCodeArgsAndEnglishText(t *testing.T) {
 		},
 		{
 			name:     "dirty worktree close",
-			err:      newDirtyWorktreeError("s1", errors.New("worktree has uncommitted changes")),
-			text:     "worktree has uncommitted changes; commit, or close with force:true to discard (branch session/s1 is kept)",
+			err:      newDirtyWorktreeError("s1", "session/inst/s1", errors.New("worktree has uncommitted changes")),
+			text:     "worktree has uncommitted changes; commit, or close with force:true to discard (branch session/inst/s1 is kept)",
 			wantCode: contracts.CodeSessionCloseDirty,
 			wantArgs: []string{"Name/1=s1"},
 		},

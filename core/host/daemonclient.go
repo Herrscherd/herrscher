@@ -74,15 +74,10 @@ func isDirectlyUnder(path, root string) bool {
 	return rootErr == nil && parentErr == nil && realParent == realRoot
 }
 
-// ServedInstanceID reports the instance id the daemon serving statePath actually
-// namespaces its sockets with, so a client can find them. The daemon freezes that
-// id into the state file at boot, resolving it from the owner when no --instance
-// was passed, and staying legacy (empty) when pre-existing sessions would be
-// orphaned. A client that only knows its own flag therefore guesses wrong every
-// time the two disagree, and dials a socket path nothing listens on.
-//
-// The stored id wins; optID is only the fallback for a state file that cannot be
-// read (no daemon has booted here yet, in which case nothing is listening either).
+// ServedInstanceID reports the instance id the daemon serving statePath froze
+// into its state file, so a client finds the sockets it listens on. optID is
+// only the fallback for a state file that holds no id yet, in which case no
+// daemon has booted on it and nothing is listening either.
 func ServedInstanceID(statePath, optID string) string {
 	hostState, err := state.LoadState(statePath)
 	if err != nil {
@@ -101,7 +96,7 @@ func ServedInstanceID(statePath, optID string) string {
 // than silently acting on a second copy of the state.
 func DaemonDispatch(ctx context.Context, messages *Messages, layout RuntimeLayout, instanceID string, argv []string) (string, error) {
 	socket := CommandSocketPathIn(layout, instanceID)
-	out, handled, err := dispatchLiveCommand(ctx, messages.owner, layout, socket, argv)
+	out, handled, err := dispatchLiveCommand(ctx, messages.owner, layout, servedSocket(layout, instanceID, CommandSocketPathIn), argv)
 	if !handled {
 		return "", &daemonNotRunningError{Socket: socket}
 	}
@@ -149,12 +144,15 @@ func SubscribeSessionEvents(ctx context.Context, messages *Messages, layout Runt
 	if err != nil {
 		return nil, err
 	}
-	return subscribeAt(ctx, messages.owner, layout, EventsSocketPathIn(layout, instanceID), append(line, '\n'))
+	return subscribeAt(ctx, messages.owner, layout, servedSocket(layout, instanceID, EventsSocketPathIn), append(line, '\n'))
 }
 
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")
 
 func subscribeAt(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string, cursor []byte) (<-chan DaemonEvent, error) {
+	if path == "" {
+		return nil, wrapHost(messages, errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{pathParam: path})
+	}
 	if err := ensureRuntimeDir(messages, layout, path); err != nil {
 		return nil, err
 	}

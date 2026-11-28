@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -124,13 +125,21 @@ func (f *fakeWT) Create(_ context.Context, repo, name, base string) (string, err
 	return f.path, nil
 }
 
+func (f *fakeWT) Path(repo, name string) string {
+	return filepath.Join(repo, ".herrscher-sessions", "inst", name)
+}
+
 func (f *fakeWT) PreExisting(context.Context, string, string) bool { return f.preExisting }
-func (f *fakeWT) Branch(name string) string                        { return "session/" + name }
-func (f *fakeWT) Remove(_ context.Context, _, name string, force bool) error {
+func (f *fakeWT) Branch(name string) string                        { return "session/inst/" + name }
+func (f *fakeWT) BranchAt(context.Context, string) (string, error) {
+	return "", errors.New("no git in the fake")
+}
+
+func (f *fakeWT) RemoveAt(_ context.Context, _, path string, force bool) error {
 	if f.removeErr != nil && !force {
 		return f.removeErr
 	}
-	f.removed = append(f.removed, name)
+	f.removed = append(f.removed, path)
 	return nil
 }
 
@@ -153,7 +162,8 @@ func (f *fakeWT) ScratchPath(root, name string) string {
 	return filepath.Join(root, ".herrscher-scratch", name)
 }
 
-func (f *fakeWT) RemoveScratch(root, name string) error {
+func (f *fakeWT) RemoveScratchAt(root, path string) error {
+	name := filepath.Base(path)
 	f.removedScrap = append(f.removedScrap, name)
 	return os.RemoveAll(f.ScratchPath(root, name))
 }
@@ -186,6 +196,8 @@ func (f *fakeUpdater) Build(_ context.Context, pull bool) (string, error) {
 }
 func (f *fakeUpdater) Restart(_ context.Context) error { f.restarts++; return f.restartErr }
 
+const testInstance = "inst"
+
 func newTestHandler(t *testing.T, homeType string) (*Handler, *fakeChannelAdmin, *fakeSup, *fakeWT, *fakeForge, *state.State) {
 	t.Helper()
 	h, _, d, sup, wt, fg, st := newTestHandlerWithUpdater(t, homeType)
@@ -200,6 +212,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	fg := &fakeForge{}
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")
+	st.InstanceID = testInstance
 	agents := agent.NewStore(t.TempDir())
 	return NewHandler(clitext.NewMessages(), d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}, nil, nil), up, d, sup, wt, fg, st
 }

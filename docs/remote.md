@@ -32,6 +32,24 @@ paths while the new daemon listens in the new directory. Restart each remote ses
 forward the new paths. Until then its bridge cannot reach the daemon, and the
 session shows no answer.
 
+The state migration of a daemon upgrade (see
+[sessions](sessions.md#the-state-file-and-its-migration)) can give the daemon an
+instance id it did not have, and the forwarded socket paths carry that id. The
+daemon starts each remote runner again, with the new paths, once the migration
+is done. A runner from before the upgrade that is still alive on the remote
+machine keeps dialling the old paths and gets no answer: restart that session
+once. A
+remote session still in the layout without an instance id is migrated in the
+state only, since its worktree is on the other machine and the migration does not
+reach it: the state points at the new place, and `serve` prints the commands to
+run on that host (`mkdir -p` of the new parent, `git worktree move`, then
+`git branch -m session/<name> session/<id>/<name>`, or `mv` for a scratch
+directory). The daemon starts the runner again as soon as the migration is done,
+so until the commands are run the runner does not find its folder: the session
+fails to start, the daemon logs a warning and keeps retrying with a delay, and
+the session starts once its folder is in place. Nothing is posted to its
+channel meanwhile. Keep the old branch name if it carries an open pull request.
+
 Three refusals replace a blind start: a host that was never provisioned, a host
 running a different build than this daemon would ship, and `--clone` combined
 with `--host`, since the forge client runs here and would clone onto the wrong

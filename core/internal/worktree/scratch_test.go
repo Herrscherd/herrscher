@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestScratchIsIdempotentAndRemovable(t *testing.T) {
@@ -53,5 +55,21 @@ func TestScratchRefusesNamesThatWouldEscapeTheRoot(t *testing.T) {
 	}
 	if _, err := w.Scratch("", "demo"); err == nil {
 		t.Fatal("Scratch with no root should be refused")
+	}
+}
+
+func TestRemoveScratchAtRefusesARecordedPathOutsideTheScratchRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "victim")
+	if err := os.Mkdir(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w := NewWorktreer(clitext.NewMessages(), "inst")
+
+	if err := w.RemoveScratchAt(root, outside); err == nil {
+		t.Fatal("a recorded path outside the scratch root must be refused")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("the refused removal must leave %s in place: %v", outside, err)
 	}
 }

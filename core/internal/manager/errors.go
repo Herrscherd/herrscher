@@ -11,6 +11,10 @@ import (
 var (
 	// ErrCloneUnsupported is returned when a clone is requested on a host that cannot clone.
 	ErrCloneUnsupported = clitext.SentinelError("clone is not supported on this host: create the project locally first, then create the session with --host")
+	// ErrWorkspaceTaken is returned when a new session's folder is still the recorded folder of another session.
+	ErrWorkspaceTaken = clitext.SentinelError("the session folder is still the folder of another session")
+	// ErrWorkspaceShared is returned when the folder of a session to close is also the recorded folder of another session.
+	ErrWorkspaceShared = clitext.SentinelError("the session folder is also the folder of another session")
 	// ErrConflictingChannel is returned when channel_id and under are both given.
 	ErrConflictingChannel = clitext.SentinelError("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
 	// ErrConflictingPlacement is returned when terminal_only and under are both given.
@@ -219,17 +223,22 @@ func restartLostError(messages *clitext.Messages, lang i18n.Language, name strin
 	return localize(messages, lang, english, clitext.SessionSwitchRestartLost, params, restartErr, rollbackErr)
 }
 
-func newDirtyWorktreeError(name string, cause error) error {
-	return &dirtyWorktreeError{name: name, cause: cause}
+func newDirtyWorktreeError(name, branch string, cause error) error {
+	return &dirtyWorktreeError{name: name, branch: branch, cause: cause}
 }
 
 type dirtyWorktreeError struct {
-	name  string
-	cause error
+	name   string
+	branch string
+	cause  error
 }
 
 func (e *dirtyWorktreeError) Error() string {
-	return fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", e.cause, e.name)
+	return fmt.Sprintf("%v; commit, or close with force:true to discard (branch %s is kept)", e.cause, e.branch)
+}
+
+func (e *dirtyWorktreeError) KeptBranch() string {
+	return e.branch
 }
 
 func (e *dirtyWorktreeError) Unwrap() error {

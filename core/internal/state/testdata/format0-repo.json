@@ -1,0 +1,23 @@
+{
+  "home": {
+    "id": "1180000000000000001",
+    "type": "category"
+  },
+  "repo": "/srv/work/herrscher",
+  "sessions": [
+    {
+      "id": "s_fix-login",
+      "incarnation": "inc_FIXLOGIN0000000000000000",
+      "name": "fix-login",
+      "channelID": "1180000000000000101",
+      "type": "channel",
+      "cmd": "claude",
+      "worktree": "/srv/work/herrscher/.herrscher-sessions/alice/fix-login",
+      "dir": "/srv/work/herrscher/.herrscher-sessions/alice/fix-login",
+      "gateways": [
+        "chat"
+      ]
+    }
+  ],
+  "instanceID": "alice"
+}

@@ -18,9 +18,6 @@ func (w *Worktreer) ScratchPath(root, name string) string {
 }
 
 func scratchPathIn(root, instanceID, name string) string {
-	if instanceID == "" {
-		return filepath.Join(root, scratchDir, name)
-	}
 	return filepath.Join(root, scratchDir, instanceID, name)
 }
 

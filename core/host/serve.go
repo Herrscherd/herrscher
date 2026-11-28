@@ -18,7 +18,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/forgecreds"
 	"github.com/Herrscherd/herrscher/core/internal/atomicfile"
 	"github.com/Herrscherd/herrscher/core/internal/health"
-	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -89,9 +88,14 @@ type Options struct {
 	ContextLimits  map[string]int
 
 	// InstanceID is the explicit per-daemon namespace (-instance flag /
-	// HERRSCHER_INSTANCE_ID). Empty falls back to HERRSCHER_OWNER_ID, then legacy
-	// mode.
+	// HERRSCHER_INSTANCE_ID). Once the state holds an id, that id wins, and a
+	// different value here, or a different id derived from the owner, refuses
+	// the start. On a state without one, empty takes the id from
+	// HERRSCHER_OWNER_ID, else serve generates one at its first start.
 	InstanceID string
+
+	// OwnsState marks an operator registry built under the state lock, standing in for serve: it migrates an outdated state and picks and writes the instance id as serve does.
+	OwnsState bool
 
 	// Declarative config.json defaults. Owner is the per-daemon instance-id
 	// fallback (env HERRSCHER_OWNER_ID takes precedence, resolved by the caller).
@@ -165,31 +169,6 @@ func DefaultStatePath() string {
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
-func resolveInstanceID(messages *hostMessages, hostState *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
-	resolved, err := instanceid.Resolve(optID, ownerID)
-	if err != nil {
-		return "", err
-	}
-	if hostState.InstanceID != "" {
-		if resolved != "" && resolved != hostState.InstanceID {
-			return "", &instanceIDMismatchError{messages: messages, Have: hostState.InstanceID, Want: resolved}
-		}
-		return hostState.InstanceID, nil
-	}
-	if resolved == "" {
-		return "", nil
-	}
-	if len(hostState.SnapshotSessions()) > 0 {
-		log.Warn("legacy sessions present; staying in non-namespaced mode",
-			"sessions", len(hostState.SnapshotSessions()))
-		return "", nil
-	}
-	if err := hostState.SetInstanceID(resolved); err != nil {
-		return "", wrapHost(messages, err, "serve.instance_persist", nil)
-	}
-	return resolved, nil
-}
-
 func (options Options) operatorLanguage() i18n.Language {
 	return options.languageSource()()
 }
@@ -245,20 +224,41 @@ func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) 
 	}
 }
 
-func loadHubState(opts Options) (*state.State, error) {
+func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, opts Options) (*state.State, instanceClaim, error) {
 	logCleanup(atomicfile.Sweep(opts.StatePath))
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
-		return nil, err
+		return nil, instanceClaim{}, err
+	}
+	claim, err := migrateHubStateClaimed(ctx, messages, announcer, store, hubMigrationInputs(ctx, messages, opts))
+	if err != nil {
+		return nil, instanceClaim{}, err
 	}
 	sweepTranscriptStaging(filepath.Dir(opts.StatePath))
+	applyHubDefaults(store, opts)
+	return store, claim, nil
+}
+
+func hubMigrationInputs(ctx context.Context, messages *hostMessages, opts Options) migrationInputs {
+	return migrationInputs{
+		optID:           opts.InstanceID,
+		ownerID:         opts.Owner,
+		defaultGateways: opts.DefaultGateways,
+		configWorkspace: opts.Workspace,
+		forge:           forgeCredentials(opts.Forge),
+		claim: func(instID string) (func(), error) {
+			return claimInstance(ctx, messages, opts.Runtime, instID)
+		},
+	}
+}
+
+func applyHubDefaults(store *state.State, opts Options) {
 	var home *state.HomeRef
 	if opts.Home != nil {
 		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}
 	}
 	store.ApplyDefaults(home, opts.Workspace, opts.Source)
 	seedTerminalHome(store, opts.ForegroundBound)
-	return store, nil
 }
 
 func newHubSupervisor(ctx context.Context, self string, layout RuntimeLayout, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
@@ -445,16 +445,6 @@ func firstReader(gws []Deps) contracts.ChannelReader {
 		if dep.Reader != nil {
 			return dep.Reader
 		}
-	}
-	return nil
-}
-
-func effectiveKinds(all []Deps, sess state.Session) []string {
-	if kinds := sess.BoundGateways(); len(kinds) > 0 {
-		return kinds
-	}
-	if sess.IsLegacy() {
-		return nonTerminalKinds(all)
 	}
 	return nil
 }

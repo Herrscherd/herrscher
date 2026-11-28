@@ -19,7 +19,7 @@ func TestSessionCreateUsesGatewayChannelRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, d.ChannelRef("new-demo")) {
+	if !strings.Contains(out, d.ChannelRef("new-inst__demo")) {
 		t.Fatalf("create output %q must render the gateway channel ref", out)
 	}
 }
@@ -32,7 +32,7 @@ func TestSessionCreateText(t *testing.T) {
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
 	}
-	if len(d.created) != 1 || d.created[0] != "demo" {
+	if len(d.created) != 1 || d.created[0] != "inst__demo" {
 		t.Fatalf("expected channel created: %+v", d.created)
 	}
 	if len(wt.created) != 1 {
@@ -239,7 +239,7 @@ func TestSessionCreateForum(t *testing.T) {
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "topic")); err != nil {
 		t.Fatal(err)
 	}
-	if len(d.created) != 1 || d.created[0] != "forum:topic" {
+	if len(d.created) != 1 || d.created[0] != "forum:inst__topic" {
 		t.Fatalf("expected forum post: %+v", d.created)
 	}
 	if len(sup.started) != 1 {
@@ -300,7 +300,7 @@ func TestSessionCreateUnderAForum(t *testing.T) {
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "post", "under", "a-forum", "shared", "true")); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if len(d.created) != 1 || d.created[0] != "forum:post" {
+	if len(d.created) != 1 || d.created[0] != "forum:inst__post" {
 		t.Fatalf("expected a forum post, got %+v", d.created)
 	}
 	if sess, ok := st.FindSession("post"); !ok || sess.Type != "forum" {

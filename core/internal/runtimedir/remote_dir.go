@@ -5,6 +5,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
 // RemoteDirScript is the shell that prepares the private directory of the user on
@@ -23,7 +25,7 @@ func IsRemoteDir(dir string) bool {
 }
 
 func remoteDirScript(roots searchRoots) string {
-	return fmt.Sprintf(`uid=$(id -u) && run=%[1]s/$uid && if [ -d "$run" ] && [ ! -L "$run" ] && [ -O "$run" ] && [ "$(ls -ld "$run" | cut -c1-10)" = drwx------ ]; then dir=$run/herrscher; else dir=%[2]s/herrscher-$uid; fi && mkdir -m 0700 -p "$dir" && test -d "$dir" && test ! -L "$dir" && test -O "$dir" && test "$(ls -ld "$dir" | cut -c1-10)" = drwx------ && printf '%%s\n' "$dir"`, shellQuote(roots.runUser), shellQuote(roots.tmp))
+	return fmt.Sprintf(`uid=$(id -u) && run=%[1]s/$uid && if [ -d "$run" ] && [ ! -L "$run" ] && [ -O "$run" ] && [ "$(ls -ld "$run" | cut -c1-10)" = drwx------ ]; then dir=$run/herrscher; else dir=%[2]s/herrscher-$uid; fi && mkdir -m 0700 -p "$dir" && test -d "$dir" && test ! -L "$dir" && test -O "$dir" && test "$(ls -ld "$dir" | cut -c1-10)" = drwx------ && printf '%%s\n' "$dir"`, shellquote.Quote(roots.runUser), shellquote.Quote(roots.tmp))
 }
 
 func isRemoteDir(dir string, roots searchRoots) bool {
@@ -33,8 +35,4 @@ func isRemoteDir(dir string, roots searchRoots) bool {
 	parent := path.Dir(dir)
 	_, uidErr := strconv.Atoi(path.Base(parent))
 	return path.Base(dir) == runUserDirName && uidErr == nil && path.Dir(parent) == roots.runUser
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

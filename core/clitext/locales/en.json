@@ -3198,6 +3198,16 @@
     "other": "worktree: {{.Err}}"
   },
   {
+    "id": "cli.host.err.workspace_taken",
+    "description": "Reply of a host command, err workspace taken by another session",
+    "other": "session {{.Name}} cannot be created: {{.Path}} is still the folder of session {{.Owner}}, which kept it when it was renamed; pick another name, or close {{.Owner}} first"
+  },
+  {
+    "id": "cli.host.err.workspace_shared",
+    "description": "Reply of a host command, err the folder of the session to close is also the folder of another session",
+    "other": "cannot close session {{.Name}}: sessions {{.Name}} and {{.Owner}} record the same folder: {{.Path}} and {{.From}}, and removing it would delete the folder {{.Owner}} works in; nothing was stopped or removed. Keep the folder with one of them: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then start herrscher serve again"
+  },
+  {
     "id": "cli.host.err.provision_agent",
     "description": "Reply of a host command, err provision agent",
     "other": "provision agent \"{{.Agent}}\": {{.Err}}"
@@ -3636,6 +3646,16 @@
     "id": "cli.worktree.scratch_remove_refused",
     "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_remove_refused)",
     "other": "refusing a scratch directory: to remove session {{.Name}} under root {{.Root}}"
+  },
+  {
+    "id": "cli.worktree.outside_root",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root)",
+    "other": "refusing to remove {{.Path}}: it is not under {{.Root}}, nothing was removed; it may hold work, so move or delete it yourself, then close the session with force:true"
+  },
+  {
+    "id": "cli.worktree.outside_root_gone",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root_gone)",
+    "other": "refusing to remove {{.Path}}: it is not under {{.Root}} and no longer exists, nothing was removed; close the session with force:true to drop it"
   },
   {
     "id": "cli.worktree.scratch_create",
@@ -5980,6 +6000,259 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Check conclusion word: completed without a conclusion the plugin can name",
     "other": "other"
+  },
+  {
+    "id": "cli.worktree.relocate_target_exists",
+    "description": "State migration refusal: the worktree target already exists",
+    "other": "session {{.Name}}: {{.Path}} already exists, the migration cannot move {{.From}} there; move or delete {{.Path}} by hand, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_branch_exists",
+    "description": "State migration refusal: the target branch already exists",
+    "other": "session {{.Name}}: branch {{.Branch}} already exists, the migration cannot rename {{.From}} to it; rename or delete {{.Branch}} by hand, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_upstream",
+    "description": "State migration refusal: the branch tracks a remote branch",
+    "other": "session {{.Name}}: branch {{.Branch}} tracks a remote branch, renaming it would cut its pull request off; merge or close the pull request, drop the tracking with {{.Command}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_failed",
+    "description": "A move failed during the state migration",
+    "other": "session {{.Name}}: the move failed: {{.Err}} {{.Output}}"
+  },
+  {
+    "id": "cli.worktree.relocate_name_is_instance",
+    "description": "State migration refusal: a session name is the instance id",
+    "other": "session {{.Name}}: its name, or the folder {{.Path}} it lives in, is the instance id {{.Value}}, and the instance layout would put every other session inside it; set HERRSCHER_INSTANCE_ID to another id, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_remote_branch",
+    "description": "State migration refusal: the branch was pushed to a remote",
+    "other": "session {{.Name}}: branch {{.Branch}} is on remote {{.Target}}, and renaming it would leave its pull request on the old branch; once the pull request is merged or closed, delete the branch there with {{.Command}} (or {{.Recovery}} if it is already gone there), then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_remote_unreachable",
+    "description": "State migration refusal: a remote could not be asked about a pull request branch",
+    "other": "session {{.Name}}: branch {{.Branch}} carries a pull request, and remote {{.Target}} could not be asked whether it still holds it: {{.Err}} {{.Output}}; run herrscher serve again once the remote answers, or, if the pull request is merged or closed, move the session yourself, which needs no network: {{.Command}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_locked",
+    "description": "State migration refusal: git keeps the worktree to move locked",
+    "other": "session {{.Name}}: git keeps its worktree {{.Path}} locked (git worktree lock), and git refuses to move a locked worktree or to drop the entry of a gone one; nothing was moved. If no other tool still needs that lock, lift it with {{.Command}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_submodules",
+    "description": "State migration refusal: the worktree to move holds submodules",
+    "other": "session {{.Name}}: its worktree {{.Path}} holds submodules, and git worktree move refuses to move a worktree that does; nothing was moved. Move it yourself: {{.Command}}. The worktree moves whole, with what its submodules ignore, and nothing is deinitialized, so the submodule settings of the repository stay as they are; the last command points each submodule, nested ones included, back at its git folder, which the move leaves behind. Then run herrscher serve again: it finds the worktree at its new place and goes on"
+  },
+  {
+    "id": "cli.worktree.relocate_branch_blocked",
+    "description": "State migration refusal: a branch stands where the branch folder of the instance must go",
+    "other": "session {{.Name}}: branch {{.Branch}} exists, and git cannot create {{.Target}} while it does, since one branch name cannot also be a folder of branch names; nothing was moved and no id was written. Rename it with {{.Command}}, or choose another instance id with HERRSCHER_INSTANCE_ID, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_instance_folder",
+    "description": "State migration refusal: the folder of the instance id already holds something the instance does not own",
+    "other": "session {{.Name}}: {{.Path}}, the folder the instance id {{.Value}} gives the sessions of this repository, already exists as a git worktree, a .git entry or something that is not a folder, and moving the session inside it would put its work in there, where removing that worktree would delete it; nothing was moved and no id was written. Move {{.Path}} out of the way, or set HERRSCHER_INSTANCE_ID to another id, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_foreign_repository",
+    "description": "State migration refusal: the worktree to move belongs to another repository than the one it sits in",
+    "other": "session {{.Name}}: the worktree {{.Path}} belongs to the repository {{.Target}}, not to {{.Repo}} it sits in (a copy of the repository keeps the links of the original), so git cannot move it from {{.Repo}}; nothing was moved and no id was written. If the folder should belong to {{.Repo}}, link only this worktree there with {{.Command}}, which leaves the other worktrees of both repositories as they are; otherwise move the folder out of {{.Repo}}. Then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_head_gone",
+    "description": "State migration refusal: the moved worktree is checked out on a branch that no longer exists",
+    "other": "session {{.Name}}: its worktree {{.Path}} is checked out on {{.Tip}}, a branch that no longer exists, as a branch rename stopped halfway leaves it; nothing more was moved. If {{.Branch}} holds the work of the session, point the worktree at it with {{.Command}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_foreign_unlinked",
+    "description": "State migration refusal: the worktree to move belongs to another repository, and the repository it sits in keeps no entry for it",
+    "other": "session {{.Name}}: the worktree {{.Path}} belongs to the repository {{.Target}}, not to {{.Repo}} it sits in, and {{.Repo}} keeps no worktree entry it could be linked to, so git cannot move it from {{.Repo}}; nothing was moved and no id was written. Move the folder out of {{.Repo}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_branches_gone",
+    "description": "State migration refusal: the moved worktree is checked out on a branch that no longer exists, and the other name of the session branch is gone too",
+    "other": "session {{.Name}}: its worktree {{.Path}} is checked out on {{.Tip}}, a branch that no longer exists, and {{.Branch}}, the other name of the session branch, does not exist either, so no branch of this repository is known to hold the work of the session; nothing more was moved. Point the worktree at the branch that holds that work with git symbolic-ref HEAD, or move the folder {{.Path}} out of the repository, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.instance_invalid",
+    "description": "Refusal of the worktree verb: the instance id the driving daemon passed is empty or invalid",
+    "other": "worktree: --instance {{.Value}} is not a valid instance id (lowercase letters, digits and dashes, 16 characters at most, not starting with a dash), and an empty one would build the paths and branches of a daemon without an instance id; the daemon driving this host is older than this herrscher, so upgrade it, then try again"
+  },
+  {
+    "id": "cli.migration.started",
+    "description": "Notice that a state migration starts",
+    "other": "herrscher: migrating state {{.Path}} from format {{.From}} to format {{.To}}; the old file is kept in {{.File}}"
+  },
+  {
+    "id": "cli.migration.done",
+    "description": "Notice that a state migration finished",
+    "other": "herrscher: state {{.Path}} migrated to format {{.To}}"
+  },
+  {
+    "id": "cli.migration.instance_configured",
+    "description": "Migration: instance id taken from the configuration",
+    "other": "herrscher: migration: instance id {{.Value}} taken from HERRSCHER_INSTANCE_ID or HERRSCHER_OWNER_ID, written into the state"
+  },
+  {
+    "id": "cli.migration.instance_generated",
+    "description": "Migration: instance id generated for lack of configuration",
+    "other": "herrscher: migration: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"
+  },
+  {
+    "id": "cli.migration.workspace_from_repo",
+    "description": "Migration: the old repo field becomes the workspace",
+    "other": "herrscher: migration: the old repo field {{.Path}} becomes the workspace"
+  },
+  {
+    "id": "cli.migration.repo_dropped",
+    "description": "Migration: the old repo field is dropped since a workspace already applies",
+    "other": "herrscher: migration: the old repo field {{.Path}} is dropped, a workspace already applies"
+  },
+  {
+    "id": "cli.migration.gateways_bound",
+    "description": "Migration: a session gets the gateway binding it was using",
+    "other": "herrscher: migration: session {{.Name}} bound to gateways {{.Kind}}"
+  },
+  {
+    "id": "cli.migration.worktree_relocated",
+    "description": "Migration: a session worktree or directory moves",
+    "other": "herrscher: migration: session {{.Name}}, directory {{.From}} moved to {{.To}}"
+  },
+  {
+    "id": "cli.migration.branch_renamed",
+    "description": "Migration: a session branch is renamed",
+    "other": "herrscher: migration: session {{.Name}}, branch {{.From}} renamed {{.To}}"
+  },
+  {
+    "id": "cli.migration.newer_format",
+    "description": "Refusal to start on a state written by a newer build",
+    "other": "state {{.Path}} has format {{.Have}}, this build reads up to format {{.Want}} only: run a herrscher build that reads format {{.Have}}. Going back to an older build is not supported, and putting back a *.bak copy left next to the file would point sessions at folders, branches and checkpoint refs the migration moved (see Rollback in docs/sessions.md)"
+  },
+  {
+    "id": "cli.migration.pending",
+    "description": "Refusal of a command on a state not migrated yet",
+    "other": "state {{.Path}} has an old format: restart the daemon so this build migrates it (stop the herrscher serve still running, then run herrscher serve), then run this command again"
+  },
+  {
+    "id": "cli.migration.no_gateway",
+    "description": "Migration refusal: no channel gateway to bind",
+    "other": "session {{.Name}}: it has a channel but no bound gateway, and no channel gateway is built; run herrscher serve with the gateway of that channel configured, the migration will bind it"
+  },
+  {
+    "id": "cli.migration.remote_worktree",
+    "description": "Migration notice: a remote session worktree the operator moves by hand",
+    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, and until these commands are run on {{.Host}} the session fails to start there and keeps retrying: mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (keep the branch name if it carries an open pull request)"
+  },
+  {
+    "id": "cli.migration.remote_scratch",
+    "description": "Migration notice: a remote scratch directory the operator moves by hand",
+    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, and until these commands are run on {{.Host}} the session fails to start there and keeps retrying: mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
+  },
+  {
+    "id": "cli.migration.conversation_reset",
+    "description": "Migration notice: a moved session starts a new conversation",
+    "other": "herrscher: migration: session {{.Name}} now works in {{.Path}}; a backend that files its conversations by folder (Claude Code does) will not find the old one there, so its next turn starts a new conversation"
+  },
+  {
+    "id": "cli.migration.backup_failed",
+    "description": "Migration refusal: the copy of the old state could not be written",
+    "other": "the copy of the old state could not be written next to {{.Path}} ({{.Err}}), so nothing was moved; free some space or fix the rights on its folder, then run herrscher serve again"
+  },
+  {
+    "id": "cli.migration.refused",
+    "description": "State migration refusal, nothing is written",
+    "other": "state migration refused, the state was not rewritten: {{.Err}}"
+  },
+  {
+    "id": "cli.migration.checkpoints_rekeyed",
+    "description": "Migration: the checkpoint refs of a session move to its stable key (Count selects the plural form)",
+    "one": "herrscher: migration: session {{.Name}}, 1 checkpoint ref moved from {{.From}} to {{.To}}",
+    "other": "herrscher: migration: session {{.Name}}, {{.Count}} checkpoint refs moved from {{.From}} to {{.To}}"
+  },
+  {
+    "id": "cli.migration.undo_rekeyed",
+    "description": "Migration: the undo point of a session moves to its stable key",
+    "other": "herrscher: migration: session {{.Name}}, undo point moved from {{.From}} to {{.To}}"
+  },
+  {
+    "id": "cli.migration.rekey_finished",
+    "description": "Migration: refs already at their new name lose their old name, finishing an interrupted migration (Count selects the plural form)",
+    "one": "herrscher: migration: session {{.Name}}, 1 checkpoint ref was already at its new name, its old name is deleted, which finishes an interrupted migration",
+    "other": "herrscher: migration: session {{.Name}}, {{.Count}} checkpoint refs were already at their new name, their old names are deleted, which finishes an interrupted migration"
+  },
+  {
+    "id": "cli.migration.checkpoints_renumbered",
+    "description": "Migration: checkpoint refs filed under the session name again are filed after the last index of its stable key (Count selects the plural form)",
+    "one": "herrscher: migration: session {{.Name}}, 1 checkpoint ref filed from {{.From}} under {{.To}} from index {{.Start}}, after the checkpoints already there, since an older build filed it under the name again",
+    "other": "herrscher: migration: session {{.Name}}, {{.Count}} checkpoint refs filed from {{.From}} under {{.To}} from index {{.Start}}, after the checkpoints already there, since an older build filed them under the name again"
+  },
+  {
+    "id": "cli.migration.undo_replaced",
+    "description": "Migration: the undo point filed under the session name again replaces the one of its stable key",
+    "other": "herrscher: migration: session {{.Name}}, the undo point {{.From}} replaces {{.To}}, as a later rewind would"
+  },
+  {
+    "id": "cli.migration.checkpoint_inspect",
+    "description": "Migration refusal: the checkpoint refs of a session cannot be read",
+    "other": "session {{.Name}}: cannot read the checkpoint refs of {{.Path}}: {{.Err}}; nothing was moved. Make {{.Command}} work: fix the rights on the folder, add it with {{.Trust}} if git calls its owner dubious, or run {{.Recovery}} if its repository moved; then start herrscher serve again"
+  },
+  {
+    "id": "cli.migration.checkpoint_hidden_repository",
+    "description": "Migration refusal: git finds no repository for a session folder although a .git entry sits on its path",
+    "other": "session {{.Name}}: git finds no repository for {{.Path}}, yet {{.Repo}} sits on its path, so the branch and checkpoint refs of the session may live there: {{.Err}}; nothing was moved. If GIT_CEILING_DIRECTORIES stops the search below {{.Repo}}, start herrscher serve once without it (or with GIT_DISCOVERY_ACROSS_FILESYSTEM=1 if a filesystem boundary stops it): the migration then only moves the refs of that repository filed under the session name, those under refs/herrscher/ and its session/ branch, never another branch or a tag. Set the variable back right after that start: while it is lifted, every checkpoint of a session in that repository copies its whole working tree, untracked files included, into {{.Repo}}. If {{.Repo}} is empty or broken, repair or remove it. If {{.Path}} does not belong to that repository, move the folder out of its path. Then start herrscher serve again"
+  },
+  {
+    "id": "cli.migration.checkpoint_move",
+    "description": "Migration refusal: the checkpoint refs of a session cannot be moved",
+    "other": "session {{.Name}}: cannot move the checkpoint refs of {{.Path}}: {{.Err}}; they move in one git transaction, so none moved, and the next start of herrscher serve tries again"
+  },
+  {
+    "id": "cli.migration.shared_worktree",
+    "description": "State migration refusal: two sessions record the same folder",
+    "other": "sessions {{.Name}} and {{.Target}} record the same folder: {{.From}} and {{.Path}}, and one folder cannot move to two places; nothing was moved. Neither session can be closed before the migration, and closing one would remove the folder the other still works in. Keep one: with herrscher stopped, copy {{.File}} aside, delete the entry of the other session from its sessions list, then run herrscher serve again. The folder, its branch and its work stay with the session you keep; the channel of the other one is left as it is"
+  },
+  {
+    "id": "cli.migration.interrupted",
+    "description": "State migration stopped after it changed something",
+    "other": "state migration stopped partway: {{.Err}}. Already done, and kept: {{.Detail}}. The state keeps its old format, with its instance id written in, and the copy of the file taken before any change is {{.File}}. Once the cause is fixed, run herrscher serve again with this build: it finds what already moved at its new place and carries on from there. Do not start an older build on this file, it would run the sessions half moved"
+  },
+  {
+    "id": "cli.migration.nothing_done",
+    "description": "Part of the stopped migration text: nothing was moved yet",
+    "other": "no ref moved, no folder moved, no branch renamed"
+  },
+  {
+    "id": "cli.instance.generated",
+    "description": "Instance id generated for a fresh state",
+    "other": "herrscher: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"
+  },
+  {
+    "id": "cli.instance.stored_invalid",
+    "description": "Refusal to start on a state whose instance id is malformed",
+    "other": "state {{.Path}} records the instance id {{.Value}}, which is not a valid id (lowercase letters, digits and dashes, 16 characters at most, not starting with a dash), so worktree paths and branch names built from it could leave their folders; put back the id this daemon ran with (the folder under .herrscher-sessions/ that holds its worktrees names it), then run herrscher again"
+  },
+  {
+    "id": "cli.instance.unset",
+    "description": "Refusal of an operator command on a state that records no instance id while none is configured",
+    "other": "state {{.Path}} records no instance id yet, and neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID sets one; only herrscher serve picks and writes the id, so that a command run first cannot fix an id serve would then refuse. Start herrscher serve once, or set HERRSCHER_INSTANCE_ID, then run this command again"
+  },
+  {
+    "id": "cli.migration.instance_running",
+    "description": "Migration refusal: another daemon on this machine holds the instance id the migration would move the sessions under",
+    "other": "the instance id {{.Value}} is held by another herrscher daemon running on this machine ({{.Err}}), and migrating now would move the sessions of this state among the sessions of that daemon; nothing was moved and no id was written. Give this daemon its own id with HERRSCHER_INSTANCE_ID, or stop the other daemon if it serves this same state, then run herrscher serve again"
+  },
+  {
+    "id": "cli.migration.instance_in_use",
+    "description": "Migration refusal: worktrees or branches of the instance id belong to no session of this state",
+    "other": "the instance id {{.Value}} is already in use in the repository {{.Repo}}: {{.Target}} belong to no session of this state, so another daemon has run with this id there, and moving the sessions of this state under it would mix them with its own; nothing was moved and no id was written. Give this daemon its own id with HERRSCHER_INSTANCE_ID, then run herrscher serve again"
+  },
+  {
+    "id": "cli.migration.backup_missing",
+    "description": "Migration refusal: the copy of the old file the state names is gone",
+    "other": "state {{.Path}} names {{.File}} as its copy of the file from before the migration, but that copy is gone, and the state now holds the instance id the migration wrote, so a new copy would not be the old file; nothing more was moved. Put the copy back at {{.File}} if you still have it; otherwise remove the migration_backup field from {{.Path}} to carry on without a copy of the old file. Then run herrscher serve again"
   },
   {
     "id": "cli.help.cmd.mcp.weight",

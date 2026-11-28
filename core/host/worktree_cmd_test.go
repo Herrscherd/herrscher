@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -148,5 +150,18 @@ func TestWorktreeVerbMaterializesFromStdin(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dst, "AGENTS.md")); err != nil {
 		t.Fatalf("AGENTS.md not extracted: %v", err)
+	}
+}
+
+func TestWorktreeVerbRefusesAnEmptyOrInvalidInstance(t *testing.T) {
+	repo := tempRepo(t)
+	for _, instance := range []string{"", "../x"} {
+		err := RunWorktree(t.Context(), clitext.NewMessages(), NewMessages(), []string{"create", "--repo", repo, "--name", "s1", "--instance", instance})
+		if _, ok := errors.AsType[*worktreeInstanceError](err); !ok || !strings.Contains(err.Error(), "--instance "+strconv.Quote(instance)) {
+			t.Fatalf("instance %q: err = %v, want the localized invalid instance refusal", instance, err)
+		}
+	}
+	if entries, err := os.ReadDir(filepath.Join(repo, ".herrscher-sessions")); err == nil {
+		t.Fatalf("a refused create left %v in the repository", entries)
 	}
 }

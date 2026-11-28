@@ -1,0 +1,50 @@
+{
+  "home": {
+    "id": "1180000000000000001",
+    "type": "category"
+  },
+  "workspace": "/srv/work",
+  "sessions": [
+    {
+      "id": "s_alpha",
+      "incarnation": "inc_ALPHA000000000000000000",
+      "name": "alpha",
+      "channelID": "1180000000000000301",
+      "type": "channel",
+      "cmd": "claude",
+      "worktree": "/srv/work/app/.herrscher-sessions/alpha",
+      "dir": "/srv/work/app/.herrscher-sessions/alpha/web",
+      "project": "app",
+      "gateways": [
+        "chat"
+      ]
+    },
+    {
+      "id": "s_notes",
+      "incarnation": "inc_NOTES000000000000000000",
+      "name": "notes",
+      "channelID": "1180000000000000302",
+      "type": "channel",
+      "cmd": "claude",
+      "worktree": "/srv/work/.herrscher-scratch/notes",
+      "scratch": true,
+      "dir": "/srv/work/.herrscher-scratch/notes",
+      "gateways": [
+        "chat"
+      ]
+    },
+    {
+      "id": "s_shared",
+      "incarnation": "inc_SHARED00000000000000000",
+      "name": "shared",
+      "channelID": "1180000000000000303",
+      "type": "channel",
+      "cmd": "claude",
+      "dir": "/srv/work/app",
+      "project": "app",
+      "gateways": [
+        "chat"
+      ]
+    }
+  ]
+}

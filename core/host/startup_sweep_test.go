@@ -26,7 +26,7 @@ func TestLoadHubStateSweepsTheStagingFilesOfTheState(t *testing.T) {
 	stagingtest.Plant(t, ghostStale, time.Hour)
 	stagingtest.Plant(t, ghostFresh, time.Second)
 
-	if _, err := loadHubState(Options{StatePath: statePath}); err != nil {
+	if _, _, err := loadHubState(t.Context(), newHostMessages(), discardAnnouncer(), Options{StatePath: statePath}); err != nil {
 		t.Fatalf("loadHubState: %v", err)
 	}
 

@@ -330,6 +330,12 @@ func (e *worktreeFlagsError) Error() string {
 	return fmt.Sprintf("worktree %s: --repo and --name are required", e.Sub)
 }
 
+type worktreeInstanceError struct {
+	text string
+}
+
+func (e *worktreeInstanceError) Error() string { return e.text }
+
 type unknownWorktreeSubcommandError struct {
 	Sub string
 }

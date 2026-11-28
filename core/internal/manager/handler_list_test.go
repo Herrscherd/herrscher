@@ -30,7 +30,7 @@ func TestSessionListUsesGatewayChannelRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := d.ChannelRef("new-demo")
+	want := d.ChannelRef("new-inst__demo")
 	if !strings.Contains(out, want) {
 		t.Fatalf("list output %q must render the gateway channel ref %q", out, want)
 	}

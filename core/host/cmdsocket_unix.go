@@ -21,41 +21,30 @@ func CommandSocketPath(instanceID string) string {
 
 // CommandSocketPathIn is the operator command socket of the daemon serving layout.
 func CommandSocketPathIn(layout RuntimeLayout, instanceID string) string {
-	name := "herrscher-command"
-	if instanceID != "" {
-		name += "-" + instanceID
-	}
-	return layout.Socket(name)
+	return layout.Socket("herrscher-command-" + instanceID)
 }
 
 // SessionCommandSocketPathIn is the command socket of one session under layout.
 func SessionCommandSocketPathIn(layout RuntimeLayout, instanceID, session string) string {
-	name := "herrscher-command"
-	if instanceID != "" {
-		name += "-" + instanceID
-	}
-	return layout.Socket(name + "-s-" + control.SafeSessionName(session))
+	return layout.Socket("herrscher-command-" + instanceID + "-s-" + control.SafeSessionName(session))
 }
 
 // EventsSocketPath is the unix socket of the daemon's per-session events fan-out
 // for instanceID in the per-user directory of the user running this process. It
 // is the contract for Neublox's HerrscherEventSource, which must call this
-// function rather than rebuild the name. The directory is <run user>/<uid>/herrscher
-// when systemd has made a private one for the uid, and /tmp/herrscher-<uid>
-// otherwise. The socket is named herrscher-events (with -<instanceID> when one is
-// set), or takes its hashed name in that directory when the full path is longer
-// than the unix socket limit.
+// function rather than rebuild the name. The directory is
+// <run user>/<uid>/herrscher when systemd has made a private one for the uid,
+// and /tmp/herrscher-<uid> otherwise. The socket is herrscher-events-<instanceID>,
+// or a hashed name in that directory when the full path passes the unix limit.
+// instanceID is the one [ServedInstanceID] reads; an empty one names no daemon,
+// so the path is empty.
 func EventsSocketPath(instanceID string) string {
-	return EventsSocketPathIn(ProductionRuntime(), instanceID)
+	return servedSocket(ProductionRuntime(), instanceID, EventsSocketPathIn)
 }
 
 // EventsSocketPathIn is the events socket of the daemon serving layout.
 func EventsSocketPathIn(layout RuntimeLayout, instanceID string) string {
-	name := "herrscher-events"
-	if instanceID != "" {
-		name += "-" + instanceID
-	}
-	return layout.Socket(name)
+	return layout.Socket("herrscher-events-" + instanceID)
 }
 
 func listenCommandSocket(ctx context.Context, messages *hostMessages, layout RuntimeLayout, path string) (net.Listener, error) {

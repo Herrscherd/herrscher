@@ -63,11 +63,11 @@ func TestARefusedCloseNamesTheDirtySessionInEachLanguage(t *testing.T) {
 	}{
 		{"english", i18n.English, []string{
 			"session dirty has uncommitted changes: commit them, or close it with force:true to discard them",
-			"branch session/dirty is kept.",
+			"branch session/inst/dirty is kept.",
 		}},
 		{"french", i18n.French, []string{
 			"la session « dirty » a des changements non validés : valide-les, ou ferme-la avec force:true pour les abandonner",
-			"la branche session/dirty est conservée.",
+			"la branche session/inst/dirty est conservée.",
 		}},
 	}
 	for _, tc := range cases {
@@ -88,7 +88,7 @@ func refusedDirtyClose(t *testing.T) error {
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"}); err != nil {
+	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/ws/.herrscher-sessions/inst/dirty"}); err != nil {
 		t.Fatal(err)
 	}
 	wt.removeErr = errors.New("uncommitted changes")

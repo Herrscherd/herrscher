@@ -12,9 +12,6 @@ import (
 
 func TestCommandSocketPathUnix(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	if got := CommandSocketPathIn(layout, ""); got != filepath.Join(layout.Dir(), "herrscher-command.sock") {
-		t.Fatalf("CommandSocketPathIn(\"\") = %q", got)
-	}
 	if got := CommandSocketPathIn(layout, "instance-1"); got != filepath.Join(layout.Dir(), "herrscher-command-instance-1.sock") {
 		t.Fatalf("CommandSocketPathIn(instance-1) = %q", got)
 	}
@@ -22,9 +19,6 @@ func TestCommandSocketPathUnix(t *testing.T) {
 
 func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	if got := EventsSocketPathIn(layout, ""); got != filepath.Join(layout.Dir(), "herrscher-events.sock") {
-		t.Fatalf("EventsSocketPathIn(\"\") = %q", got)
-	}
 	if got := EventsSocketPathIn(layout, "instance-1"); got != filepath.Join(layout.Dir(), "herrscher-events-instance-1.sock") {
 		t.Fatalf("EventsSocketPathIn(instance-1) = %q", got)
 	}
@@ -41,6 +35,9 @@ func TestPublicSocketPathsShareOneDirectory(t *testing.T) {
 	}
 	if filepath.Base(events) != "herrscher-events-instance-1.sock" {
 		t.Fatalf("EventsSocketPath(instance-1) base = %q", filepath.Base(events))
+	}
+	if none := EventsSocketPath(""); none != "" {
+		t.Fatalf("EventsSocketPath(\"\") = %q, want no socket", none)
 	}
 }
 

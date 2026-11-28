@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -63,6 +64,12 @@ func (r *Remote) Create(ctx context.Context, repo, name, base string) (string, e
 	return out.Path, nil
 }
 
+// Path returns the worktree directory Create makes for name inside repo on the
+// remote host.
+func (r *Remote) Path(repo, name string) string {
+	return sessionPathIn(repo, r.instanceID, name)
+}
+
 // PreExisting reports whether Create would reuse a worktree. It has no error
 // return, so a host that cannot answer is reported as "yes, one is there": that
 // is the direction where a failed rollback leaves a directory behind, rather
@@ -77,9 +84,16 @@ func (r *Remote) PreExisting(ctx context.Context, repo, name string) bool {
 	return out.PreExisting
 }
 
-// Remove deletes the named worktree of repo on the remote host.
-func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) error {
-	argv := []string{subWorktree, "remove", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
+// RemoveAt deletes the worktree of repo recorded at path on the remote host. The
+// path must be a session directory of this instance, and its directory name is
+// what travels, so a renamed session removes the worktree it was created with.
+func (r *Remote) RemoveAt(ctx context.Context, repo, path string, force bool) error {
+	root := filepath.Join(repo, sessionsDir, r.instanceID)
+	dir, ok := recordedChild(root, path)
+	if !ok {
+		return outsideRoot(r.messages, path, root)
+	}
+	argv := []string{subWorktree, "remove", flagRepo, repo, flagName, dir, flagInstance, r.instanceID}
 	if force {
 		argv = append(argv, "--force")
 	}
@@ -99,8 +113,22 @@ func (r *Remote) ScratchPath(root, name string) string {
 	return scratchPathIn(root, r.instanceID, name)
 }
 
-// RemoveScratch deletes the scratch directory for name under root.
-func (r *Remote) RemoveScratch(_, _ string) error { return nil }
+// RemoveScratchAt has nothing to delete: a remote host never gets a scratch
+// directory, since Scratch refuses to make one there.
+func (r *Remote) RemoveScratchAt(_, _ string) error { return nil }
+
+// BranchAt reads the branch checked out in the worktree at path on the remote
+// host.
+func (r *Remote) BranchAt(ctx context.Context, path string) (string, error) {
+	cmd := r.run.Command(ctx, "", "git", "-C", path, "symbolic-ref", "--short", "HEAD")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		cause := reason(stderr.String(), err)
+		return "", NewFailure(r.messages, clitext.WorktreeBranchUnreadable, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: cause}, cause)
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
 
 // Materialize ships an agent's provisioning files into a remote worktree. The
 // payload is a tar stream, which the verb on the far side extracts before

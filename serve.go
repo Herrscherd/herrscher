@@ -311,7 +311,7 @@ func loadOperator() (config.Config, language.Languages, error) {
 	return cfg, langs, err
 }
 
-func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
+func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cfg config.Config, lang i18n.Language, ownsState bool) (*cli.Registry, error) {
 	gws, err := buildGateways(ctx, messages, lang)
 	if err != nil {
 		return nil, err
@@ -328,6 +328,7 @@ func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, message
 		Home:       home,
 		Workspace:  cfg.Workspace,
 		Source:     cfg.Source,
+		OwnsState:  ownsState,
 	})
 }
 
@@ -336,7 +337,7 @@ func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, messages *c
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client, false)
 	if err != nil {
 		return err
 	}
@@ -364,13 +365,22 @@ func runPrompt(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 		if err != nil {
 			return err
 		}
-		reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
+		reg, err := newPromptRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
 		if err != nil {
 			return err
 		}
 		return runPromptWith(ctx, messages, reg, name, task.Text, langs.Client, os.Stdout, os.Stderr)
 	}
 	return runPromptWindow(ctx, layout, messages, hostMessages, name, task.Text)
+}
+
+func newPromptRegistry(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
+	unlock, lockErr := host.LockState(hostMessages, host.DefaultStatePath())
+	if lockErr != nil {
+		return newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, lang, false)
+	}
+	defer unlock()
+	return newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, lang, true)
 }
 
 func createTaskSession(ctx context.Context, name string) []string {
@@ -390,12 +400,13 @@ func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, messages *c
 		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
 		return newAttachRunner(messages, hostMessages, slog.Default()).runAttached(ctx, layout, instance, statePath, tui.OpenOn(name, text))
 	}
-	unlock()
 	cfg, langs, err := loadOperator()
 	if err != nil {
+		unlock()
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client, true)
+	unlock()
 	if err != nil {
 		return err
 	}

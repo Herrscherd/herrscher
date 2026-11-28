@@ -106,6 +106,8 @@ const (
 	HostScheduleLive            = "cli.host.schedule.live"
 	HostScheduleStatusPaused    = "cli.host.schedule.status_paused"
 	HostErrWorktree             = "cli.host.err.worktree"
+	HostErrWorkspaceTaken       = "cli.host.err.workspace_taken"
+	HostErrWorkspaceShared      = "cli.host.err.workspace_shared"
 	HostErrProvisionAgent       = "cli.host.err.provision_agent"
 	HostErrCreateChannel        = "cli.host.err.create_channel"
 	HostErrCreateForumPost      = "cli.host.err.create_forum_post"
@@ -221,6 +223,8 @@ func hostKeys() map[Key][]string {
 		HostScheduleLive:            nil,
 		HostScheduleStatusPaused:    nil,
 		HostErrWorktree:             {ParamErr},
+		HostErrWorkspaceTaken:       {ParamName, ParamOwner, ParamPath},
+		HostErrWorkspaceShared:      {ParamName, ParamOwner, ParamPath, ParamFrom, ParamFile},
 		HostErrProvisionAgent:       {ParamAgent, ParamErr},
 		HostErrCreateChannel:        {ParamErr},
 		HostErrCreateForumPost:      {ParamErr},

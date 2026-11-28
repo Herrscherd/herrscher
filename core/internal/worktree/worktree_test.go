@@ -26,13 +26,6 @@ func TestPathAndBranch(t *testing.T) {
 			wantPath:   filepath.Join("repo", ".herrscher-sessions", "alice", "foo"),
 			wantBranch: "session/alice/foo",
 		},
-		{
-			name:       "legacy-empty-id",
-			instanceID: "",
-			session:    "foo",
-			wantPath:   filepath.Join("repo", ".herrscher-sessions", "foo"),
-			wantBranch: "session/foo",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -49,8 +42,8 @@ func TestPathAndBranch(t *testing.T) {
 
 func TestPathAlwaysCurrentName(t *testing.T) {
 	repo := t.TempDir()
-	w := NewWorktreer(clitext.NewMessages(), "")
-	want := filepath.Join(repo, ".herrscher-sessions", "feat1")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
+	want := filepath.Join(repo, ".herrscher-sessions", "inst", "feat1")
 
 	if err := os.MkdirAll(filepath.Join(repo, ".stray-sessions", "feat1"), 0o755); err != nil {
 		t.Fatal(err)
@@ -108,7 +101,7 @@ func commitFile(t *testing.T, dir, name, content, msg string) {
 
 func TestMergeIntoCleanMerge(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	commitFile(t, repo, "f.txt", "base\n", "base file")
 
 	if _, err := w.Create(context.Background(), repo, "worker", ""); err != nil {
@@ -141,7 +134,7 @@ func TestMergeIntoCleanMerge(t *testing.T) {
 
 func TestMergeIntoConflictAborts(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	commitFile(t, repo, "f.txt", "base\n", "base file")
 
 	if _, err := w.Create(context.Background(), repo, "worker", ""); err != nil {
@@ -173,12 +166,12 @@ func TestMergeIntoConflictAborts(t *testing.T) {
 
 func TestCreateUsesPassedRepo(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	path, err := w.Create(context.Background(), repo, "feat1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	want := filepath.Join(repo, ".herrscher-sessions", "feat1")
+	want := filepath.Join(repo, ".herrscher-sessions", "inst", "feat1")
 	if path != want {
 		t.Fatalf("path = %q, want %q", path, want)
 	}
@@ -191,17 +184,17 @@ func TestCreateReportsCancellationInsteadOfFallingBack(t *testing.T) {
 	repo := initRepo(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	path, err := NewWorktreer(clitext.NewMessages(), "").Create(ctx, repo, "feat1", "")
+	path, err := NewWorktreer(clitext.NewMessages(), "inst").Create(ctx, repo, "feat1", "")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Create under a cancelled context = %q, %v; want context.Canceled", path, err)
 	}
-	if _, statErr := os.Stat(filepath.Join(repo, ".herrscher-sessions", "feat1")); statErr == nil {
+	if _, statErr := os.Stat(filepath.Join(repo, ".herrscher-sessions", "inst", "feat1")); statErr == nil {
 		t.Fatal("a cancelled Create left a worktree directory behind")
 	}
 }
 
 func TestCreateNonGitRepoFallsBack(t *testing.T) {
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	path, err := w.Create(context.Background(), t.TempDir(), "feat1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -213,21 +206,21 @@ func TestCreateNonGitRepoFallsBack(t *testing.T) {
 
 func TestRemoveUsesPassedRepo(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	if _, err := w.Create(context.Background(), repo, "feat1", ""); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if err := w.Remove(context.Background(), repo, "feat1", false); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".herrscher-sessions", "feat1")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo, ".herrscher-sessions", "inst", "feat1")); !os.IsNotExist(err) {
 		t.Fatalf("worktree should be gone, stat err = %v", err)
 	}
 }
 
 func TestRemoveForceRecoversEmptyUnregisteredWorktree(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	path := w.Path(repo, "orphan")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
@@ -256,7 +249,7 @@ func TestRemoveForceRecoversASessionWhoseSessionsRootIsGone(t *testing.T) {
 
 func TestRemoveDoesNotRecoverEmptyOrphanWithoutForce(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	path := w.Path(repo, "orphan")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
@@ -272,7 +265,7 @@ func TestRemoveDoesNotRecoverEmptyOrphanWithoutForce(t *testing.T) {
 
 func TestRemoveForceDoesNotRecoverNonEmptyOrphan(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	path := w.Path(repo, "orphan")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
@@ -292,7 +285,7 @@ func TestRemoveForceDoesNotRecoverNonEmptyOrphan(t *testing.T) {
 
 func TestRemoveForceDoesNotRecoverPathOutsideSessionRoot(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	name := filepath.Join("..", "outside")
 	path := w.Path(repo, name)
 	if err := os.MkdirAll(path, 0o755); err != nil {
@@ -331,12 +324,12 @@ func TestRemoveForceRejectsTraversingInstanceID(t *testing.T) {
 func TestRemoveForceRejectsLinkedSessionsRoot(t *testing.T) {
 	repo := initRepo(t)
 	externalRoot := t.TempDir()
-	path := filepath.Join(externalRoot, "orphan")
-	if err := os.Mkdir(path, 0o755); err != nil {
+	path := filepath.Join(externalRoot, "inst", "orphan")
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	makeDirectoryLink(t, filepath.Join(repo, sessionsDir), externalRoot)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 
 	if err := w.Remove(context.Background(), repo, "orphan", true); err == nil {
 		t.Fatal("force remove must reject a linked sessions root")
@@ -370,7 +363,7 @@ func TestRemoveForceRejectsLinkedInstanceRoot(t *testing.T) {
 
 func TestRecoverEmptyOrphanRejectsRegisteredWorktree(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	path, err := w.Create(context.Background(), repo, "registered", "")
 	if err != nil {
 		t.Fatal(err)
@@ -390,7 +383,7 @@ func TestRecoverEmptyOrphanRejectsRegisteredWorktree(t *testing.T) {
 
 func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	if _, err := w.Create(context.Background(), repo, "registered", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +403,7 @@ func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
 }
 
 func TestCreateWithBaseBranchesOffIt(t *testing.T) {
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	repo := initRepo(t)
 	pa, err := w.Create(context.Background(), repo, "alpha", "")
 	if err != nil {
@@ -424,7 +417,7 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 			t.Fatalf("git %v: %v (%s)", args, runErr, out)
 		}
 	}
-	pb, err := w.Create(context.Background(), repo, "beta", "session/alpha")
+	pb, err := w.Create(context.Background(), repo, "beta", "session/inst/alpha")
 	if err != nil {
 		t.Fatalf("create beta on base: %v", err)
 	}
@@ -434,7 +427,7 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 }
 
 func TestCreateRejectsFlagLikeBase(t *testing.T) {
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	repo := initRepo(t)
 	path, err := w.Create(context.Background(), repo, "x", "--foo")
 	if err == nil {
@@ -449,13 +442,13 @@ func TestCreateRejectsFlagLikeBase(t *testing.T) {
 }
 
 func TestBranchExistsAt(t *testing.T) {
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	repo := initRepo(t)
 	pathAlpha, err := w.Create(context.Background(), repo, "alpha", "")
 	if err != nil {
 		t.Fatalf("create alpha: %v", err)
 	}
-	exists, err := w.BranchExistsAt(context.Background(), pathAlpha, "session/alpha")
+	exists, err := w.BranchExistsAt(context.Background(), pathAlpha, "session/inst/alpha")
 	if err != nil || !exists {
 		t.Fatalf("session/alpha should exist: exists=%v err=%v", exists, err)
 	}
@@ -466,7 +459,7 @@ func TestBranchExistsAt(t *testing.T) {
 }
 
 func TestBranchExistsAtNonRepoErrors(t *testing.T) {
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	_, err := w.BranchExistsAt(context.Background(), t.TempDir(), "session/x")
 	if err == nil {
 		t.Fatal("expected error for non-repo path, got nil")
@@ -474,7 +467,7 @@ func TestBranchExistsAtNonRepoErrors(t *testing.T) {
 }
 
 func TestIsCleanAt(t *testing.T) {
-	w := NewWorktreer(clitext.NewMessages(), "")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 	repo := initRepo(t)
 	p, err := w.Create(context.Background(), repo, "alpha", "")
 	if err != nil {
@@ -558,5 +551,21 @@ func TestABranchAlreadyCheckedOutIsStillAnError(t *testing.T) {
 
 	if _, err := w.Create(context.Background(), repo, "live", ""); err == nil {
 		t.Fatal("want an error: the branch is checked out by another worktree")
+	}
+}
+
+func TestRemoveAtRefusesARecordedPathOutsideTheSessionsRoot(t *testing.T) {
+	repo := initRepo(t)
+	outside := filepath.Join(t.TempDir(), "victim")
+	if err := os.Mkdir(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w := NewWorktreer(clitext.NewMessages(), "inst")
+
+	if err := w.RemoveAt(context.Background(), repo, outside, true); err == nil {
+		t.Fatal("a recorded path outside the sessions root must be refused")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("the refused removal must leave %s in place: %v", outside, err)
 	}
 }

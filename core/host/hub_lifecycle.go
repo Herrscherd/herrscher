@@ -293,7 +293,7 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 		logCleanup(acc.Close())
 		return wrapHost(h.messages, err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
-	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
+	bound := boundGateways(h.gws, sess.BoundGateways())
 	terms := liveModelTerms(h.st, h.models, sess.Name)
 	h.announceInterruptedTurn(sess)
 	done := make(chan struct{})

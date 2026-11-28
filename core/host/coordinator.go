@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type agentLookup interface {
 type cleanBrancher interface {
 	IsCleanAt(ctx context.Context, path string) (bool, error)
 	Branch(name string) string
+	BranchAt(ctx context.Context, path string) (string, error)
 	BranchExistsAt(ctx context.Context, path, branch string) (bool, error)
 	MergeInto(ctx context.Context, leadPath, branch string) (worktree.MergeOutcome, []string, error)
 }
@@ -167,7 +169,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		Project: from.Project,
 		Cmd:     cmd,
 		Agent:   toAgent,
-		Base:    c.wt.Branch(from.Name),
+		Base:    c.sessionBranch(ctx, from),
 		Parent:  parent,
 	}, vendor); err != nil {
 		return "", wrapHost(c.messages, err, "coordination.create", map[string]any{nameParam: bName})
@@ -178,6 +180,17 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		return "", wrapHost(c.messages, &seedTimedOutError{Session: bName}, "coordination.wrap", nil)
 	}
 	return bName, nil
+}
+
+func (c *coordinator) sessionBranch(ctx context.Context, sess state.Session) string {
+	if sess.Worktree == "" {
+		return c.wt.Branch(sess.Name)
+	}
+	branch, err := worktree.SessionBranch(ctx, c.wt, sess.Worktree)
+	if err != nil {
+		slog.Warn("worktree branch unreadable", "session", sess.Name, "path", sess.Worktree, "err", err)
+	}
+	return branch
 }
 
 func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest) (string, error) {
@@ -246,7 +259,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 		total = childCount(sessions, from.Parent)
 	}
 
-	branch := c.wt.Branch(req.FromSession)
+	branch := c.sessionBranch(ctx, from)
 	msg := fmt.Sprintf("%s a terminé sur %s (%d/%d): %s", req.FromSession, branch, done, total, req.Summary)
 	if done >= total {
 		if isSealed {
@@ -289,7 +302,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 		return "", wrapHost(c.messages, &uncommittedError{Role: roleLead, Name: req.FromSession}, "merge.refused", nil)
 	}
 
-	outcome, conflicts, err := c.wt.MergeInto(ctx, lead.Worktree, c.wt.Branch(req.Worker))
+	outcome, conflicts, err := c.wt.MergeInto(ctx, lead.Worktree, c.sessionBranch(ctx, worker))
 	if err != nil {
 		return "", wrapHost(c.messages, err, "merge.wrap", nil)
 	}

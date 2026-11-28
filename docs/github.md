@@ -224,7 +224,7 @@ value, so git refuses it if the branch moved after the check. Uncommitted change
 
 When the forge ref differs from HEAD, is absent, or cannot be read, the local branch is not
 forced: `git branch -d` is tried instead. If that fails too, the local branch is kept and the
-command says so, with the reason that its head could not be verified against the pull request.
+command says so, with the reason that its state could not be verified safely.
 The same happens when the branch moved between the check and the removal. The host never
 rolls back silently.
 

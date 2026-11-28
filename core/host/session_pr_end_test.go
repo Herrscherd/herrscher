@@ -61,18 +61,18 @@ func endGit(t *testing.T, dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-func remoteHasBranch(t *testing.T, dir, branch string) bool {
+func remoteHasBranch(t *testing.T, dir string) bool {
 	t.Helper()
-	out, err := endGit(t, dir, "ls-remote", "--heads", originRemote, "refs/heads/"+branch)
+	out, err := endGit(t, dir, "ls-remote", "--heads", originRemote, "refs/heads/feat")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return out != ""
 }
 
-func localHasBranch(t *testing.T, dir, branch string) bool {
+func localHasBranch(t *testing.T, dir string) bool {
 	t.Helper()
-	_, err := endGit(t, dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	_, err := endGit(t, dir, "rev-parse", "--verify", "--quiet", "refs/heads/feat")
 	return err == nil
 }
 
@@ -225,10 +225,10 @@ func TestSessionEndClosesAndDeletesTheMergedBranches(t *testing.T) {
 	if closed != 1 {
 		t.Fatalf("session closed %d times, want 1", closed)
 	}
-	if remoteHasBranch(t, dir, "feat") {
+	if remoteHasBranch(t, dir) {
 		t.Fatal("remote branch feat still exists after a merged end")
 	}
-	if localHasBranch(t, dir, "feat") {
+	if localHasBranch(t, dir) {
 		t.Fatal("local branch feat still exists after a merged end")
 	}
 	out, err := cli.Plain(res, nil)
@@ -254,10 +254,10 @@ func TestSessionEndKeepsTheRemoteBranchOfAClosedPullRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !remoteHasBranch(t, dir, "feat") {
+	if !remoteHasBranch(t, dir) {
 		t.Fatal("remote branch feat was deleted for a closed, not merged, pull request")
 	}
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was deleted although git refuses to delete an unmerged branch")
 	}
 	out, err := cli.Plain(res, nil)
@@ -316,6 +316,7 @@ func mergedFeatureFixture(t *testing.T) (string, *state.State, string) {
 }
 
 func masterCloser(t *testing.T, dir string) func(context.Context, string) error {
+	t.Helper()
 	return func(ctx context.Context, _ string) error {
 		gitIn(ctx, t, dir, "checkout", "-q", "master")
 		return nil
@@ -339,12 +340,12 @@ func endOutput(t *testing.T, res contracts.Result) string {
 type gitIntercept func(ctx context.Context, args []string) (handled bool, out string, err error)
 
 func interceptGit(p sessionPRs, intercept gitIntercept) sessionPRs {
-	real := p.git
+	next := p.git
 	p.git = func(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 		if handled, out, err := intercept(ctx, args); handled {
 			return out, err
 		}
-		return real(ctx, dir, env, args...)
+		return next(ctx, dir, env, args...)
 	}
 	return p
 }
@@ -360,10 +361,10 @@ func TestSessionEndAcceptsASquashMergedPullRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a squash-merged session was refused: %v", err)
 	}
-	if localHasBranch(t, dir, "feat") {
+	if localHasBranch(t, dir) {
 		t.Fatal("local branch feat still exists after a squash-merged end")
 	}
-	if remoteHasBranch(t, dir, "feat") {
+	if remoteHasBranch(t, dir) {
 		t.Fatal("remote branch feat still exists after a squash-merged end")
 	}
 	want := endText(t, clitext.SessionEndLocalDeleted, clitext.Params{clitext.ParamBranch: "feat"})
@@ -384,7 +385,7 @@ func TestSessionEndKeepsTheLocalBranchWhenTheForgeRefDiffers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was deleted although the forge ref differs from HEAD")
 	}
 	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
@@ -405,7 +406,7 @@ func TestSessionEndKeepsTheLocalBranchWhenTheForgeRefCannotBeRead(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was deleted although the forge ref could not be read")
 	}
 	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
@@ -427,7 +428,7 @@ func TestSessionEndKeepsTheLocalBranchWhenItMovedBeforeDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was deleted although it moved after the forge check")
 	}
 	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
@@ -440,7 +441,7 @@ func TestSessionEndKeepsTheBranchWhenHeadMovedPastTheMergedHeadWithCommitsNotPus
 	dir, st, _ := mergedFeatureFixture(t)
 	commitFrame(t, dir, "after merge\n")
 	endRefusal(t, st, errSessionEndUnpushed)
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was removed although it holds commits not pushed")
 	}
 }
@@ -452,7 +453,7 @@ func TestSessionEndKeepsTheBranchCheckedOutInTheMainCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was deleted while the main checkout still has it")
 	}
 	want := endText(t, clitext.SessionEndLocalCheckedOut, clitext.Params{clitext.ParamBranch: "feat", clitext.ParamPath: dir})
@@ -475,7 +476,7 @@ func TestSessionEndKeepsTheBranchCheckedOutInAWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !localHasBranch(t, dir, "feat") {
+	if !localHasBranch(t, dir) {
 		t.Fatal("local branch feat was deleted while a worktree still has it checked out")
 	}
 	want := endText(t, clitext.SessionEndLocalCheckedOut, clitext.Params{clitext.ParamBranch: "feat", clitext.ParamPath: worktree})
@@ -512,5 +513,80 @@ func TestSessionEndReportsARemoteBranchThatCouldNotBeDeleted(t *testing.T) {
 	want := endText(t, clitext.SessionEndRemoteFailed, clitext.Params{clitext.ParamBranch: "feat", clitext.ParamErr: "network down"})
 	if out := endOutput(t, res); !strings.Contains(out, want) {
 		t.Fatalf("end output %q does not report the remote branch left behind", out)
+	}
+}
+
+func TestWorktreeOfReadsThePorcelainListWithoutGit(t *testing.T) {
+	const ref = "refs/heads/feat"
+	cases := []struct {
+		name      string
+		porcelain string
+		wantPath  string
+		wantFound bool
+	}{
+		{
+			name:      "a checked out branch is found with its path",
+			porcelain: "worktree /repo\nHEAD 1\nbranch refs/heads/master\n\nworktree /repo-feat\nHEAD 2\nbranch refs/heads/feat\n",
+			wantPath:  "/repo-feat",
+			wantFound: true,
+		},
+		{
+			name:      "a prunable worktree still holding the branch is kept",
+			porcelain: "worktree /gone\nHEAD 2\nbranch refs/heads/feat\nprunable gitdir file points to non-existent location\n",
+			wantPath:  "/gone",
+			wantFound: true,
+		},
+		{
+			name:      "a locked worktree still holding the branch is kept",
+			porcelain: "worktree /locked\nHEAD 2\nbranch refs/heads/feat\nlocked\n",
+			wantPath:  "/locked",
+			wantFound: true,
+		},
+		{
+			name:      "a detached worktree does not hold the branch",
+			porcelain: "worktree /detached\nHEAD 2\ndetached\n",
+			wantFound: false,
+		},
+		{
+			name:      "a path with spaces is returned whole",
+			porcelain: "worktree /home/me/my work\nHEAD 2\nbranch refs/heads/feat\n",
+			wantPath:  "/home/me/my work",
+			wantFound: true,
+		},
+		{
+			name:      "an absent branch is not found",
+			porcelain: "worktree /repo\nHEAD 1\nbranch refs/heads/master\n",
+			wantFound: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path, found := worktreeOf(tc.porcelain, ref)
+			if found != tc.wantFound || path != tc.wantPath {
+				t.Fatalf("worktreeOf = (%q, %t), want (%q, %t)", path, found, tc.wantPath, tc.wantFound)
+			}
+		})
+	}
+}
+
+func TestSessionEndKeepsTheBranchWhenTheWorktreeListFails(t *testing.T) {
+	dir, st, head := mergedFeatureFixture(t)
+	pushPullRequestHead(t, dir, head)
+	p := interceptGit(endPRs(st, nil), func(_ context.Context, args []string) (bool, string, error) {
+		if slices.Contains(args, "worktree") {
+			return true, "", errors.New("worktree list refused")
+		}
+		return false, "", nil
+	})
+	res, err := p.end(t.Context(), "alpha", masterCloser(t, dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !localHasBranch(t, dir) {
+		t.Fatal("local branch feat was deleted although the worktree list could not be read")
+	}
+	want := endText(t, clitext.SessionEndLocalUnverified, clitext.Params{clitext.ParamBranch: "feat"})
+	if out := endOutput(t, res); !strings.Contains(out, want) {
+		t.Fatalf("end output %q does not signal the kept branch", out)
 	}
 }
